@@ -1,0 +1,63 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environment
+.venv/
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Streamlit
+.streamlit/
+
+# Project specific
+ratings.json
+*.log
+*.lock
+.DS_Store
+*.swp
+*.swo
+
+# Temporary files
+.~lock.*
+*~
+*.py~
+
+# Data files (large CSV/Excel)
+*.csv
+*.xlsx
+*.xls
+*.json
+
+# But keep the source data files (they're tracked)
+!alle-navne.csv
+!godkendtefornavne/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
