@@ -52,8 +52,7 @@ ratings.json
 *.xls
 *.json
 
-# But keep the source data files (they're tracked)
-!alle-navne.csv
+# But keep the git submodule directory (it's tracked)
 !godkendtefornavne/
 
 # IDE
