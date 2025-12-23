@@ -437,6 +437,51 @@ def get_names_by_filters(
         return [row[0] for row in cursor.fetchall()]
 
 
+def get_names_by_gender() -> Dict[str, List[str]]:
+    """
+    Get names categorized by gender.
+    Returns dict with keys: "Male", "Female", "Unisex", "All".
+    Unisex names are included in both "Male" and "Female" categories.
+    """
+    with get_connection() as conn:
+        # Get all names with gender
+        cursor = conn.execute("""
+            SELECT name, gender FROM names 
+            WHERE gender IN ('Male', 'Female', 'Unisex')
+            ORDER BY name
+        """)
+        rows = cursor.fetchall()
+        
+        # Initialize gender categories
+        gender_lists = {
+            "Female": set(),
+            "Male": set(),
+            "Unisex": set(),
+            "All": set(),
+        }
+        
+        # Categorize names
+        for name, gender in rows:
+            # Always add to 'All' category
+            gender_lists["All"].add(name)
+            
+            # Add to specific gender category
+            if gender in gender_lists:
+                gender_lists[gender].add(name)
+            
+            # Unisex names also go to both Male and Female categories
+            if gender == "Unisex":
+                gender_lists["Male"].add(name)
+                gender_lists["Female"].add(name)
+        
+        # Convert sets to sorted lists
+        result = {}
+        for gender, name_set in gender_lists.items():
+            result[gender] = sorted(list(name_set))
+        
+        return result
+
+
 def get_all_origin_regions() -> List[str]:
     """Get distinct origin regions from names table, including NULL as 'International'."""
     with get_connection() as conn:

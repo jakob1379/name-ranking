@@ -13,6 +13,7 @@ import pandas as pd
 import streamlit as st
 
 from elo import INITIAL_RATING, initialize_ratings
+import database
 
 
 def is_valid_name(name: str) -> bool:
@@ -70,22 +71,14 @@ def is_valid_name(name: str) -> bool:
 
 def load_ratings(file_path: str = "ratings.json") -> Optional[Dict[str, float]]:
     """
-    Load saved ratings from JSON file.
-    Returns ratings dict or None if file doesn't exist.
+    Load saved ratings from database.
+    Returns ratings dict or None if database not initialized.
     """
     try:
-        if os.path.exists(file_path):
-            with open(file_path, "r", encoding="utf-8") as f:
-                data = json.load(f)
-                # Check if it's the new format with metadata
-                if isinstance(data, dict) and "ratings" in data:
-                    return data["ratings"]
-                # Old format: just ratings dict
-                elif isinstance(data, dict):
-                    return data
-        return None
+        database.init_database()
+        return database.get_ratings()
     except Exception as e:
-        st.warning(f"Could not load ratings: {e}")
+        st.warning(f"Could not load ratings from database: {e}")
         return None
 
 
@@ -93,20 +86,25 @@ def save_ratings(
     ratings: Dict[str, float], file_path: str = "ratings.json"
 ) -> bool:
     """
-    Save ratings to JSON file with metadata.
+    Save ratings to database.
     Returns True if successful.
     """
     try:
-        data = {
-            "ratings": ratings,
-            "last_saved": datetime.now().isoformat(),
-            "total_names": len(ratings),
-        }
-        with open(file_path, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2, ensure_ascii=False)
+        database.init_database()
+        updated = 0
+        for name, rating in ratings.items():
+            try:
+                database.update_rating(name, rating)
+                updated += 1
+            except Exception as e:
+                st.warning(f"Failed to update rating for {name}: {e}")
+                # Continue with other ratings
+        
+        if updated > 0:
+            st.info(f"Updated {updated} ratings in database")
         return True
     except Exception as e:
-        st.error(f"Failed to save ratings: {e}")
+        st.error(f"Failed to save ratings to database: {e}")
         return False
 
 
@@ -204,52 +202,30 @@ def load_local_csv(csv_path: str = "alle-navne.csv") -> List[str]:
 
 def load_names_by_gender() -> Dict[str, List[str]]:
     """
-    Load names from local git submodule JSON file, categorized by gender.
+    Load names from database, categorized by gender.
     Returns dict mapping gender to list of names.
     Unisex names are included in both 'Male' and 'Female' categories.
     """
     try:
-        data = load_submodule_json()
-        if not data:
+        # Ensure database is initialized and synced with submodule
+        database.init_database()
+        inserted = database.sync_names_with_submodule()
+        if inserted > 0:
+            st.info(f"Synced {inserted} new names from submodule to database")
+        
+        # Get names categorized by gender from database
+        gender_data = database.get_names_by_gender()
+        if not gender_data:
+            st.error("No names found in database")
             return {}
-
-        # Initialize gender categories
-        gender_lists = {
-            "Female": set(),
-            "Male": set(),
-            "Unisex": set(),
-            "All": set(),
-        }
-
-        # Categorize names
-        for item in data:
-            name = item["name"]
-            gender = item["gender"]
-
-            # Always add to 'All' category
-            gender_lists["All"].add(name)
-
-            # Add to specific gender category
-            if gender in gender_lists:
-                gender_lists[gender].add(name)
-
-            # Unisex names also go to both Male and Female categories
-            if gender == "Unisex":
-                gender_lists["Male"].add(name)
-                gender_lists["Female"].add(name)
-
-        # Convert sets to sorted lists
-        result = {}
-        for gender, name_set in gender_lists.items():
-            result[gender] = sorted(list(name_set))
-
+        
         # Log counts
-        for gender, names in result.items():
+        for gender, names in gender_data.items():
             st.info(f"Loaded {len(names)} {gender.lower()} names")
-
-        return result
+        
+        return gender_data
     except Exception as e:
-        st.error(f"Failed to load names by gender: {e}")
+        st.error(f"Failed to load names by gender from database: {e}")
         return {}
 
 
