@@ -1,7 +1,7 @@
 import streamlit as st
 import numpy as np
 import pandas as pd
-from typing import Dict, List, Tuple, Literal, Optional
+from typing import Dict, List, Tuple, Literal, Optional, Union
 import httpx
 import json
 import os
@@ -14,41 +14,68 @@ K_FACTOR: float = 32.0
 INITIAL_RATING: float = 1500.0
 
 # -----------------------------------------------------------------------------
+# Data Validation Helpers
+# -----------------------------------------------------------------------------
+
+def is_valid_name(name: str) -> bool:
+    """
+    Check if a string is a valid name (not a header or placeholder).
+    Filters out strings like 'name1', 'Navn', 'name', etc.
+    """
+    if not name or not isinstance(name, str):
+        return False
+
+    name_lower = name.strip().lower()
+
+    # Common header/placeholder patterns to exclude
+    invalid_patterns = [
+        'name', 'navn', 'fornavn', 'firstname',
+        'køn', 'gender', 'kjønn',
+        'id', 'nummer', 'number',
+        # Pattern like 'name1', 'name 1', 'navn1', etc.
+        r'^name\s*\d+$', r'^navn\s*\d+$',
+        r'^fornavn\s*\d+$',
+    ]
+
+    # Check exact matches
+    if name_lower in ['name', 'navn', 'fornavn', 'firstname', 'køn', 'gender', 'kjønn']:
+        return False
+
+    # Check pattern matches
+    import re
+    for pattern in invalid_patterns[-3:]:  # The regex patterns
+        if re.match(pattern, name_lower, re.IGNORECASE):
+            return False
+
+    # Name should have at least 2 characters
+    if len(name_lower) < 2:
+        return False
+
+    return True
+
+# -----------------------------------------------------------------------------
 # Display Helpers
 # -----------------------------------------------------------------------------
 
-def display_name_with_rating(name: str, rating: float) -> None:
+def display_name_with_rating(name: str, rating: float, delta: Optional[Union[int, float, str]] = None) -> None:
     """
     Display name much larger than rating using st.metric with custom styling.
-    Uses CSS injection to make the value (name) larger and label (rating) smaller.
+    CSS is injected in render_tournament to make the value (name) larger and label (rating) smaller.
+    delta: difference in Elo compared to opponent (positive if higher, negative if lower).
     """
-    # Inject CSS to override st.metric styles
-    st.markdown("""
-    <style>
-    /* Make metric value (name) much larger */
-    div[data-testid="stMetricValue"] p {
-        font-size: 48px !important;
-        font-weight: bold !important;
-        text-align: center !important;
-        margin-bottom: 5px !important;
-    }
-    /* Make metric label (rating) smaller */
-    div[data-testid="stMetricLabel"] p {
-        font-size: 24px !important;
-        color: #666 !important;
-        text-align: center !important;
-        margin-top: 0 !important;
-    }
-    /* Center the metric container */
-    div[data-testid="stMetric"] {
-        text-align: center !important;
-    }
-    </style>
-    """, unsafe_allow_html=True)
+    # Format delta for display
+    if delta is not None:
+        # Convert numeric delta to string with sign
+        if isinstance(delta, (int, float)):
+            delta_str = f"{delta:+.0f}"
+        else:
+            delta_str = str(delta)
+    else:
+        delta_str = None
 
     # Use st.metric with swapped label/value to get desired visual hierarchy
     # Value will be large (name), label will be smaller (rating)
-    st.metric(value=name, label=f"{rating:.0f}")
+    st.metric(value=name, label=f"{rating:.0f}", delta=delta_str, border=True)
 
 # -----------------------------------------------------------------------------
 # Core Logic: Elo & Math
@@ -83,6 +110,51 @@ def update_elo_and_save(
 
     return updated_ratings
 
+def update_elo_draw_and_save(
+    ratings: Dict[str, float],
+    player_a: str,
+    player_b: str,
+    k: float = K_FACTOR
+) -> Dict[str, float]:
+    """
+    Update Elo ratings for a draw and save in background.
+    """
+    updated_ratings = update_elo_draw(ratings, player_a, player_b, k)
+
+    # Save in background (non-blocking)
+    try:
+        save_ratings(updated_ratings)
+    except Exception as e:
+        st.warning(f"Failed to save ratings: {e}")
+
+    return updated_ratings
+
+def update_elo_generic(
+    ratings: Dict[str, float],
+    player_a: str,
+    player_b: str,
+    score_a: float,
+    score_b: float,
+    k: float = K_FACTOR
+) -> Dict[str, float]:
+    """
+    Generic Elo update for any outcome.
+    score_a is the result for player_a (typically 1.0 for win, 0.5 for draw, 0.0 for loss).
+    """
+    if player_a not in ratings or player_b not in ratings:
+        return ratings
+
+    r_a = ratings[player_a]
+    r_b = ratings[player_b]
+
+    e_a = expected_score(r_a, r_b)
+    e_b = 1.0 - e_a
+
+    ratings[player_a] = r_a + k * (score_a - e_a)
+    ratings[player_b] = r_b + k * (score_b - e_b)
+
+    return ratings
+
 def update_elo(
     ratings: Dict[str, float],
     winner: str,
@@ -92,19 +164,18 @@ def update_elo(
     """
     Update Elo ratings based on a binary outcome (1 for winner, 0 for loser).
     """
-    if winner not in ratings or loser not in ratings:
-        return ratings
+    return update_elo_generic(ratings, winner, loser, 1.0, 0.0, k)
 
-    r_winner = ratings[winner]
-    r_loser = ratings[loser]
-
-    e_winner = expected_score(r_winner, r_loser)
-    e_loser = 1.0 - e_winner
-
-    ratings[winner] = r_winner + k * (1.0 - e_winner)
-    ratings[loser] = r_loser + k * (0.0 - e_loser)
-
-    return ratings
+def update_elo_draw(
+    ratings: Dict[str, float],
+    player_a: str,
+    player_b: str,
+    k: float = K_FACTOR
+) -> Dict[str, float]:
+    """
+    Update Elo ratings for a draw (0.5 points each).
+    """
+    return update_elo_generic(ratings, player_a, player_b, 0.5, 0.5, k)
 
 def initialize_ratings(names: List[str]) -> Dict[str, float]:
     return {name.strip(): INITIAL_RATING for name in names if name.strip()}
@@ -295,14 +366,27 @@ def load_submodule_json() -> List[Dict[str, str]]:
         if not isinstance(data, list):
             st.error(f"Expected JSON array, got {type(data)}")
             return []
-        # Validate structure
+        # Validate structure and filter out invalid names
         valid_items = []
+        invalid_count = 0
         for item in data:
             if isinstance(item, dict) and "name" in item and "gender" in item:
-                valid_items.append({
-                    "name": str(item["name"]).strip(),
-                    "gender": str(item["gender"]).strip()
-                })
+                name = str(item["name"]).strip()
+                gender = str(item["gender"]).strip()
+
+                if is_valid_name(name):
+                    valid_items.append({
+                        "name": name,
+                        "gender": gender
+                    })
+                else:
+                    invalid_count += 1
+                    if invalid_count <= 5:  # Log first few invalid names
+                        st.warning(f"Skipping invalid name entry: '{name}'")
+
+        if invalid_count > 0:
+            st.info(f"Filtered out {invalid_count} invalid name entries")
+
         st.success(f"Loaded {len(valid_items)} name-gender pairs from JSON")
         return valid_items
     except Exception as e:
@@ -323,19 +407,30 @@ def load_submodule_csv_fallback() -> List[str]:
     ]
 
     all_names = []
+    invalid_count = 0
     try:
         for csv_file in csv_files:
             file_path = os.path.join(submodule_path, csv_file)
             if os.path.exists(file_path):
                 with open(file_path, 'r', encoding='utf-8') as f:
-                    names = [line.strip() for line in f.readlines() if line.strip()]
-                    all_names.extend(names)
+                    for line in f:
+                        name = line.strip()
+                        if name:  # Skip empty lines
+                            if is_valid_name(name):
+                                all_names.append(name)
+                            else:
+                                invalid_count += 1
+                                if invalid_count <= 5:  # Log first few invalid names
+                                    st.warning(f"Skipping invalid CSV entry: '{name}'")
             else:
                 st.warning(f"Submodule CSV file not found: {file_path}")
 
         if not all_names:
             st.error("No names found in submodule files")
             return []
+
+        if invalid_count > 0:
+            st.info(f"Filtered out {invalid_count} invalid CSV entries")
 
         names = sorted(list(set(all_names)))
         st.success(f"Loaded {len(names)} names from CSV fallback")
@@ -501,17 +596,71 @@ def render_tournament(names: List[str]) -> None:
         st.session_state.candidate_a = c_a
         st.session_state.candidate_b = c_b
 
-    col_a, col_b = st.columns(2)
+    # Inject CSS for metric styling and equal column heights
+    st.markdown("""
+    <style>
+    /* Style for st.metric display */
+    div[data-testid="stMetricValue"] p {
+        font-size: 48px !important;
+        font-weight: bold !important;
+        text-align: center !important;
+        margin-bottom: 5px !important;
+    }
+    div[data-testid="stMetricLabel"] p {
+        font-size: 24px !important;
+        color: #666 !important;
+        text-align: center !important;
+        margin-top: 0 !important;
+    }
+    div[data-testid="stMetric"] {
+        text-align: center !important;
+    }
+    div[data-testid="stMetricDelta"] svg {
+        width: 20px !important;
+        height: 20px !important;
+    }
+
+    /* Ensure columns have equal height */
+    div[data-testid="column"] {
+        display: flex !important;
+        flex-direction: column !important;
+        min-height: 300px !important;
+    }
+    div[data-testid="column"] > div[data-testid="stVerticalBlock"] {
+        flex-grow: 1 !important;
+        display: flex !important;
+        flex-direction: column !important;
+        justify-content: space-between !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+    _,col_a,_,_,col_b,_ = st.columns([0.8,1,0.2,0.2,1,0.8])
+
+    # Get both ratings before displaying
+    rating_a = st.session_state.ratings.get(st.session_state.candidate_a, INITIAL_RATING)
+    rating_b = st.session_state.ratings.get(st.session_state.candidate_b, INITIAL_RATING)
+
+    # Calculate rating differences for delta display
+    delta_a = rating_a - rating_b  # Positive if A is higher rated
+    delta_b = rating_b - rating_a  # Positive if B is higher rated
 
     with col_a:
-        rating_a = st.session_state.ratings.get(st.session_state.candidate_a, INITIAL_RATING)
-        display_name_with_rating(st.session_state.candidate_a, rating_a)
-        if st.button(
-            f"👈 Prefer {st.session_state.candidate_a}",
-            key="vote_a",
-            use_container_width=True,
-            type="primary"
-        ):
+        display_name_with_rating(st.session_state.candidate_a, rating_a, delta=delta_a)
+
+        # Centered button container
+        button_container = st.container()
+        with button_container:
+            st.markdown("<div style='text-align: center'>", unsafe_allow_html=True)
+            button_clicked = st.button(
+                f"👈 Prefer {st.session_state.candidate_a}",
+                key="vote_a",
+                width="content",
+                type="primary"
+            )
+            st.markdown("</div>", unsafe_allow_html=True)
+
+        if button_clicked:
             update_elo_and_save(
                 st.session_state.ratings,
                 st.session_state.candidate_a,
@@ -521,14 +670,21 @@ def render_tournament(names: List[str]) -> None:
             st.rerun()
 
     with col_b:
-        rating_b = st.session_state.ratings.get(st.session_state.candidate_b, INITIAL_RATING)
-        display_name_with_rating(st.session_state.candidate_b, rating_b)
-        if st.button(
-            f"Prefer {st.session_state.candidate_b} 👉",
-            key="vote_b",
-            use_container_width=True,
-            type="primary"
-        ):
+        display_name_with_rating(st.session_state.candidate_b, rating_b, delta=delta_b)
+
+        # Centered button container (same as left side)
+        button_container = st.container()
+        with button_container:
+            st.markdown("<div style='text-align: center'>", unsafe_allow_html=True)
+            button_clicked = st.button(
+                f"Prefer {st.session_state.candidate_b} 👉",
+                key="vote_b",
+                width="content",
+                type="primary"
+            )
+            st.markdown("</div>", unsafe_allow_html=True)
+
+        if button_clicked:
             update_elo_and_save(
                 st.session_state.ratings,
                 st.session_state.candidate_b,
@@ -537,11 +693,47 @@ def render_tournament(names: List[str]) -> None:
             st.session_state.candidate_a, st.session_state.candidate_b = select_candidates(names)
             st.rerun()
 
+    # Draw button centered below both names
+    st.markdown("<br>", unsafe_allow_html=True)  # Add some spacing
+    draw_container = st.container()
+    with draw_container:
+        st.markdown("<div style='text-align: center'>", unsafe_allow_html=True)
+        draw_clicked = st.button(
+            "🤝 Draw / Equal Preference",
+            key="vote_draw",
+            width="content",
+            type="secondary"
+        )
+        st.markdown("</div>", unsafe_allow_html=True)
+
+    if draw_clicked:
+        update_elo_draw_and_save(
+            st.session_state.ratings,
+            st.session_state.candidate_a,
+            st.session_state.candidate_b
+        )
+        st.session_state.candidate_a, st.session_state.candidate_b = select_candidates(names)
+        st.rerun()
+
     st.divider()
     st.subheader("Current Top 10")
     sorted_ratings = sorted(st.session_state.ratings.items(), key=lambda x: x[1], reverse=True)
     df = pd.DataFrame(sorted_ratings[:10], columns=["Name", "Rating"])
-    st.dataframe(df, use_container_width=True, hide_index=True)
+    st.dataframe(
+        df,
+        width="stretch",
+        hide_index=True,
+        column_config={
+            "ratings": st.column_config.NumberColumn(
+                "Rating",
+                help="Higher is better",
+                format="%d",
+                pinned=True,
+                width="small",
+            )
+        },
+
+    )
 
 def render_similarity(names: List[str]) -> None:
     st.header("Similarity Search")
@@ -558,7 +750,7 @@ def render_similarity(names: List[str]) -> None:
             results = get_string_similarity_scores(query, names, limit=10)
             st.dataframe(
                 pd.DataFrame(results, columns=["Name", "Similarity Score"]),
-                use_container_width=True,
+                width="stretch",
                 hide_index=True
             )
         else:
@@ -570,7 +762,7 @@ def render_similarity(names: List[str]) -> None:
 
             st.dataframe(
                 pd.DataFrame(results, columns=["Name", "Cosine Similarity"]),
-                use_container_width=True,
+                width="stretch",
                 hide_index=True
             )
 
