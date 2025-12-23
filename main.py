@@ -64,6 +64,13 @@ def main() -> None:
         # Submodule management
         st.subheader("Submodule Management")
 
+        # Checkbox for origin classification
+        classify_origins = st.checkbox(
+            "Classify name origins after update",
+            value=False,
+            help="Predict name origins using name2nat (requires package)",
+        )
+
         col1, col2 = st.columns(2)
         with col1:
             if st.button("Reload Names"):
@@ -95,7 +102,9 @@ def main() -> None:
         with col2:
             if st.button("Check for Updates"):
                 with st.spinner("Checking for updates..."):
-                    if pull_submodule_updates():
+                    if pull_submodule_updates(
+                        classify_origins=classify_origins
+                    ):
                         st.rerun()
 
         # Show submodule status

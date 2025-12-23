@@ -37,7 +37,8 @@ def get_region_for_nationality(nationality: str) -> Tuple[str, float]:
 
         # Try partial matching (e.g., "American" matches "United States")
         cursor = conn.execute(
-            "SELECT region FROM region_mapping WHERE ? LIKE '%' || nationality || '%' "
+            "SELECT region FROM region_mapping "
+            "WHERE ? LIKE '%' || nationality || '%' "
             "OR nationality LIKE '%' || ? || '%'",
             (nationality, nationality),
         )

@@ -80,7 +80,8 @@ def main():
     print("\nDatabase Statistics:")
     print(f"  Total names: {stats['total_names']}")
     print(
-        f"  Classified names: {stats['classified_names']} ({stats['classified_names'] / stats['total_names'] * 100:.1f}%)"
+        f"  Classified names: {stats['classified_names']} "
+        f"({stats['classified_names'] / stats['total_names'] * 100:.1f}%)"
     )
     print(f"  Rated names: {stats['rated_names']}")
 

@@ -12,9 +12,10 @@ from data_loader import initialize_or_load_ratings, save_ratings
 from elo import K_FACTOR, update_elo, update_elo_draw
 
 
-def pull_submodule_updates() -> bool:
+def pull_submodule_updates(classify_origins: bool = False) -> bool:
     """
     Pull latest updates from the git submodule and sync with database.
+    If classify_origins is True and name2nat is available, classify origins.
     Returns True if successful.
     """
     try:
@@ -42,12 +43,52 @@ def pull_submodule_updates() -> bool:
                 try:
                     inserted = database.sync_names_with_submodule()
                     if inserted > 0:
-                        st.success(f"✅ Added {inserted} new names to database")
+                        st.toast(
+                            f"✅ Added {inserted} new names to database",
+                            icon="✅",
+                        )
                     else:
-                        st.info("No new names to add")
+                        st.toast(
+                            "No new names to add",
+                            icon="ℹ️",
+                        )
                 except Exception as sync_error:
-                    st.error(f"Failed to sync names: {sync_error}")
+                    st.toast(
+                        f"Failed to sync names: {sync_error}",
+                        icon="❌",
+                        duration="long",
+                    )
                     # Continue anyway - names will be synced on next load
+
+            # Classify origins if requested and name2nat is available
+            if classify_origins:
+                try:
+                    from classify_origins import classify_all_names
+
+                    with st.spinner("Classifying name origins..."):
+                        # Classify only unclassified names
+                        classified = classify_all_names(limit=None)
+                        if classified > 0:
+                            st.toast(
+                                f"✅ Classified {classified} name origins",
+                                icon="✅",
+                            )
+                        else:
+                            st.toast(
+                                "No names needed classification",
+                                icon="ℹ️",
+                            )
+                except ImportError:
+                    st.toast(
+                        "name2nat not installed. Run: pip install name2nat",
+                        icon="⚠️",
+                    )
+                except Exception as classify_error:
+                    st.toast(
+                        f"Failed to classify origins: {classify_error}",
+                        icon="❌",
+                        duration="long",
+                    )
 
             # Show reload message with slight delay
             st.toast("⏳ Reloading names in 2 seconds...", icon="⏳")

@@ -91,7 +91,8 @@ def init_database():
             "CREATE INDEX IF NOT EXISTS idx_names_gender ON names(gender)"
         )
         conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_names_origin ON names(origin_region)"
+            "CREATE INDEX IF NOT EXISTS idx_names_origin "
+            "ON names(origin_region)"
         )
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_ratings_rating ON ratings(rating)"
@@ -295,7 +296,8 @@ def _insert_default_region_mapping(conn):
         mappings.append(("Oceanian", country))
 
     conn.executemany(
-        "INSERT OR IGNORE INTO region_mapping (region, nationality) VALUES (?, ?)",
+        "INSERT OR IGNORE INTO region_mapping "
+        "(region, nationality) VALUES (?, ?)",
         mappings,
     )
 
@@ -423,7 +425,10 @@ def get_names_by_filters(
         if "International" in origins:
             # Include both NULL and specified regions
             placeholders = ", ".join(["?"] * (len(origins) - 1))
-            query += f" AND (origin_region IN ({placeholders}) OR origin_region IS NULL)"
+            query += (
+                f" AND (origin_region IN ({placeholders}) "
+                f"OR origin_region IS NULL)"
+            )
             params.extend([o for o in origins if o != "International"])
         else:
             placeholders = ", ".join(["?"] * len(origins))
@@ -483,7 +488,8 @@ def get_names_by_gender() -> Dict[str, List[str]]:
 
 
 def get_all_origin_regions() -> List[str]:
-    """Get distinct origin regions from names table, including NULL as 'International'."""
+    """Get distinct origin regions from names table, 
+    including NULL as 'International'."""
     with get_connection() as conn:
         cursor = conn.execute("""
             SELECT DISTINCT 
@@ -523,11 +529,15 @@ def update_rating(name: str, rating: float):
         # Update or insert rating
         conn.execute(
             """
-            INSERT OR REPLACE INTO ratings (name_id, rating, matches, last_updated)
+            INSERT OR REPLACE INTO ratings 
+            (name_id, rating, matches, last_updated)
             VALUES (
                 ?,
                 ?,
-                COALESCE((SELECT matches + 1 FROM ratings WHERE name_id = ?), 1),
+                COALESCE((
+                    SELECT matches + 1 FROM ratings 
+                    WHERE name_id = ?
+                ), 1),
                 CURRENT_TIMESTAMP
             )
         """,
@@ -585,7 +595,8 @@ def migrate_ratings_from_json(json_path: Path = Path("ratings.json")) -> int:
                 # Insert rating
                 conn.execute(
                     """
-                    INSERT OR REPLACE INTO ratings (name_id, rating) VALUES (?, ?)
+                    INSERT OR REPLACE INTO ratings 
+                    (name_id, rating) VALUES (?, ?)
                 """,
                     (name_id, rating),
                 )
