@@ -41,6 +41,8 @@ def pull_submodule_updates(classify_origins: bool = False) -> bool:
             # Sync new names with database
             with st.spinner("Syncing new names with database..."):
                 try:
+                    # Ensure database is initialized
+                    database.init_database()
                     inserted = database.sync_names_with_submodule()
                     if inserted > 0:
                         st.toast(
@@ -63,6 +65,8 @@ def pull_submodule_updates(classify_origins: bool = False) -> bool:
             # Classify origins if requested and name2nat is available
             if classify_origins:
                 try:
+                    # Ensure database is initialized before classification
+                    database.init_database()
                     from classify_origins import classify_all_names
 
                     with st.spinner("Classifying name origins..."):
