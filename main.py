@@ -1,13 +1,13 @@
-import streamlit as st
-import numpy as np
-import pandas as pd
-from typing import Dict, List, Tuple, Literal, Optional, Union
-import httpx
 import json
 import os
 from datetime import datetime
-from rapidfuzz import fuzz, process
+from typing import Dict, List, Literal, Optional, Tuple, Union
 
+import httpx
+import numpy as np
+import pandas as pd
+import streamlit as st
+from rapidfuzz import fuzz, process
 from sentence_transformers import SentenceTransformer
 
 K_FACTOR: float = 32.0
@@ -16,6 +16,7 @@ INITIAL_RATING: float = 1500.0
 # -----------------------------------------------------------------------------
 # Data Validation Helpers
 # -----------------------------------------------------------------------------
+
 
 def is_valid_name(name: str) -> bool:
     """
@@ -29,20 +30,37 @@ def is_valid_name(name: str) -> bool:
 
     # Common header/placeholder patterns to exclude
     invalid_patterns = [
-        'name', 'navn', 'fornavn', 'firstname',
-        'køn', 'gender', 'kjønn',
-        'id', 'nummer', 'number',
+        "name",
+        "navn",
+        "fornavn",
+        "firstname",
+        "køn",
+        "gender",
+        "kjønn",
+        "id",
+        "nummer",
+        "number",
         # Pattern like 'name1', 'name 1', 'navn1', etc.
-        r'^name\s*\d+$', r'^navn\s*\d+$',
-        r'^fornavn\s*\d+$',
+        r"^name\s*\d+$",
+        r"^navn\s*\d+$",
+        r"^fornavn\s*\d+$",
     ]
 
     # Check exact matches
-    if name_lower in ['name', 'navn', 'fornavn', 'firstname', 'køn', 'gender', 'kjønn']:
+    if name_lower in [
+        "name",
+        "navn",
+        "fornavn",
+        "firstname",
+        "køn",
+        "gender",
+        "kjønn",
+    ]:
         return False
 
     # Check pattern matches
     import re
+
     for pattern in invalid_patterns[-3:]:  # The regex patterns
         if re.match(pattern, name_lower, re.IGNORECASE):
             return False
@@ -53,11 +71,15 @@ def is_valid_name(name: str) -> bool:
 
     return True
 
+
 # -----------------------------------------------------------------------------
 # Display Helpers
 # -----------------------------------------------------------------------------
 
-def display_name_with_rating(name: str, rating: float, delta: Optional[Union[int, float, str]] = None) -> None:
+
+def display_name_with_rating(
+    name: str, rating: float, delta: Optional[Union[int, float, str]] = None
+) -> None:
     """
     Display name much larger than rating using st.metric with custom styling.
     CSS is injected in render_tournament to make the value (name) larger and label (rating) smaller.
@@ -77,9 +99,11 @@ def display_name_with_rating(name: str, rating: float, delta: Optional[Union[int
     # Value will be large (name), label will be smaller (rating)
     st.metric(value=name, label=f"{rating:.0f}", delta=delta_str, border=True)
 
+
 # -----------------------------------------------------------------------------
 # Core Logic: Elo & Math
 # -----------------------------------------------------------------------------
+
 
 def expected_score(rating_a: float, rating_b: float) -> float:
     """
@@ -88,11 +112,9 @@ def expected_score(rating_a: float, rating_b: float) -> float:
     """
     return 1.0 / (1.0 + 10.0 ** ((rating_b - rating_a) / 400.0))
 
+
 def update_elo_and_save(
-    ratings: Dict[str, float],
-    winner: str,
-    loser: str,
-    k: float = K_FACTOR
+    ratings: Dict[str, float], winner: str, loser: str, k: float = K_FACTOR
 ) -> Dict[str, float]:
     """
     Update Elo ratings and save in background.
@@ -110,11 +132,9 @@ def update_elo_and_save(
 
     return updated_ratings
 
+
 def update_elo_draw_and_save(
-    ratings: Dict[str, float],
-    player_a: str,
-    player_b: str,
-    k: float = K_FACTOR
+    ratings: Dict[str, float], player_a: str, player_b: str, k: float = K_FACTOR
 ) -> Dict[str, float]:
     """
     Update Elo ratings for a draw and save in background.
@@ -129,13 +149,14 @@ def update_elo_draw_and_save(
 
     return updated_ratings
 
+
 def update_elo_generic(
     ratings: Dict[str, float],
     player_a: str,
     player_b: str,
     score_a: float,
     score_b: float,
-    k: float = K_FACTOR
+    k: float = K_FACTOR,
 ) -> Dict[str, float]:
     """
     Generic Elo update for any outcome.
@@ -155,39 +176,36 @@ def update_elo_generic(
 
     return ratings
 
+
 def update_elo(
-    ratings: Dict[str, float],
-    winner: str,
-    loser: str,
-    k: float = K_FACTOR
+    ratings: Dict[str, float], winner: str, loser: str, k: float = K_FACTOR
 ) -> Dict[str, float]:
     """
     Update Elo ratings based on a binary outcome (1 for winner, 0 for loser).
     """
     return update_elo_generic(ratings, winner, loser, 1.0, 0.0, k)
 
+
 def update_elo_draw(
-    ratings: Dict[str, float],
-    player_a: str,
-    player_b: str,
-    k: float = K_FACTOR
+    ratings: Dict[str, float], player_a: str, player_b: str, k: float = K_FACTOR
 ) -> Dict[str, float]:
     """
     Update Elo ratings for a draw (0.5 points each).
     """
     return update_elo_generic(ratings, player_a, player_b, 0.5, 0.5, k)
 
+
 def initialize_ratings(names: List[str]) -> Dict[str, float]:
     return {name.strip(): INITIAL_RATING for name in names if name.strip()}
+
 
 # -----------------------------------------------------------------------------
 # Similarity Logic: String & Vector
 # -----------------------------------------------------------------------------
 
+
 def get_string_similarity_scores(
-    target: str,
-    candidates: List[str],
-    limit: int = 10
+    target: str, candidates: List[str], limit: int = 10
 ) -> List[Tuple[str, float]]:
     """
     Uses RapidFuzz (Levenshtein) to find similar names.
@@ -197,19 +215,23 @@ def get_string_similarity_scores(
         return []
 
     # process.extract returns (match, score, index)
-    results = process.extract(target, candidates, scorer=fuzz.ratio, limit=limit)
+    results = process.extract(
+        target, candidates, scorer=fuzz.ratio, limit=limit
+    )
     return [(item[0], item[1]) for item in results]
+
 
 @st.cache_resource
 def load_embedding_model() -> SentenceTransformer:
     # 'paraphrase-multilingual-MiniLM-L12-v2' is good for Danish/English
-    return SentenceTransformer('paraphrase-multilingual-MiniLM-L12-v2')
+    return SentenceTransformer("paraphrase-multilingual-MiniLM-L12-v2")
+
 
 def get_vector_similarity_scores(
     model: SentenceTransformer,
     target: str,
     candidates: List[str],
-    limit: int = 10
+    limit: int = 10,
 ) -> List[Tuple[str, float]]:
     """
     Uses LLM embeddings to find semantic similarity.
@@ -231,9 +253,11 @@ def get_vector_similarity_scores(
 
     return [(candidates[i], float(scores[i])) for i in top_indices]
 
+
 # -----------------------------------------------------------------------------
 # Data Source
 # -----------------------------------------------------------------------------
+
 
 def fetch_danish_names() -> List[str]:
     """
@@ -251,7 +275,11 @@ def fetch_danish_names() -> List[str]:
                 response = client.get(url)
                 response.raise_for_status()
                 # Split by newline and filter
-                names = [line.strip() for line in response.text.splitlines() if line.strip()]
+                names = [
+                    line.strip()
+                    for line in response.text.splitlines()
+                    if line.strip()
+                ]
                 all_names.extend(names)
         return sorted(list(set(all_names)))
     except Exception as e:
@@ -265,9 +293,11 @@ def load_local_csv(csv_path: str = "alle-navne.csv") -> List[str]:
     Returns list of names.
     """
     try:
-        df = pd.read_csv(csv_path, encoding='utf-8-sig')
+        df = pd.read_csv(csv_path, encoding="utf-8-sig")
         if "Navn" not in df.columns:
-            st.error(f"CSV file missing 'Navn' column. Columns found: {df.columns.tolist()}")
+            st.error(
+                f"CSV file missing 'Navn' column. Columns found: {df.columns.tolist()}"
+            )
             return []
         names = df["Navn"].astype(str).str.strip().tolist()
         # Filter out empty strings and deduplicate
@@ -295,7 +325,7 @@ def load_names_by_gender() -> Dict[str, List[str]]:
             "Female": set(),
             "Male": set(),
             "Unisex": set(),
-            "All": set()
+            "All": set(),
         }
 
         # Categorize names
@@ -361,7 +391,7 @@ def load_submodule_json() -> List[Dict[str, str]]:
     """
     json_path = os.path.join("godkendtefornavne", "allenavne.json")
     try:
-        with open(json_path, 'r', encoding='utf-8') as f:
+        with open(json_path, "r", encoding="utf-8") as f:
             data = json.load(f)
         if not isinstance(data, list):
             st.error(f"Expected JSON array, got {type(data)}")
@@ -375,10 +405,7 @@ def load_submodule_json() -> List[Dict[str, str]]:
                 gender = str(item["gender"]).strip()
 
                 if is_valid_name(name):
-                    valid_items.append({
-                        "name": name,
-                        "gender": gender
-                    })
+                    valid_items.append({"name": name, "gender": gender})
                 else:
                     invalid_count += 1
                     if invalid_count <= 5:  # Log first few invalid names
@@ -400,11 +427,7 @@ def load_submodule_csv_fallback() -> List[str]:
     Used when JSON is not available.
     """
     submodule_path = "godkendtefornavne"
-    csv_files = [
-        "drengenavne.csv",
-        "pigenavne.csv",
-        "unisexnavne.csv"
-    ]
+    csv_files = ["drengenavne.csv", "pigenavne.csv", "unisexnavne.csv"]
 
     all_names = []
     invalid_count = 0
@@ -412,7 +435,7 @@ def load_submodule_csv_fallback() -> List[str]:
         for csv_file in csv_files:
             file_path = os.path.join(submodule_path, csv_file)
             if os.path.exists(file_path):
-                with open(file_path, 'r', encoding='utf-8') as f:
+                with open(file_path, "r", encoding="utf-8") as f:
                     for line in f:
                         name = line.strip()
                         if name:  # Skip empty lines
@@ -420,8 +443,12 @@ def load_submodule_csv_fallback() -> List[str]:
                                 all_names.append(name)
                             else:
                                 invalid_count += 1
-                                if invalid_count <= 5:  # Log first few invalid names
-                                    st.warning(f"Skipping invalid CSV entry: '{name}'")
+                                if (
+                                    invalid_count <= 5
+                                ):  # Log first few invalid names
+                                    st.warning(
+                                        f"Skipping invalid CSV entry: '{name}'"
+                                    )
             else:
                 st.warning(f"Submodule CSV file not found: {file_path}")
 
@@ -458,7 +485,11 @@ def fetch_koldfront_csv() -> List[str]:
                 response = client.get(url)
                 response.raise_for_status()
                 # CSV files have one name per line (no header)
-                names = [line.strip() for line in response.text.splitlines() if line.strip()]
+                names = [
+                    line.strip()
+                    for line in response.text.splitlines()
+                    if line.strip()
+                ]
                 all_names.extend(names)
         names = sorted(list(set(all_names)))
         st.success(f"Fetched {len(names)} names from Koldfront")
@@ -475,7 +506,7 @@ def load_ratings(file_path: str = "ratings.json") -> Optional[Dict[str, float]]:
     """
     try:
         if os.path.exists(file_path):
-            with open(file_path, 'r', encoding='utf-8') as f:
+            with open(file_path, "r", encoding="utf-8") as f:
                 data = json.load(f)
                 # Check if it's the new format with metadata
                 if isinstance(data, dict) and "ratings" in data:
@@ -489,7 +520,9 @@ def load_ratings(file_path: str = "ratings.json") -> Optional[Dict[str, float]]:
         return None
 
 
-def save_ratings(ratings: Dict[str, float], file_path: str = "ratings.json") -> bool:
+def save_ratings(
+    ratings: Dict[str, float], file_path: str = "ratings.json"
+) -> bool:
     """
     Save ratings to JSON file with metadata.
     Returns True if successful.
@@ -498,9 +531,9 @@ def save_ratings(ratings: Dict[str, float], file_path: str = "ratings.json") -> 
         data = {
             "ratings": ratings,
             "last_saved": datetime.now().isoformat(),
-            "total_names": len(ratings)
+            "total_names": len(ratings),
         }
-        with open(file_path, 'w', encoding='utf-8') as f:
+        with open(file_path, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2, ensure_ascii=False)
         return True
     except Exception as e:
@@ -527,7 +560,9 @@ def initialize_or_load_ratings(names: List[str]) -> Dict[str, float]:
             new_names_added += 1
 
     if new_names_added > 0:
-        st.info(f"Added {new_names_added} new names with initial rating {INITIAL_RATING}")
+        st.info(
+            f"Added {new_names_added} new names with initial rating {INITIAL_RATING}"
+        )
 
     return ratings
 
@@ -539,11 +574,12 @@ def pull_submodule_updates() -> bool:
     """
     try:
         import subprocess
+
         result = subprocess.run(
             ["git", "-C", "godkendtefornavne", "pull"],
             capture_output=True,
             text=True,
-            timeout=30
+            timeout=30,
         )
         if result.returncode == 0:
             st.success("Submodule updated successfully")
@@ -562,6 +598,7 @@ def pull_submodule_updates() -> bool:
 # UI Layout
 # -----------------------------------------------------------------------------
 
+
 def setup_session_state(names: List[str]) -> None:
     if "ratings" not in st.session_state:
         st.session_state.ratings = initialize_or_load_ratings(names)
@@ -575,6 +612,7 @@ def setup_session_state(names: List[str]) -> None:
     if "names" not in st.session_state:
         st.session_state.names = names
 
+
 def select_candidates(names: List[str]) -> Tuple[str, str]:
     """
     Simple random selection for candidates.
@@ -585,6 +623,7 @@ def select_candidates(names: List[str]) -> Tuple[str, str]:
         return "", ""
 
     return tuple(np.random.choice(names, size=2, replace=False))
+
 
 def render_tournament(names: List[str]) -> None:
     st.header("Elo Rating Tournament")
@@ -597,7 +636,8 @@ def render_tournament(names: List[str]) -> None:
         st.session_state.candidate_b = c_b
 
     # Inject CSS for metric styling and equal column heights
-    st.markdown("""
+    st.markdown(
+        """
     <style>
     /* Style for st.metric display */
     div[data-testid="stMetricValue"] p {
@@ -633,31 +673,41 @@ def render_tournament(names: List[str]) -> None:
         justify-content: space-between !important;
     }
     </style>
-    """, unsafe_allow_html=True)
+    """,
+        unsafe_allow_html=True,
+    )
 
-    _,col_left,_,col_right,_ = st.columns([0.8,1,0.4,1,0.8])
+    _, col_left, _, col_right, _ = st.columns([0.8, 1, 0.4, 1, 0.8])
 
     # Get both ratings before displaying
-    rating_a = st.session_state.ratings.get(st.session_state.candidate_a, INITIAL_RATING)
-    rating_b = st.session_state.ratings.get(st.session_state.candidate_b, INITIAL_RATING)
+    rating_a = st.session_state.ratings.get(
+        st.session_state.candidate_a, INITIAL_RATING
+    )
+    rating_b = st.session_state.ratings.get(
+        st.session_state.candidate_b, INITIAL_RATING
+    )
 
     # Calculate rating differences for delta display
     delta_a = rating_a - rating_b  # Positive if A is higher rated
     delta_b = rating_b - rating_a  # Positive if B is higher rated
 
     with col_left:
-        display_name_with_rating(st.session_state.candidate_a, rating_a, delta=delta_a)
+        display_name_with_rating(
+            st.session_state.candidate_a, rating_a, delta=delta_a
+        )
 
         # Centered button container
         button_container = st.container()
         with button_container:
-            st.markdown("<div style='text-align: center'>", unsafe_allow_html=True)
+            st.markdown(
+                "<div style='text-align: center'>", unsafe_allow_html=True
+            )
             button_clicked = st.button(
                 f"👈 Prefer {st.session_state.candidate_a}",
                 key="vote_a",
                 width="stretch",
                 type="primary",
-                shortcut="Left"
+                shortcut="Left",
             )
             st.markdown("</div>", unsafe_allow_html=True)
 
@@ -665,24 +715,30 @@ def render_tournament(names: List[str]) -> None:
             update_elo_and_save(
                 st.session_state.ratings,
                 st.session_state.candidate_a,
-                st.session_state.candidate_b
+                st.session_state.candidate_b,
             )
-            st.session_state.candidate_a, st.session_state.candidate_b = select_candidates(names)
+            st.session_state.candidate_a, st.session_state.candidate_b = (
+                select_candidates(names)
+            )
             st.rerun()
 
     with col_right:
-        display_name_with_rating(st.session_state.candidate_b, rating_b, delta=delta_b)
+        display_name_with_rating(
+            st.session_state.candidate_b, rating_b, delta=delta_b
+        )
 
         # Centered button container (same as left side)
         button_container = st.container()
         with button_container:
-            st.markdown("<div style='text-align: center'>", unsafe_allow_html=True)
+            st.markdown(
+                "<div style='text-align: center'>", unsafe_allow_html=True
+            )
             button_clicked = st.button(
                 f"Prefer {st.session_state.candidate_b} 👉",
                 key="vote_b",
                 width="stretch",
                 type="primary",
-                shortcut="Right"
+                shortcut="Right",
             )
             st.markdown("</div>", unsafe_allow_html=True)
 
@@ -690,34 +746,40 @@ def render_tournament(names: List[str]) -> None:
             update_elo_and_save(
                 st.session_state.ratings,
                 st.session_state.candidate_b,
-                st.session_state.candidate_a
+                st.session_state.candidate_a,
             )
-            st.session_state.candidate_a, st.session_state.candidate_b = select_candidates(names)
+            st.session_state.candidate_a, st.session_state.candidate_b = (
+                select_candidates(names)
+            )
             st.rerun()
 
     # Draw button centered below both names
-    _, col_mid, _ = st.columns([1,0.4,1])
+    _, col_mid, _ = st.columns([1, 0.4, 1])
     with col_mid:
         draw_clicked = st.button(
             "🤝 Draw / Equal Preference",
             key="vote_draw",
             width="stretch",
             type="secondary",
-            shortcut="Up"
+            shortcut="Up",
         )
 
     if draw_clicked:
         update_elo_draw_and_save(
             st.session_state.ratings,
             st.session_state.candidate_a,
-            st.session_state.candidate_b
+            st.session_state.candidate_b,
         )
-        st.session_state.candidate_a, st.session_state.candidate_b = select_candidates(names)
+        st.session_state.candidate_a, st.session_state.candidate_b = (
+            select_candidates(names)
+        )
         st.rerun()
 
     st.divider()
     st.subheader("Current Top 10")
-    sorted_ratings = sorted(st.session_state.ratings.items(), key=lambda x: x[1], reverse=True)
+    sorted_ratings = sorted(
+        st.session_state.ratings.items(), key=lambda x: x[1], reverse=True
+    )
     df = pd.DataFrame(sorted_ratings[:10], columns=["Name", "Rating"])
     st.dataframe(
         df,
@@ -732,15 +794,14 @@ def render_tournament(names: List[str]) -> None:
                 width="small",
             )
         },
-
     )
+
 
 def render_similarity(names: List[str]) -> None:
     st.header("Similarity Search")
 
     search_type: Literal["String", "Vector"] = st.radio(
-        "Search Method",
-        ["String (Levenshtein)", "Vector (LLM Embedding)"]
+        "Search Method", ["String (Levenshtein)", "Vector (LLM Embedding)"]
     )
 
     query = st.text_input("Reference Name", value="Alma")
@@ -751,20 +812,23 @@ def render_similarity(names: List[str]) -> None:
             st.dataframe(
                 pd.DataFrame(results, columns=["Name", "Similarity Score"]),
                 width="stretch",
-                hide_index=True
+                hide_index=True,
             )
         else:
             with st.spinner("Loading Embedding Model (first run is slow)..."):
                 model = load_embedding_model()
 
             with st.spinner("Computing Similarities..."):
-                results = get_vector_similarity_scores(model, query, names, limit=10)
+                results = get_vector_similarity_scores(
+                    model, query, names, limit=10
+                )
 
             st.dataframe(
                 pd.DataFrame(results, columns=["Name", "Cosine Similarity"]),
                 width="stretch",
-                hide_index=True
+                hide_index=True,
             )
+
 
 def main() -> None:
     st.set_page_config(page_title="Name Ranker", layout="wide")
@@ -789,7 +853,9 @@ def main() -> None:
                     # Show breakdown
                     for gender in ["Male", "Female", "Unisex"]:
                         if gender in gender_data:
-                            st.info(f"  • {gender}: {len(gender_data[gender])} names")
+                            st.info(
+                                f"  • {gender}: {len(gender_data[gender])} names"
+                            )
 
                     # Auto-save ratings after loading new dataset
                     if save_ratings(st.session_state.ratings):
@@ -814,12 +880,16 @@ def main() -> None:
 
                         # Reinitialize ratings with all names
                         setup_session_state(gender_data["All"])
-                        st.success(f"Reloaded {len(gender_data['All'])} total names")
+                        st.success(
+                            f"Reloaded {len(gender_data['All'])} total names"
+                        )
 
                         # Show breakdown
                         for gender in ["Male", "Female", "Unisex"]:
                             if gender in gender_data:
-                                st.info(f"  • {gender}: {len(gender_data[gender])} names")
+                                st.info(
+                                    f"  • {gender}: {len(gender_data[gender])} names"
+                                )
                         st.rerun()
 
         with col2:
@@ -832,11 +902,20 @@ def main() -> None:
         if os.path.exists("godkendtefornavne"):
             try:
                 import subprocess
+
                 result = subprocess.run(
-                    ["git", "-C", "godkendtefornavne", "log", "-1", "--format=%cd", "--date=short"],
+                    [
+                        "git",
+                        "-C",
+                        "godkendtefornavne",
+                        "log",
+                        "-1",
+                        "--format=%cd",
+                        "--date=short",
+                    ],
                     capture_output=True,
                     text=True,
-                    timeout=5
+                    timeout=5,
                 )
                 if result.returncode == 0:
                     last_update = result.stdout.strip()
@@ -854,7 +933,9 @@ def main() -> None:
         gender_option = st.selectbox(
             "Filter names by gender:",
             ["All", "Male", "Female", "Unisex"],
-            index=["All", "Male", "Female", "Unisex"].index(st.session_state.gender_filter)
+            index=["All", "Male", "Female", "Unisex"].index(
+                st.session_state.gender_filter
+            ),
         )
 
         if gender_option != st.session_state.gender_filter:
@@ -879,29 +960,31 @@ def main() -> None:
                         st.success("Ratings saved!")
             with col2:
                 if st.button("Reset Ratings"):
-                    st.session_state.ratings = initialize_ratings(st.session_state.names)
+                    st.session_state.ratings = initialize_ratings(
+                        st.session_state.names
+                    )
                     st.success("Ratings reset to initial values")
                     st.rerun()
 
             # Export ratings
             st.subheader("Export")
             if st.button("Export Ratings as JSON"):
-                import io
                 import json as json_module
+
                 ratings_json = json_module.dumps(
                     {
                         "ratings": st.session_state.ratings,
                         "export_date": datetime.now().isoformat(),
-                        "total_names": len(st.session_state.ratings)
+                        "total_names": len(st.session_state.ratings),
                     },
                     indent=2,
-                    ensure_ascii=False
+                    ensure_ascii=False,
                 )
                 st.download_button(
                     label="Download Ratings JSON",
                     data=ratings_json,
                     file_name=f"name_ratings_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
-                    mime="application/json"
+                    mime="application/json",
                 )
 
     # Main Content
@@ -923,7 +1006,9 @@ def main() -> None:
         return
 
     # Show filter info
-    st.info(f"Showing {len(filtered_names)} {current_gender.lower()} names (out of {len(st.session_state.all_names)} total)")
+    st.info(
+        f"Showing {len(filtered_names)} {current_gender.lower()} names (out of {len(st.session_state.all_names)} total)"
+    )
 
     tab1, tab2 = st.tabs(["Tournament", "Similarity Search"])
 
@@ -932,6 +1017,7 @@ def main() -> None:
 
     with tab2:
         render_similarity(filtered_names)
+
 
 if __name__ == "__main__":
     main()
