@@ -2,18 +2,16 @@
 Data loading and persistence functions.
 """
 
-import json
 import os
 import re
-from datetime import datetime
 from typing import Dict, List, Optional
 
 import httpx
 import pandas as pd
 import streamlit as st
 
-from elo import INITIAL_RATING, initialize_ratings
 import database
+from elo import INITIAL_RATING, initialize_ratings
 
 
 def is_valid_name(name: str) -> bool:
@@ -105,7 +103,7 @@ def save_ratings(
                     icon="⚠️",
                 )
                 # Continue with other ratings
-        
+
         if updated > 0:
             st.toast(
                 f"Updated {updated} ratings in database",
@@ -253,7 +251,7 @@ def load_names_by_gender() -> Dict[str, List[str]]:
                 f"Synced {inserted} new names from submodule to database",
                 icon="ℹ️",
             )
-        
+
         # Get names categorized by gender from database
         gender_data = database.get_names_by_gender()
         if not gender_data:
@@ -263,7 +261,7 @@ def load_names_by_gender() -> Dict[str, List[str]]:
                 duration="long",
             )
             return {}
-        
+
         # Log counts
         for gender, names in gender_data.items():
             st.toast(

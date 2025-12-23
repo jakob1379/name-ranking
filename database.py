@@ -451,7 +451,7 @@ def get_names_by_gender() -> Dict[str, List[str]]:
             ORDER BY name
         """)
         rows = cursor.fetchall()
-        
+
         # Initialize gender categories
         gender_lists = {
             "Female": set(),
@@ -459,26 +459,26 @@ def get_names_by_gender() -> Dict[str, List[str]]:
             "Unisex": set(),
             "All": set(),
         }
-        
+
         # Categorize names
         for name, gender in rows:
             # Always add to 'All' category
             gender_lists["All"].add(name)
-            
+
             # Add to specific gender category
             if gender in gender_lists:
                 gender_lists[gender].add(name)
-            
+
             # Unisex names also go to both Male and Female categories
             if gender == "Unisex":
                 gender_lists["Male"].add(name)
                 gender_lists["Female"].add(name)
-        
+
         # Convert sets to sorted lists
         result = {}
         for gender, name_set in gender_lists.items():
             result[gender] = sorted(list(name_set))
-        
+
         return result
 
 

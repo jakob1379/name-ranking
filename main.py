@@ -3,17 +3,17 @@ Name Ranker - Main entry point.
 Refactored version with modular imports.
 """
 
-import os
 import json
+import os
 from datetime import datetime
 
 import streamlit as st
 
+import database
 from data_loader import load_names_by_gender, save_ratings
 from elo import initialize_ratings
 from ui import render_similarity, render_tournament
 from utils import pull_submodule_updates, setup_session_state
-import database
 
 
 def main() -> None:
@@ -156,19 +156,23 @@ def main() -> None:
         # Get available origin regions from database
         database.init_database()
         available_regions = database.get_all_origin_regions()
-        
+
         if "origin_filter" not in st.session_state:
             # Load saved origin filter from database
-            saved_origins_json = database.load_user_setting("selected_origins", "[]")
+            saved_origins_json = database.load_user_setting(
+                "selected_origins", "[]"
+            )
             try:
                 saved_origins = json.loads(saved_origins_json)
                 # Validate that saved origins are still available
-                saved_origins = [o for o in saved_origins if o in available_regions]
+                saved_origins = [
+                    o for o in saved_origins if o in available_regions
+                ]
                 st.session_state.origin_filter = saved_origins
             except Exception:
                 # Default: empty list (show all regions)
                 st.session_state.origin_filter = []
-        
+
         # Multiselect for origin filter
         selected_origins = st.multiselect(
             "Filter names by origin region:",
@@ -176,15 +180,20 @@ def main() -> None:
             default=st.session_state.origin_filter,
             help="Select origin regions. Empty shows all.",
         )
-        
+
         # Save to session state and persist to database if changed
         if selected_origins != st.session_state.origin_filter:
             st.session_state.origin_filter = selected_origins
             # Save to database
-            database.save_user_setting("selected_origins", json.dumps(selected_origins))
-            st.info(f"Filter: {selected_origins if selected_origins else 'All'}")
+            database.save_user_setting(
+                "selected_origins", json.dumps(selected_origins)
+            )
+            st.toast(
+                f"Filter: {selected_origins if selected_origins else 'All'}",
+                icon="ℹ️",
+            )
             st.rerun()
-        
+
         st.divider()
 
         # Ratings management
@@ -265,21 +274,18 @@ def main() -> None:
 
     # Get current gender filter
     current_gender = st.session_state.get("gender_filter", "All")
-<<<<<<< HEAD
-
     # Get current origin filter
     current_origins = st.session_state.get("origin_filter", [])
     # Empty list means no origin filtering (show all regions)
     origins_to_filter = current_origins if current_origins else None
-    
+
     # Get filtered names using database
     database.init_database()
     filtered_names = database.get_names_by_filters(
         gender=current_gender if current_gender != "All" else None,
-        origins=origins_to_filter
+        origins=origins_to_filter,
     )
-    )
-    
+
     if not filtered_names:
         if current_origins:
             st.toast(
@@ -293,10 +299,10 @@ def main() -> None:
                 icon="⚠️",
             )
         return
-    
+
     # Get total names count for reference (all names in database)
     total_names_count = len(st.session_state.all_names)
-    
+
     # Show filter info
     if current_origins:
         st.toast(

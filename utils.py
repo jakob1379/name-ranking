@@ -7,9 +7,9 @@ from typing import Dict, List, Tuple
 import numpy as np
 import streamlit as st
 
+import database
 from data_loader import initialize_or_load_ratings, save_ratings
 from elo import K_FACTOR, update_elo, update_elo_draw
-import database
 
 
 def pull_submodule_updates() -> bool:
