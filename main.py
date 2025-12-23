@@ -82,8 +82,10 @@ def display_name_with_rating(
 ) -> None:
     """
     Display name much larger than rating using st.metric with custom styling.
-    CSS is injected in render_tournament to make the value (name) larger and label (rating) smaller.
-    delta: difference in Elo compared to opponent (positive if higher, negative if lower).
+    CSS is injected in render_tournament to make the value (name) larger
+    and label (rating) smaller.
+    delta: difference in Elo compared to opponent (positive if higher,
+    negative if lower).
     """
     # Format delta for display
     if delta is not None:
@@ -160,7 +162,8 @@ def update_elo_generic(
 ) -> Dict[str, float]:
     """
     Generic Elo update for any outcome.
-    score_a is the result for player_a (typically 1.0 for win, 0.5 for draw, 0.0 for loss).
+    score_a is the result for player_a (typically 1.0 for win,
+    0.5 for draw, 0.0 for loss).
     """
     if player_a not in ratings or player_b not in ratings:
         return ratings
@@ -296,7 +299,8 @@ def load_local_csv(csv_path: str = "alle-navne.csv") -> List[str]:
         df = pd.read_csv(csv_path, encoding="utf-8-sig")
         if "Navn" not in df.columns:
             st.error(
-                f"CSV file missing 'Navn' column. Columns found: {df.columns.tolist()}"
+                "CSV file missing 'Navn' column. "
+                f"Columns found: {df.columns.tolist()}"
             )
             return []
         names = df["Navn"].astype(str).str.strip().tolist()
@@ -391,25 +395,30 @@ def load_submodule_json() -> List[Dict[str, str]]:
     """
     json_path = os.path.join("godkendtefornavne", "allenavne.json")
     try:
-        with open(json_path, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        if not isinstance(data, list):
-            st.error(f"Expected JSON array, got {type(data)}")
+        # Use pandas to read JSON for better performance and error handling
+        df = pd.read_json(json_path, encoding="utf-8")
+
+        # Ensure we have the expected columns
+        if not all(col in df.columns for col in ["name", "gender"]):
+            st.error(
+                f"JSON missing required columns. Found: {df.columns.tolist()}"
+            )
             return []
+
         # Validate structure and filter out invalid names
         valid_items = []
         invalid_count = 0
-        for item in data:
-            if isinstance(item, dict) and "name" in item and "gender" in item:
-                name = str(item["name"]).strip()
-                gender = str(item["gender"]).strip()
 
-                if is_valid_name(name):
-                    valid_items.append({"name": name, "gender": gender})
-                else:
-                    invalid_count += 1
-                    if invalid_count <= 5:  # Log first few invalid names
-                        st.warning(f"Skipping invalid name entry: '{name}'")
+        for _, row in df.iterrows():
+            name = str(row["name"]).strip()
+            gender = str(row["gender"]).strip()
+
+            if is_valid_name(name):
+                valid_items.append({"name": name, "gender": gender})
+            else:
+                invalid_count += 1
+                if invalid_count <= 5:  # Log first few invalid names
+                    st.warning(f"Skipping invalid name entry: '{name}'")
 
         if invalid_count > 0:
             st.info(f"Filtered out {invalid_count} invalid name entries")
@@ -561,7 +570,8 @@ def initialize_or_load_ratings(names: List[str]) -> Dict[str, float]:
 
     if new_names_added > 0:
         st.info(
-            f"Added {new_names_added} new names with initial rating {INITIAL_RATING}"
+            f"Added {new_names_added} new names with initial rating "
+            f"{INITIAL_RATING}"
         )
 
     return ratings
@@ -573,18 +583,27 @@ def pull_submodule_updates() -> bool:
     Returns True if successful.
     """
     try:
-        import subprocess
+        import subprocess  # nosec: B404 - git commands are safe, no user input
+        import time
 
-        result = subprocess.run(
-            ["git", "-C", "godkendtefornavne", "pull"],
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
+        with st.spinner("Pulling latest name data from git submodule..."):
+            result = subprocess.run(  # nosec
+                ["git", "-C", "godkendtefornavne", "pull"],
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+
         if result.returncode == 0:
-            st.success("Submodule updated successfully")
+            st.success("✅ Submodule updated successfully")
             if result.stdout:
                 st.text(f"Output: {result.stdout[:200]}")
+
+            # Show reload message with slight delay
+            reload_info = st.info("⏳ Reloading names in 2 seconds...")
+            time.sleep(2)
+            reload_info.empty()
+
             return True
         else:
             st.error(f"Failed to pull submodule: {result.stderr}")
@@ -628,6 +647,10 @@ def select_candidates(names: List[str]) -> Tuple[str, str]:
 def render_tournament(names: List[str]) -> None:
     st.header("Elo Rating Tournament")
     st.write(f"Comparing {len(names)} names")
+    st.caption(
+        "💡 **Keyboard shortcuts**: Left arrow (←) for left name, "
+        "Right arrow (→) for right name, Up arrow (↑) for draw"
+    )
 
     # Pick candidates if not set or just reset
     if not st.session_state.candidate_a or not st.session_state.candidate_b:
@@ -708,6 +731,10 @@ def render_tournament(names: List[str]) -> None:
                 width="stretch",
                 type="primary",
                 shortcut="Left",
+                help=(
+                    f"Select {st.session_state.candidate_a} as preferred "
+                    "(Left arrow key)"
+                ),
             )
             st.markdown("</div>", unsafe_allow_html=True)
 
@@ -739,6 +766,10 @@ def render_tournament(names: List[str]) -> None:
                 width="stretch",
                 type="primary",
                 shortcut="Right",
+                help=(
+                    f"Select {st.session_state.candidate_b} as preferred "
+                    "(Right arrow key)"
+                ),
             )
             st.markdown("</div>", unsafe_allow_html=True)
 
@@ -762,9 +793,11 @@ def render_tournament(names: List[str]) -> None:
             width="stretch",
             type="secondary",
             shortcut="Up",
+            help="Mark both names as equally preferred (Up arrow key)",
         )
 
     if draw_clicked:
+        st.toast("you chose a draw!", duration="long")
         update_elo_draw_and_save(
             st.session_state.ratings,
             st.session_state.candidate_a,
@@ -854,7 +887,8 @@ def main() -> None:
                     for gender in ["Male", "Female", "Unisex"]:
                         if gender in gender_data:
                             st.info(
-                                f"  • {gender}: {len(gender_data[gender])} names"
+                                f"  • {gender}: "
+                                f"{len(gender_data[gender])} names"
                             )
 
                     # Auto-save ratings after loading new dataset
@@ -888,7 +922,8 @@ def main() -> None:
                         for gender in ["Male", "Female", "Unisex"]:
                             if gender in gender_data:
                                 st.info(
-                                    f"  • {gender}: {len(gender_data[gender])} names"
+                                    f"  • {gender}: "
+                                    f"{len(gender_data[gender])} names"
                                 )
                         st.rerun()
 
@@ -901,9 +936,9 @@ def main() -> None:
         # Show submodule status
         if os.path.exists("godkendtefornavne"):
             try:
-                import subprocess
+                import subprocess  # nosec: B404 - git commands are safe, no user input
 
-                result = subprocess.run(
+                result = subprocess.run(  # nosec
                     [
                         "git",
                         "-C",
@@ -920,7 +955,7 @@ def main() -> None:
                 if result.returncode == 0:
                     last_update = result.stdout.strip()
                     st.caption(f"Last update: {last_update}")
-            except:
+            except Exception:  # nosec: B110 - non-critical, can safely ignore git log failure
                 pass
 
         st.divider()
@@ -930,11 +965,14 @@ def main() -> None:
         if "gender_filter" not in st.session_state:
             st.session_state.gender_filter = "All"
 
-        gender_option = st.selectbox(
+        # Use pills for gender selection - modern, tab-like appearance
+        gender_option = st.pills(
             "Filter names by gender:",
             ["All", "Male", "Female", "Unisex"],
-            index=["All", "Male", "Female", "Unisex"].index(
-                st.session_state.gender_filter
+            default=st.session_state.gender_filter,
+            help=(
+                "Select which gender of names to compare. "
+                "Click or use left/right arrow keys to navigate."
             ),
         )
 
@@ -959,12 +997,34 @@ def main() -> None:
                     if save_ratings(st.session_state.ratings):
                         st.success("Ratings saved!")
             with col2:
-                if st.button("Reset Ratings"):
-                    st.session_state.ratings = initialize_ratings(
-                        st.session_state.names
-                    )
-                    st.success("Ratings reset to initial values")
-                    st.rerun()
+                if st.button(
+                    "Reset Ratings",
+                    help=(
+                        "Reset all ratings to initial values. "
+                        "This action cannot be undone."
+                    ),
+                    type="secondary",
+                ):
+                    # Open confirmation dialog
+                    with st.dialog("Confirm Reset Ratings"):
+                        st.markdown("### ⚠️ Reset All Ratings?")
+                        st.write(
+                            "This will reset **all** ratings to their "
+                            "initial values."
+                        )
+                        st.write("**This action cannot be undone.**")
+
+                        col_confirm, col_cancel = st.columns(2)
+                        with col_confirm:
+                            if st.button("Yes, Reset Ratings", type="primary"):
+                                st.session_state.ratings = initialize_ratings(
+                                    st.session_state.names
+                                )
+                                st.success("✅ Ratings reset to initial values")
+                                st.rerun()
+                        with col_cancel:
+                            if st.button("Cancel", type="secondary"):
+                                st.rerun()
 
             # Export ratings
             st.subheader("Export")
@@ -1007,7 +1067,8 @@ def main() -> None:
 
     # Show filter info
     st.info(
-        f"Showing {len(filtered_names)} {current_gender.lower()} names (out of {len(st.session_state.all_names)} total)"
+        f"Showing {len(filtered_names)} {current_gender.lower()} names "
+        f"(out of {len(st.session_state.all_names)} total)"
     )
 
     tab1, tab2 = st.tabs(["Tournament", "Similarity Search"])

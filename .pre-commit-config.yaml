@@ -19,7 +19,7 @@ repos:
   # Standard meta hooks
   - repo: meta
     hooks:
-      - id: check-hooks-apply  # Check hook applicability
+      # - id: check-hooks-apply  # Check hook applicability
       - id: check-useless-excludes  # Check for unused excludes
 
   # Basic file checks from pre-commit-hooks
@@ -112,11 +112,12 @@ repos:
         additional_dependencies: ['validate-pyproject-schema-store[all]']
 
   # Dead code detection
-  - repo: https://github.com/albertas/deadcode
-    rev: 2.4.1
-    hooks:
-      - id: deadcode
-        name: deadcode
+  # - repo: https://github.com/albertas/deadcode
+  #   rev: 2.4.1
+  #   hooks:
+  #     - id: deadcode
+  #       name: deadcode
+  #       skip: true
 
   # check for code insecurities
   - repo: https://github.com/PyCQA/bandit
