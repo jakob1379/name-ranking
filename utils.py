@@ -29,21 +29,31 @@ def pull_submodule_updates() -> bool:
             )
 
         if result.returncode == 0:
-            st.success("✅ Submodule updated successfully")
+            st.toast(
+                "✅ Submodule updated successfully",
+                icon="✅",
+            )
             if result.stdout:
                 st.text(f"Output: {result.stdout[:200]}")
 
             # Show reload message with slight delay
-            reload_info = st.info("⏳ Reloading names in 2 seconds...")
+            st.toast("⏳ Reloading names in 2 seconds...", icon="⏳")
             time.sleep(2)
-            reload_info.empty()
 
             return True
         else:
-            st.error(f"Failed to pull submodule: {result.stderr}")
+            st.toast(
+                f"Failed to pull submodule: {result.stderr}",
+                icon="❌",
+                duration="long",
+            )
             return False
     except Exception as e:
-        st.error(f"Error pulling submodule: {e}")
+        st.toast(
+            f"Error pulling submodule: {e}",
+            icon="❌",
+            duration="long",
+        )
         return False
 
 
@@ -88,7 +98,10 @@ def update_elo_and_save(
         save_ratings(updated_ratings)
     except Exception as e:
         # Don't break the UI if save fails
-        st.warning(f"Failed to save ratings: {e}")
+        st.toast(
+            f"Failed to save ratings: {e}",
+            icon="⚠️",
+        )
 
     return updated_ratings
 
@@ -105,6 +118,9 @@ def update_elo_draw_and_save(
     try:
         save_ratings(updated_ratings)
     except Exception as e:
-        st.warning(f"Failed to save ratings: {e}")
+        st.toast(
+            f"Failed to save ratings: {e}",
+            icon="⚠️",
+        )
 
     return updated_ratings

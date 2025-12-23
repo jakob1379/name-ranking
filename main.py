@@ -32,21 +32,31 @@ def main() -> None:
 
                     # Initialize with all names for ratings
                     setup_session_state(gender_data["All"])
-                    st.success(f"Loaded {len(gender_data['All'])} total names")
+                    st.toast(
+                        f"Loaded {len(gender_data['All'])} total names",
+                        icon="✅",
+                    )
 
                     # Show breakdown
                     for gender in ["Male", "Female", "Unisex"]:
                         if gender in gender_data:
-                            st.info(
-                                f"  • {gender}: "
-                                f"{len(gender_data[gender])} names"
+                            st.toast(
+                                f"{gender}: {len(gender_data[gender])} names",
+                                icon="ℹ️",
                             )
 
                     # Auto-save ratings after loading new dataset
                     if save_ratings(st.session_state.ratings):
-                        st.info("Ratings saved automatically")
+                        st.toast(
+                            "Ratings saved automatically",
+                            icon="ℹ️",
+                        )
                 else:
-                    st.error("Failed to load names from submodule")
+                    st.toast(
+                        "Failed to load names from submodule",
+                        icon="❌",
+                        duration="long",
+                    )
                     return
 
         # Submodule management
@@ -65,16 +75,18 @@ def main() -> None:
 
                         # Reinitialize ratings with all names
                         setup_session_state(gender_data["All"])
-                        st.success(
-                            f"Reloaded {len(gender_data['All'])} total names"
+                        st.toast(
+                            f"Reloaded {len(gender_data['All'])} total names",
+                            icon="✅",
                         )
 
                         # Show breakdown
                         for gender in ["Male", "Female", "Unisex"]:
                             if gender in gender_data:
-                                st.info(
-                                    f"  • {gender}: "
-                                    f"{len(gender_data[gender])} names"
+                                st.toast(
+                                    f"{gender}: "
+                                    f"{len(gender_data[gender])} names",
+                                    icon="ℹ️",
                                 )
                         st.rerun()
 
@@ -129,7 +141,10 @@ def main() -> None:
 
         if gender_option != st.session_state.gender_filter:
             st.session_state.gender_filter = gender_option
-            st.info(f"Filter set to: {gender_option}")
+            st.toast(
+                f"Filter set to: {gender_option}",
+                icon="ℹ️",
+            )
             # When changing filter, we need to update the displayed names
             # but keep all ratings
             st.rerun()
@@ -146,7 +161,10 @@ def main() -> None:
             with col1:
                 if st.button("Save Ratings"):
                     if save_ratings(st.session_state.ratings):
-                        st.success("Ratings saved!")
+                        st.toast(
+                            "Ratings saved!",
+                            icon="✅",
+                        )
             with col2:
                 if st.button(
                     "Reset Ratings",
@@ -171,7 +189,10 @@ def main() -> None:
                                 st.session_state.ratings = initialize_ratings(
                                     st.session_state.names
                                 )
-                                st.success("✅ Ratings reset to initial values")
+                                st.toast(
+                                    "✅ Ratings reset to initial values",
+                                    icon="✅",
+                                )
                                 st.rerun()
                         with col_cancel:
                             if st.button("Cancel", type="secondary"):
@@ -200,7 +221,10 @@ def main() -> None:
 
     # Main Content
     if "all_names_data" not in st.session_state:
-        st.warning("Please load names from the sidebar.")
+        st.toast(
+            "Please load names from the sidebar.",
+            icon="⚠️",
+        )
         return
 
     # Get current gender filter
@@ -213,13 +237,17 @@ def main() -> None:
         filtered_names = st.session_state.all_names_data.get("All", [])
 
     if not filtered_names:
-        st.warning(f"No names found for gender filter: {current_gender}")
+        st.toast(
+            f"No names found for gender filter: {current_gender}",
+            icon="⚠️",
+        )
         return
 
     # Show filter info
-    st.info(
+    st.toast(
         f"Showing {len(filtered_names)} {current_gender.lower()} names "
-        f"(out of {len(st.session_state.all_names)} total)"
+        f"(out of {len(st.session_state.all_names)} total)",
+        icon="ℹ️",
     )
 
     tab1, tab2 = st.tabs(["Tournament", "Similarity Search"])

@@ -85,7 +85,10 @@ def load_ratings(file_path: str = "ratings.json") -> Optional[Dict[str, float]]:
                     return data
         return None
     except Exception as e:
-        st.warning(f"Could not load ratings: {e}")
+        st.toast(
+            f"Could not load ratings: {e}",
+            icon="⚠️",
+        )
         return None
 
 
@@ -106,7 +109,11 @@ def save_ratings(
             json.dump(data, f, indent=2, ensure_ascii=False)
         return True
     except Exception as e:
-        st.error(f"Failed to save ratings: {e}")
+        st.toast(
+            f"Failed to save ratings: {e}",
+            icon="❌",
+            duration="long",
+        )
         return False
 
 
@@ -129,9 +136,10 @@ def initialize_or_load_ratings(names: List[str]) -> Dict[str, float]:
             new_names_added += 1
 
     if new_names_added > 0:
-        st.info(
+        st.toast(
             f"Added {new_names_added} new names with initial rating "
-            f"{INITIAL_RATING}"
+            f"{INITIAL_RATING}",
+            icon="ℹ️",
         )
 
     return ratings
@@ -149,8 +157,10 @@ def load_submodule_json() -> List[Dict[str, str]]:
 
         # Ensure we have the expected columns
         if not all(col in df.columns for col in ["name", "gender"]):
-            st.error(
-                f"JSON missing required columns. Found: {df.columns.tolist()}"
+            st.toast(
+                f"JSON missing required columns. Found: {df.columns.tolist()}",
+                icon="❌",
+                duration="long",
             )
             return []
 
@@ -167,15 +177,28 @@ def load_submodule_json() -> List[Dict[str, str]]:
             else:
                 invalid_count += 1
                 if invalid_count <= 5:  # Log first few invalid names
-                    st.warning(f"Skipping invalid name entry: '{name}'")
+                    st.toast(
+                        f"Skipping invalid name entry: '{name}'",
+                        icon="⚠️",
+                    )
 
         if invalid_count > 0:
-            st.info(f"Filtered out {invalid_count} invalid name entries")
+            st.toast(
+                f"Filtered out {invalid_count} invalid name entries",
+                icon="ℹ️",
+            )
 
-        st.success(f"Loaded {len(valid_items)} name-gender pairs from JSON")
+        st.toast(
+            f"Loaded {len(valid_items)} name-gender pairs from JSON",
+            icon="✅",
+        )
         return valid_items
     except Exception as e:
-        st.error(f"Failed to load submodule JSON: {e}")
+        st.toast(
+            f"Failed to load submodule JSON: {e}",
+            icon="❌",
+            duration="long",
+        )
         return []
 
 
@@ -187,18 +210,27 @@ def load_local_csv(csv_path: str = "alle-navne.csv") -> List[str]:
     try:
         df = pd.read_csv(csv_path, encoding="utf-8-sig")
         if "Navn" not in df.columns:
-            st.error(
+            st.toast(
                 "CSV file missing 'Navn' column. "
-                f"Columns found: {df.columns.tolist()}"
+                f"Columns found: {df.columns.tolist()}",
+                icon="❌",
+                duration="long",
             )
             return []
         names = df["Navn"].astype(str).str.strip().tolist()
         # Filter out empty strings and deduplicate
         names = sorted(list(set([name for name in names if name])))
-        st.success(f"Loaded {len(names)} names from local CSV")
+        st.toast(
+            f"Loaded {len(names)} names from local CSV",
+            icon="✅",
+        )
         return names
     except Exception as e:
-        st.error(f"Failed to load local CSV: {e}")
+        st.toast(
+            f"Failed to load local CSV: {e}",
+            icon="❌",
+            duration="long",
+        )
         return []
 
 
@@ -245,11 +277,18 @@ def load_names_by_gender() -> Dict[str, List[str]]:
 
         # Log counts
         for gender, names in result.items():
-            st.info(f"Loaded {len(names)} {gender.lower()} names")
+            st.toast(
+                f"Loaded {len(names)} {gender.lower()} names",
+                icon="ℹ️",
+            )
 
         return result
     except Exception as e:
-        st.error(f"Failed to load names by gender: {e}")
+        st.toast(
+            f"Failed to load names by gender: {e}",
+            icon="❌",
+            duration="long",
+        )
         return {}
 
 
@@ -265,14 +304,24 @@ def load_submodule_names(gender: str = "All") -> List[str]:
             return []
 
         if gender not in gender_data:
-            st.warning(f"Unknown gender filter: {gender}. Using 'All'")
+            st.toast(
+                f"Unknown gender filter: {gender}. Using 'All'",
+                icon="⚠️",
+            )
             gender = "All"
 
         names = gender_data.get(gender, [])
-        st.success(f"Loaded {len(names)} names for {gender}")
+        st.toast(
+            f"Loaded {len(names)} names for {gender}",
+            icon="✅",
+        )
         return names
     except Exception as e:
-        st.error(f"Failed to load from submodule JSON: {e}")
+        st.toast(
+            f"Failed to load from submodule JSON: {e}",
+            icon="❌",
+            duration="long",
+        )
         # Fallback to CSV files for compatibility
         return load_submodule_csv_fallback()
 
@@ -302,24 +351,42 @@ def load_submodule_csv_fallback() -> List[str]:
                                 if (
                                     invalid_count <= 5
                                 ):  # Log first few invalid names
-                                    st.warning(
-                                        f"Skipping invalid CSV entry: '{name}'"
+                                    st.toast(
+                                        f"Skipping invalid CSV entry: '{name}'",
+                                        icon="⚠️",
                                     )
             else:
-                st.warning(f"Submodule CSV file not found: {file_path}")
+                st.toast(
+                    f"Submodule CSV file not found: {file_path}",
+                    icon="⚠️",
+                )
 
         if not all_names:
-            st.error("No names found in submodule files")
+            st.toast(
+                "No names found in submodule files",
+                icon="❌",
+                duration="long",
+            )
             return []
 
         if invalid_count > 0:
-            st.info(f"Filtered out {invalid_count} invalid CSV entries")
+            st.toast(
+                f"Filtered out {invalid_count} invalid CSV entries",
+                icon="ℹ️",
+            )
 
         names = sorted(list(set(all_names)))
-        st.success(f"Loaded {len(names)} names from CSV fallback")
+        st.toast(
+            f"Loaded {len(names)} names from CSV fallback",
+            icon="✅",
+        )
         return names
     except Exception as e:
-        st.error(f"Failed to load from CSV fallback: {e}")
+        st.toast(
+            f"Failed to load from CSV fallback: {e}",
+            icon="❌",
+            duration="long",
+        )
         return []
 
 
@@ -347,7 +414,11 @@ def fetch_danish_names() -> List[str]:
                 all_names.extend(names)
         return sorted(list(set(all_names)))
     except Exception as e:
-        st.error(f"Failed to fetch remote names: {e}")
+        st.toast(
+            f"Failed to fetch remote names: {e}",
+            icon="❌",
+            duration="long",
+        )
         return []
 
 
@@ -376,8 +447,15 @@ def fetch_koldfront_csv() -> List[str]:
                 ]
                 all_names.extend(names)
         names = sorted(list(set(all_names)))
-        st.success(f"Fetched {len(names)} names from Koldfront")
+        st.toast(
+            f"Fetched {len(names)} names from Koldfront",
+            icon="✅",
+        )
         return names
     except Exception as e:
-        st.error(f"Failed to fetch from Koldfront: {e}")
+        st.toast(
+            f"Failed to fetch from Koldfront: {e}",
+            icon="❌",
+            duration="long",
+        )
         return []
