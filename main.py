@@ -1,6 +1,8 @@
 import json
 import os
+import sys
 from datetime import datetime
+from pathlib import Path
 from typing import Dict, List, Literal, Optional, Tuple, Union
 
 import httpx
@@ -9,6 +11,10 @@ import pandas as pd
 import streamlit as st
 from rapidfuzz import fuzz, process
 from sentence_transformers import SentenceTransformer
+
+# Add parent directory to path for database module
+sys.path.insert(0, str(Path(__file__).parent))
+import database
 
 K_FACTOR: float = 32.0
 INITIAL_RATING: float = 1500.0
@@ -315,15 +321,32 @@ def load_local_csv(csv_path: str = "alle-navne.csv") -> List[str]:
 
 def load_names_by_gender() -> Dict[str, List[str]]:
     """
-    Load names from local git submodule JSON file, categorized by gender.
+    Load names from database, categorized by gender.
     Returns dict mapping gender to list of names.
     Unisex names are included in both 'Male' and 'Female' categories.
     """
     try:
-        data = load_submodule_json()
-        if not data:
-            return {}
-
+        # Initialize database if needed
+        database.init_database()
+        
+        # Query all names with gender from database
+        with database.get_connection() as conn:
+            cursor = conn.execute("SELECT name, gender FROM names")
+            rows = cursor.fetchall()
+        
+        if not rows:
+            st.warning("No names found in database. Syncing with submodule...")
+            inserted = database.sync_names_with_submodule()
+            if inserted > 0:
+                st.info(f"Synced {inserted} names from submodule")
+                # Query again
+                with database.get_connection() as conn:
+                    cursor = conn.execute("SELECT name, gender FROM names")
+                    rows = cursor.fetchall()
+            else:
+                st.error("Failed to sync names from submodule")
+                return {}
+        
         # Initialize gender categories
         gender_lists = {
             "Female": set(),
@@ -331,37 +354,50 @@ def load_names_by_gender() -> Dict[str, List[str]]:
             "Unisex": set(),
             "All": set(),
         }
-
+        
         # Categorize names
-        for item in data:
-            name = item["name"]
-            gender = item["gender"]
-
+        for name, gender in rows:
             # Always add to 'All' category
             gender_lists["All"].add(name)
-
+            
             # Add to specific gender category
             if gender in gender_lists:
                 gender_lists[gender].add(name)
-
+            
             # Unisex names also go to both Male and Female categories
             if gender == "Unisex":
                 gender_lists["Male"].add(name)
                 gender_lists["Female"].add(name)
-
+        
         # Convert sets to sorted lists
         result = {}
         for gender, name_set in gender_lists.items():
             result[gender] = sorted(list(name_set))
-
+        
         # Log counts
         for gender, names in result.items():
             st.info(f"Loaded {len(names)} {gender.lower()} names")
-
+        
         return result
     except Exception as e:
-        st.error(f"Failed to load names by gender: {e}")
+        st.error(f"Failed to load names from database: {e}")
         return {}
+
+
+def get_filtered_names(
+    gender: Optional[str] = None, 
+    origins: Optional[List[str]] = None
+) -> List[str]:
+    """
+    Get names filtered by gender and origin regions.
+    Returns list of names.
+    """
+    try:
+        database.init_database()
+        return database.get_names_by_filters(gender, origins)
+    except Exception as e:
+        st.error(f"Failed to get filtered names: {e}")
+        return []
 
 
 def load_submodule_names(gender: str = "All") -> List[str]:
@@ -510,43 +546,31 @@ def fetch_koldfront_csv() -> List[str]:
 
 def load_ratings(file_path: str = "ratings.json") -> Optional[Dict[str, float]]:
     """
-    Load saved ratings from JSON file.
-    Returns ratings dict or None if file doesn't exist.
+    Load saved ratings from database.
+    Returns ratings dict or empty dict if no ratings exist.
     """
     try:
-        if os.path.exists(file_path):
-            with open(file_path, "r", encoding="utf-8") as f:
-                data = json.load(f)
-                # Check if it's the new format with metadata
-                if isinstance(data, dict) and "ratings" in data:
-                    return data["ratings"]
-                # Old format: just ratings dict
-                elif isinstance(data, dict):
-                    return data
-        return None
+        database.init_database()
+        return database.get_ratings()
     except Exception as e:
-        st.warning(f"Could not load ratings: {e}")
-        return None
+        st.warning(f"Could not load ratings from database: {e}")
+        return {}
 
 
 def save_ratings(
     ratings: Dict[str, float], file_path: str = "ratings.json"
 ) -> bool:
     """
-    Save ratings to JSON file with metadata.
+    Save ratings to database.
     Returns True if successful.
     """
     try:
-        data = {
-            "ratings": ratings,
-            "last_saved": datetime.now().isoformat(),
-            "total_names": len(ratings),
-        }
-        with open(file_path, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2, ensure_ascii=False)
+        database.init_database()
+        for name, rating in ratings.items():
+            database.update_rating(name, rating)
         return True
     except Exception as e:
-        st.error(f"Failed to save ratings: {e}")
+        st.error(f"Failed to save ratings to database: {e}")
         return False
 
 
@@ -983,6 +1007,40 @@ def main() -> None:
             # but keep all ratings
             st.rerun()
 
+        # Origin Filtering
+        st.subheader("Origin Filter")
+        
+        # Get available origin regions from database
+        available_regions = database.get_all_origin_regions()
+        
+        # Load saved origin filter from database
+        if "origin_filter" not in st.session_state:
+            saved_origins_json = database.load_user_setting("selected_origins", "[]")
+            try:
+                saved_origins = json.loads(saved_origins_json)
+                # Validate that saved origins are still available
+                saved_origins = [o for o in saved_origins if o in available_regions]
+                st.session_state.origin_filter = saved_origins
+            except:
+                # Default: all regions selected
+                st.session_state.origin_filter = available_regions.copy()
+        
+        # Multiselect for origin filter
+        selected_origins = st.multiselect(
+            "Filter names by origin region:",
+            options=available_regions,
+            default=st.session_state.origin_filter,
+            help="Select one or more origin regions. Leave empty to show all names."
+        )
+        
+        # Save to session state and persist to database if changed
+        if selected_origins != st.session_state.origin_filter:
+            st.session_state.origin_filter = selected_origins
+            # Save to database
+            database.save_user_setting("selected_origins", json.dumps(selected_origins))
+            st.info(f"Origin filter updated: {selected_origins if selected_origins else 'All regions'}")
+            st.rerun()
+        
         st.divider()
 
         # Ratings management
@@ -1055,21 +1113,43 @@ def main() -> None:
     # Get current gender filter
     current_gender = st.session_state.get("gender_filter", "All")
 
-    # Get filtered names for the current gender
-    if current_gender in st.session_state.all_names_data:
-        filtered_names = st.session_state.all_names_data[current_gender]
-    else:
-        filtered_names = st.session_state.all_names_data.get("All", [])
-
-    if not filtered_names:
-        st.warning(f"No names found for gender filter: {current_gender}")
-        return
-
-    # Show filter info
-    st.info(
-        f"Showing {len(filtered_names)} {current_gender.lower()} names "
-        f"(out of {len(st.session_state.all_names)} total)"
+    # Get current origin filter
+    current_origins = st.session_state.get("origin_filter", [])
+    # Empty list means no origin filtering (show all regions)
+    origins_to_filter = current_origins if current_origins else None
+    
+    # Get filtered names using database
+    filtered_names = get_filtered_names(
+        gender=current_gender if current_gender != "All" else None,
+        origins=origins_to_filter
     )
+    
+    if not filtered_names:
+        if current_origins:
+            st.warning(
+                f"No names found for gender: {current_gender}, "
+                f"origins: {current_origins}"
+            )
+        else:
+            st.warning(f"No names found for gender filter: {current_gender}")
+        return
+    
+    # Get total names count for reference (all names in database)
+    total_names_count = len(st.session_state.all_names)
+    
+    # Show filter info
+    if current_origins:
+        st.info(
+            f"Showing {len(filtered_names)} names "
+            f"(gender: {current_gender.lower()}, "
+            f"origins: {', '.join(current_origins)}) "
+            f"out of {total_names_count} total"
+        )
+    else:
+        st.info(
+            f"Showing {len(filtered_names)} {current_gender.lower()} names "
+            f"out of {total_names_count} total"
+        )
 
     tab1, tab2 = st.tabs(["Tournament", "Similarity Search"])
 
