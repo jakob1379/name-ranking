@@ -52,6 +52,7 @@ ratings.json
 *.xlsx
 *.xls
 *.json
+*.db
 
 # But keep the git submodule directory (it's tracked)
 !godkendtefornavne/

@@ -9,11 +9,12 @@ import streamlit as st
 
 from data_loader import initialize_or_load_ratings, save_ratings
 from elo import K_FACTOR, update_elo, update_elo_draw
+import database
 
 
 def pull_submodule_updates() -> bool:
     """
-    Pull latest updates from the git submodule.
+    Pull latest updates from the git submodule and sync with database.
     Returns True if successful.
     """
     try:
@@ -35,6 +36,18 @@ def pull_submodule_updates() -> bool:
             )
             if result.stdout:
                 st.text(f"Output: {result.stdout[:200]}")
+
+            # Sync new names with database
+            with st.spinner("Syncing new names with database..."):
+                try:
+                    inserted = database.sync_names_with_submodule()
+                    if inserted > 0:
+                        st.success(f"✅ Added {inserted} new names to database")
+                    else:
+                        st.info("No new names to add")
+                except Exception as sync_error:
+                    st.error(f"Failed to sync names: {sync_error}")
+                    # Continue anyway - names will be synced on next load
 
             # Show reload message with slight delay
             st.toast("⏳ Reloading names in 2 seconds...", icon="⏳")
