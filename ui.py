@@ -2,6 +2,7 @@
 UI rendering functions for the name ranking application.
 """
 
+import logging
 from typing import List, Literal, Optional, Union
 
 import pandas as pd
@@ -18,6 +19,8 @@ from utils import (
     update_elo_and_save,
     update_elo_draw_and_save,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def display_name_with_rating(
@@ -46,6 +49,7 @@ def display_name_with_rating(
 
 
 def render_tournament(names: List[str]) -> None:
+    logger.debug("Rendering tournament with %d names", len(names))
     st.header("Elo Rating Tournament")
     st.write(f"Comparing {len(names)} names")
     st.caption(
@@ -232,6 +236,7 @@ def render_tournament(names: List[str]) -> None:
 
 
 def render_similarity(names: List[str]) -> None:
+    logger.debug("Rendering similarity search with %d names", len(names))
     st.header("Similarity Search")
 
     search_type: Literal["String", "Vector"] = st.radio(

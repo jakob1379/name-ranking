@@ -10,6 +10,7 @@ This script:
 5. Handles batch processing with progress reporting
 """
 
+import logging
 import sys
 import time
 from pathlib import Path
@@ -19,6 +20,24 @@ from typing import Optional, Tuple
 sys.path.insert(0, str(Path(__file__).parent))
 
 from database import get_connection, get_unclassified_names, update_name_origin
+
+logger = logging.getLogger(__name__)
+
+
+def get_classifier():
+    """Get or create the name2nat classifier (lazy load)."""
+    try:
+        from name2nat import Name2nat
+    except ImportError:
+        raise ImportError(
+            "name2nat not installed. Install with: pip install name2nat"
+        )
+    
+    if not hasattr(get_classifier, "_classifier"):
+        get_classifier._classifier = Name2nat()
+        logger.debug("Initialized name2nat classifier")
+    
+    return get_classifier._classifier
 
 
 def get_region_for_nationality(nationality: str) -> Tuple[str, float]:
@@ -56,68 +75,120 @@ def classify_name(name: str) -> Optional[Tuple[str, float]]:
     Returns (region, confidence) or None if classification failed.
     """
     try:
-        from name2nat import Name2nat
-
-        # Initialize classifier (lazy load)
-        if not hasattr(classify_name, "_classifier"):
-            classify_name._classifier = Name2nat()
-
-        classifier = classify_name._classifier
-
+        classifier = get_classifier()
+        
         # Predict nationality
         # name2nat expects a list of names, returns list of
         # (name, [(nationality, prob), ...])
         results = classifier([name], top_n=1)
         if not results:
+            logger.debug(f"No results for name: {name}")
             return None
 
         # Extract top prediction
         name_result = results[0]
         if not name_result[1]:  # No predictions
+            logger.debug(f"No predictions for name: {name}")
             return None
 
         nationality, confidence = name_result[1][0]
+        logger.debug(f"Classified {name} -> {nationality} ({confidence:.2f})")
 
         # Map nationality to region
         region, region_confidence = get_region_for_nationality(nationality)
 
         # Combine confidences
         combined_confidence = confidence * region_confidence
+        logger.debug(f"Mapped to region: {region} (confidence: {combined_confidence:.2f})")
 
         return region, combined_confidence
 
-    except ImportError:
-        print(
-            "Error: name2nat not installed. Install with: pip install name2nat"
-        )
+    except ImportError as e:
+        logger.error("name2nat not installed. Install with: pip install name2nat")
         raise
     except Exception as e:
-        print(f"Error classifying name '{name}': {e}")
+        logger.warning(f"Error classifying name '{name}': {e}")
         return None
 
 
 def classify_batch(names_batch: list, batch_size: int = 100) -> int:
     """
-    Classify a batch of names.
+    Classify a batch of names using batch processing.
     Returns number of successfully classified names.
     """
-    classified_count = 0
+    if not names_batch:
+        return 0
+    
+    # Extract names for batch classification
+    names = [item["name"] for item in names_batch]
+    name_ids = [item["id"] for item in names_batch]
+    
+    logger.debug(f"Classifying batch of {len(names)} names")
+    
+    try:
+        classifier = get_classifier()
+        
+        # Predict nationalities for all names in batch
+        # name2nat expects a list of names, returns list of
+        # (name, [(nationality, prob), ...])
+        results = classifier(names, top_n=1)
+        
+        if not results:
+            logger.warning(f"No results for batch of {len(names)} names")
+            return 0
+        
+        classified_count = 0
+        
+        # Process each result
+        for idx, (name_result, name_id) in enumerate(zip(results, name_ids)):
+            if not name_result[1]:  # No predictions
+                logger.debug(f"No predictions for name: {names[idx]}")
+                continue
+            
+            nationality, confidence = name_result[1][0]
+            
+            # Map nationality to region
+            region, region_confidence = get_region_for_nationality(nationality)
+            combined_confidence = confidence * region_confidence
+            
+            # Update database
+            update_name_origin(name_id, region, combined_confidence)
+            classified_count += 1
+            
+            # Log progress every 10 names
+            if (idx + 1) % 10 == 0:
+                logger.debug(f"  Processed {idx + 1}/{len(names)} names")
+        
+        logger.info(f"Batch classified {classified_count}/{len(names)} names")
+        return classified_count
+        
+    except Exception as e:
+        logger.error(f"Error classifying batch: {e}")
+        # Fall back to individual classification
+        logger.info("Falling back to individual classification")
+        return _classify_individually(names_batch)
 
+
+def _classify_individually(names_batch: list) -> int:
+    """
+    Fallback: classify names individually (used when batch processing fails).
+    """
+    classified_count = 0
+    
     for i, name_data in enumerate(names_batch):
         name_id = name_data["id"]
         name = name_data["name"]
-
-        # Classify
+        
         result = classify_name(name)
         if result:
             region, confidence = result
             update_name_origin(name_id, region, confidence)
             classified_count += 1
-
-        # Progress indicator
+        
         if (i + 1) % 10 == 0:
-            print(f"  Processed {i + 1}/{len(names_batch)} names...")
-
+            logger.debug(f"  Individually processed {i + 1}/{len(names_batch)} names")
+    
+    logger.info(f"Individually classified {classified_count}/{len(names_batch)} names")
     return classified_count
 
 
@@ -128,24 +199,24 @@ def classify_all_names(
     Classify all unclassified names.
     Returns total number of names classified.
     """
-    print("Fetching unclassified names...")
+    logger.info("Fetching unclassified names...")
     unclassified = get_unclassified_names(limit)
 
     if not unclassified:
-        print("No unclassified names found.")
+        logger.info("No unclassified names found.")
         return 0
 
     total = len(unclassified)
-    print(f"Found {total} unclassified names.")
+    logger.info(f"Found {total} unclassified names.")
 
     if limit and limit < total:
-        print(f"Limiting to {limit} names.")
+        logger.info(f"Limiting to {limit} names.")
         unclassified = unclassified[:limit]
         total = len(unclassified)
 
-    print("Starting classification...")
-    print("This may take a while for large datasets.")
-    print("Progress: (each dot = 10 names)")
+    logger.info("Starting classification...")
+    logger.info("This may take a while for large datasets.")
+    logger.debug("Progress: (each dot = 10 names)")
 
     start_time = time.time()
     classified = 0
@@ -153,6 +224,8 @@ def classify_all_names(
     # Process in batches
     for i in range(0, total, batch_size):
         batch = unclassified[i : i + batch_size]
+        logger.debug(f"Processing batch {i // batch_size + 1} ({len(batch)} names)")
+        
         batch_classified = classify_batch(batch, batch_size)
         classified += batch_classified
 
@@ -161,19 +234,19 @@ def classify_all_names(
         remaining = total - (i + len(batch))
         eta = remaining / rate if rate > 0 else 0
 
-        print(
-            f"  Batch {i // batch_size + 1}: Classified "
+        logger.info(
+            f"Batch {i // batch_size + 1}: Classified "
             f"{batch_classified}/{len(batch)}"
         )
-        print(
-            f"  Total: {classified}/{total} ({classified / total * 100:.1f}%)"
+        logger.info(
+            f"Total: {classified}/{total} ({classified / total * 100:.1f}%)"
         )
-        print(f"  Rate: {rate:.1f} names/sec, ETA: {eta:.0f} seconds")
+        logger.debug(f"Rate: {rate:.1f} names/sec, ETA: {eta:.0f} seconds")
 
     elapsed = time.time() - start_time
-    print("\n✅ Classification complete!")
-    print(f"   Classified {classified} of {total} names")
-    print(f"   Time: {elapsed:.1f} seconds ({elapsed / total:.2f} sec/name)")
+    logger.info("✅ Classification complete!")
+    logger.info(f"   Classified {classified} of {total} names")
+    logger.info(f"   Time: {elapsed:.1f} seconds ({elapsed / total:.2f} sec/name)")
 
     return classified
 

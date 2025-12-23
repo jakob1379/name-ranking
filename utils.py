@@ -2,6 +2,7 @@
 Utility functions for the name ranking application.
 """
 
+import logging
 from typing import Dict, List, Tuple
 
 import numpy as np
@@ -11,6 +12,8 @@ import database
 from data_loader import initialize_or_load_ratings, save_ratings
 from elo import K_FACTOR, update_elo, update_elo_draw
 
+logger = logging.getLogger(__name__)
+
 
 def pull_submodule_updates(classify_origins: bool = False) -> bool:
     """
@@ -18,6 +21,7 @@ def pull_submodule_updates(classify_origins: bool = False) -> bool:
     If classify_origins is True and name2nat is available, classify origins.
     Returns True if successful.
     """
+    logger.debug("Pulling submodule updates, classify_origins=%s", classify_origins)
     try:
         import subprocess  # nosec: B404 - git commands are safe, no user input
         import time

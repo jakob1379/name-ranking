@@ -10,10 +10,13 @@ Handles:
 """
 
 import json
+import logging
 import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+
+logger = logging.getLogger(__name__)
 
 DB_PATH = Path("names.db")
 
@@ -35,6 +38,7 @@ def get_connection():
 
 def init_database():
     """Initialize database schema if it doesn't exist."""
+    logger.debug("Initializing database schema")
     with get_connection() as conn:
         # Names table
         conn.execute("""
@@ -104,6 +108,8 @@ def init_database():
             == 0
         ):
             _insert_default_region_mapping(conn)
+        
+        logger.info("Database initialized successfully")
 
 
 def _insert_default_region_mapping(conn):
@@ -308,6 +314,7 @@ def sync_names_with_submodule(submodule_path: Path = Path("godkendtefornavne")):
     Only inserts new names that don't exist in the database.
     Tracks submodule commit hash to avoid redundant processing.
     """
+    logger.debug("Syncing names from submodule")
     json_path = submodule_path / "allenavne.json"
     if not json_path.exists():
         raise FileNotFoundError(f"Submodule JSON not found: {json_path}")
@@ -323,6 +330,7 @@ def sync_names_with_submodule(submodule_path: Path = Path("godkendtefornavne")):
             timeout=5,
         )
         current_commit = result.stdout.strip()
+        logger.debug(f"Submodule commit hash: {current_commit}")
     except Exception as e:
         raise RuntimeError(f"Failed to get submodule commit hash: {e}")
 
@@ -333,19 +341,21 @@ def sync_names_with_submodule(submodule_path: Path = Path("godkendtefornavne")):
         ).fetchone()
 
         if last_sync and last_sync[0] == current_commit:
+            logger.debug("Already synced with current commit")
             return 0  # Already synced
 
     # Load JSON data
     import pandas as pd
 
     df = pd.read_json(json_path, encoding="utf-8")
+    logger.info(f"Loaded {len(df)} rows from JSON")
 
     # Validate columns
     if not all(col in df.columns for col in ["name", "gender"]):
         raise ValueError("JSON missing required columns 'name' and/or 'gender'")
 
     # Filter valid names
-    from main import is_valid_name
+    from data_loader import is_valid_name
 
     valid_names = []
     for _, row in df.iterrows():
@@ -354,16 +364,18 @@ def sync_names_with_submodule(submodule_path: Path = Path("godkendtefornavne")):
         if is_valid_name(name):
             valid_names.append((name, gender))
 
+    logger.debug(f"Filtered {len(valid_names)} valid names")
     # Insert new names
     inserted_count = 0
     with get_connection() as conn:
-        for name, gender in valid_names:
-            cursor = conn.execute(
+        if valid_names:
+            before = conn.total_changes
+            conn.executemany(
                 "INSERT OR IGNORE INTO names (name, gender) VALUES (?, ?)",
-                (name, gender),
+                valid_names
             )
-            if cursor.rowcount > 0:
-                inserted_count += 1
+            inserted_count = conn.total_changes - before
+            logger.debug(f"Bulk insert attempted, {inserted_count} new rows")
 
         # Record this sync
         conn.execute(
@@ -371,6 +383,7 @@ def sync_names_with_submodule(submodule_path: Path = Path("godkendtefornavne")):
             (current_commit,),
         )
 
+    logger.info(f"Inserted {inserted_count} new names")
     return inserted_count
 
 

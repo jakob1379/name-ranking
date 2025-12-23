@@ -3,7 +3,10 @@ Elo rating system implementation.
 Pure calculation functions with no side effects.
 """
 
+import logging
 from typing import Dict, List
+
+logger = logging.getLogger(__name__)
 
 K_FACTOR: float = 32.0
 INITIAL_RATING: float = 1500.0

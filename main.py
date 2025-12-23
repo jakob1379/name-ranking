@@ -4,10 +4,17 @@ Refactored version with modular imports.
 """
 
 import json
+import logging
 import os
 from datetime import datetime
 
 import streamlit as st
+
+# Configure logging
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 
 import database
 from data_loader import load_names_by_gender, save_ratings

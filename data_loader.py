@@ -2,6 +2,7 @@
 Data loading and persistence functions.
 """
 
+import logging
 import os
 import re
 from typing import Dict, List, Optional
@@ -11,6 +12,8 @@ import pandas as pd
 import streamlit as st
 
 import database
+
+logger = logging.getLogger(__name__)
 from elo import INITIAL_RATING, initialize_ratings
 
 
