@@ -328,12 +328,12 @@ def load_names_by_gender() -> Dict[str, List[str]]:
     try:
         # Initialize database if needed
         database.init_database()
-        
+
         # Query all names with gender from database
         with database.get_connection() as conn:
             cursor = conn.execute("SELECT name, gender FROM names")
             rows = cursor.fetchall()
-        
+
         if not rows:
             st.warning("No names found in database. Syncing with submodule...")
             inserted = database.sync_names_with_submodule()
@@ -346,7 +346,7 @@ def load_names_by_gender() -> Dict[str, List[str]]:
             else:
                 st.error("Failed to sync names from submodule")
                 return {}
-        
+
         # Initialize gender categories
         gender_lists = {
             "Female": set(),
@@ -354,30 +354,30 @@ def load_names_by_gender() -> Dict[str, List[str]]:
             "Unisex": set(),
             "All": set(),
         }
-        
+
         # Categorize names
         for name, gender in rows:
             # Always add to 'All' category
             gender_lists["All"].add(name)
-            
+
             # Add to specific gender category
             if gender in gender_lists:
                 gender_lists[gender].add(name)
-            
+
             # Unisex names also go to both Male and Female categories
             if gender == "Unisex":
                 gender_lists["Male"].add(name)
                 gender_lists["Female"].add(name)
-        
+
         # Convert sets to sorted lists
         result = {}
         for gender, name_set in gender_lists.items():
             result[gender] = sorted(list(name_set))
-        
+
         # Log counts
         for gender, names in result.items():
             st.info(f"Loaded {len(names)} {gender.lower()} names")
-        
+
         return result
     except Exception as e:
         st.error(f"Failed to load names from database: {e}")
@@ -385,8 +385,7 @@ def load_names_by_gender() -> Dict[str, List[str]]:
 
 
 def get_filtered_names(
-    gender: Optional[str] = None, 
-    origins: Optional[List[str]] = None
+    gender: Optional[str] = None, origins: Optional[List[str]] = None
 ) -> List[str]:
     """
     Get names filtered by gender and origin regions.
@@ -603,7 +602,7 @@ def initialize_or_load_ratings(names: List[str]) -> Dict[str, float]:
 
 def pull_submodule_updates() -> bool:
     """
-    Pull latest updates from the git submodule.
+    Pull latest updates from the git submodule and sync with database.
     Returns True if successful.
     """
     try:
@@ -622,6 +621,18 @@ def pull_submodule_updates() -> bool:
             st.success("✅ Submodule updated successfully")
             if result.stdout:
                 st.text(f"Output: {result.stdout[:200]}")
+
+            # Sync new names with database
+            with st.spinner("Syncing new names with database..."):
+                try:
+                    inserted = database.sync_names_with_submodule()
+                    if inserted > 0:
+                        st.success(f"✅ Added {inserted} new names to database")
+                    else:
+                        st.info("No new names to add")
+                except Exception as sync_error:
+                    st.error(f"Failed to sync names: {sync_error}")
+                    # Continue anyway - names will be synced on next load
 
             # Show reload message with slight delay
             reload_info = st.info("⏳ Reloading names in 2 seconds...")
@@ -1009,38 +1020,46 @@ def main() -> None:
 
         # Origin Filtering
         st.subheader("Origin Filter")
-        
+
         # Get available origin regions from database
         available_regions = database.get_all_origin_regions()
-        
+
         # Load saved origin filter from database
         if "origin_filter" not in st.session_state:
-            saved_origins_json = database.load_user_setting("selected_origins", "[]")
+            saved_origins_json = database.load_user_setting(
+                "selected_origins", "[]"
+            )
             try:
                 saved_origins = json.loads(saved_origins_json)
                 # Validate that saved origins are still available
-                saved_origins = [o for o in saved_origins if o in available_regions]
+                saved_origins = [
+                    o for o in saved_origins if o in available_regions
+                ]
                 st.session_state.origin_filter = saved_origins
-            except:
+            except Exception:
                 # Default: all regions selected
                 st.session_state.origin_filter = available_regions.copy()
-        
+
         # Multiselect for origin filter
         selected_origins = st.multiselect(
             "Filter names by origin region:",
             options=available_regions,
             default=st.session_state.origin_filter,
-            help="Select one or more origin regions. Leave empty to show all names."
+            help="Select origin regions. Empty shows all.",
         )
-        
+
         # Save to session state and persist to database if changed
         if selected_origins != st.session_state.origin_filter:
             st.session_state.origin_filter = selected_origins
             # Save to database
-            database.save_user_setting("selected_origins", json.dumps(selected_origins))
-            st.info(f"Origin filter updated: {selected_origins if selected_origins else 'All regions'}")
+            database.save_user_setting(
+                "selected_origins", json.dumps(selected_origins)
+            )
+            st.info(
+                f"Filter: {selected_origins if selected_origins else 'All'}"
+            )
             st.rerun()
-        
+
         st.divider()
 
         # Ratings management
@@ -1117,13 +1136,13 @@ def main() -> None:
     current_origins = st.session_state.get("origin_filter", [])
     # Empty list means no origin filtering (show all regions)
     origins_to_filter = current_origins if current_origins else None
-    
+
     # Get filtered names using database
     filtered_names = get_filtered_names(
         gender=current_gender if current_gender != "All" else None,
-        origins=origins_to_filter
+        origins=origins_to_filter,
     )
-    
+
     if not filtered_names:
         if current_origins:
             st.warning(
@@ -1133,10 +1152,10 @@ def main() -> None:
         else:
             st.warning(f"No names found for gender filter: {current_gender}")
         return
-    
+
     # Get total names count for reference (all names in database)
     total_names_count = len(st.session_state.all_names)
-    
+
     # Show filter info
     if current_origins:
         st.info(
