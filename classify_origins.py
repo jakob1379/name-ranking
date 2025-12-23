@@ -32,11 +32,11 @@ def get_classifier():
         raise ImportError(
             "name2nat not installed. Install with: pip install name2nat"
         )
-    
+
     if not hasattr(get_classifier, "_classifier"):
         get_classifier._classifier = Name2nat()
         logger.debug("Initialized name2nat classifier")
-    
+
     return get_classifier._classifier
 
 
@@ -76,7 +76,7 @@ def classify_name(name: str) -> Optional[Tuple[str, float]]:
     """
     try:
         classifier = get_classifier()
-        
+
         # Predict nationality
         # name2nat expects a list of names, returns list of
         # (name, [(nationality, prob), ...])
@@ -99,12 +99,17 @@ def classify_name(name: str) -> Optional[Tuple[str, float]]:
 
         # Combine confidences
         combined_confidence = confidence * region_confidence
-        logger.debug(f"Mapped to region: {region} (confidence: {combined_confidence:.2f})")
+        logger.debug(
+            f"Mapped to region: {region} "
+            f"(confidence: {combined_confidence:.2f})"
+        )
 
         return region, combined_confidence
 
-    except ImportError as e:
-        logger.error("name2nat not installed. Install with: pip install name2nat")
+    except ImportError:
+        logger.error(
+            "name2nat not installed. Install with: pip install name2nat"
+        )
         raise
     except Exception as e:
         logger.warning(f"Error classifying name '{name}': {e}")
@@ -118,50 +123,50 @@ def classify_batch(names_batch: list, batch_size: int = 100) -> int:
     """
     if not names_batch:
         return 0
-    
+
     # Extract names for batch classification
     names = [item["name"] for item in names_batch]
     name_ids = [item["id"] for item in names_batch]
-    
+
     logger.debug(f"Classifying batch of {len(names)} names")
-    
+
     try:
         classifier = get_classifier()
-        
+
         # Predict nationalities for all names in batch
         # name2nat expects a list of names, returns list of
         # (name, [(nationality, prob), ...])
         results = classifier(names, top_n=1)
-        
+
         if not results:
             logger.warning(f"No results for batch of {len(names)} names")
             return 0
-        
+
         classified_count = 0
-        
+
         # Process each result
         for idx, (name_result, name_id) in enumerate(zip(results, name_ids)):
             if not name_result[1]:  # No predictions
                 logger.debug(f"No predictions for name: {names[idx]}")
                 continue
-            
+
             nationality, confidence = name_result[1][0]
-            
+
             # Map nationality to region
             region, region_confidence = get_region_for_nationality(nationality)
             combined_confidence = confidence * region_confidence
-            
+
             # Update database
             update_name_origin(name_id, region, combined_confidence)
             classified_count += 1
-            
+
             # Log progress every 10 names
             if (idx + 1) % 10 == 0:
                 logger.debug(f"  Processed {idx + 1}/{len(names)} names")
-        
+
         logger.info(f"Batch classified {classified_count}/{len(names)} names")
         return classified_count
-        
+
     except Exception as e:
         logger.error(f"Error classifying batch: {e}")
         # Fall back to individual classification
@@ -174,21 +179,25 @@ def _classify_individually(names_batch: list) -> int:
     Fallback: classify names individually (used when batch processing fails).
     """
     classified_count = 0
-    
+
     for i, name_data in enumerate(names_batch):
         name_id = name_data["id"]
         name = name_data["name"]
-        
+
         result = classify_name(name)
         if result:
             region, confidence = result
             update_name_origin(name_id, region, confidence)
             classified_count += 1
-        
+
         if (i + 1) % 10 == 0:
-            logger.debug(f"  Individually processed {i + 1}/{len(names_batch)} names")
-    
-    logger.info(f"Individually classified {classified_count}/{len(names_batch)} names")
+            logger.debug(
+                f"  Individually processed {i + 1}/{len(names_batch)} names"
+            )
+
+    logger.info(
+        f"Individually classified {classified_count}/{len(names_batch)} names"
+    )
     return classified_count
 
 
@@ -224,8 +233,10 @@ def classify_all_names(
     # Process in batches
     for i in range(0, total, batch_size):
         batch = unclassified[i : i + batch_size]
-        logger.debug(f"Processing batch {i // batch_size + 1} ({len(batch)} names)")
-        
+        logger.debug(
+            f"Processing batch {i // batch_size + 1} ({len(batch)} names)"
+        )
+
         batch_classified = classify_batch(batch, batch_size)
         classified += batch_classified
 
@@ -246,7 +257,9 @@ def classify_all_names(
     elapsed = time.time() - start_time
     logger.info("✅ Classification complete!")
     logger.info(f"   Classified {classified} of {total} names")
-    logger.info(f"   Time: {elapsed:.1f} seconds ({elapsed / total:.2f} sec/name)")
+    logger.info(
+        f"   Time: {elapsed:.1f} seconds ({elapsed / total:.2f} sec/name)"
+    )
 
     return classified
 

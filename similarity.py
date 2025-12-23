@@ -19,7 +19,12 @@ def get_string_similarity_scores(
     Uses RapidFuzz (Levenshtein) to find similar names.
     Returns list of (name, score).
     """
-    logger.debug("String similarity search: target='%s', candidates=%d, limit=%d", target, len(candidates), limit)
+    logger.debug(
+        "String similarity search: target='%s', candidates=%d, limit=%d",
+        target,
+        len(candidates),
+        limit,
+    )
     if not candidates:
         return []
 
@@ -45,7 +50,12 @@ def get_vector_similarity_scores(
     Uses LLM embeddings to find semantic similarity.
     Returns list of (name, score).
     """
-    logger.debug("Vector similarity search: target='%s', candidates=%d, limit=%d", target, len(candidates), limit)
+    logger.debug(
+        "Vector similarity search: target='%s', candidates=%d, limit=%d",
+        target,
+        len(candidates),
+        limit,
+    )
     if not candidates:
         return []
 

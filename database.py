@@ -108,7 +108,7 @@ def init_database():
             == 0
         ):
             _insert_default_region_mapping(conn)
-        
+
         logger.info("Database initialized successfully")
 
 
@@ -372,7 +372,7 @@ def sync_names_with_submodule(submodule_path: Path = Path("godkendtefornavne")):
             before = conn.total_changes
             conn.executemany(
                 "INSERT OR IGNORE INTO names (name, gender) VALUES (?, ?)",
-                valid_names
+                valid_names,
             )
             inserted_count = conn.total_changes - before
             logger.debug(f"Bulk insert attempted, {inserted_count} new rows")
@@ -501,7 +501,7 @@ def get_names_by_gender() -> Dict[str, List[str]]:
 
 
 def get_all_origin_regions() -> List[str]:
-    """Get distinct origin regions from names table, 
+    """Get distinct origin regions from names table,
     including NULL as 'International'."""
     with get_connection() as conn:
         cursor = conn.execute("""

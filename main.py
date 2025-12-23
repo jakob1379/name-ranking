@@ -10,17 +10,17 @@ from datetime import datetime
 
 import streamlit as st
 
-# Configure logging
-logging.basicConfig(
-    level=logging.DEBUG,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-
 import database
 from data_loader import load_names_by_gender, save_ratings
 from elo import initialize_ratings
 from ui import render_similarity, render_tournament
 from utils import pull_submodule_updates, setup_session_state
+
+# Configure logging
+logging.basicConfig(
+    level=logging.DEBUG,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+)
 
 
 def main() -> None:
@@ -32,8 +32,8 @@ def main() -> None:
         # Auto-load from submodule on first run
         if "all_names_data" not in st.session_state:
             with st.spinner("Loading names from submodule..."):
-                # Load gender-categorized data
-                gender_data = load_names_by_gender()
+                # Load gender-categorized data (no sync for faster startup)
+                gender_data = load_names_by_gender(sync_with_submodule=False)
                 if gender_data and "All" in gender_data:
                     # Store the full dataset
                     st.session_state.all_names_data = gender_data
@@ -71,19 +71,105 @@ def main() -> None:
         # Submodule management
         st.subheader("Submodule Management")
 
-        # Checkbox for origin classification
+        # Origin classification
+        st.write("**Origin Classification**")
+
         classify_origins = st.checkbox(
-            "Classify name origins after update",
+            "Auto-classify after update",
             value=False,
-            help="Predict name origins using name2nat (requires package)",
+            help="Automatically classify origins after git updates",
         )
 
-        col1, col2 = st.columns(2)
+        col_class1, col_class2 = st.columns(2)
+        with col_class1:
+            if st.button(
+                "Classify 100 Names", help="Classify 100 unclassified names"
+            ):
+                with st.spinner("Classifying names..."):
+                    try:
+                        database.init_database()
+                        from classify_origins import classify_all_names
+
+                        classified = classify_all_names(limit=100)
+                        if classified > 0:
+                            st.toast(
+                                f"✅ Classified {classified} names",
+                                icon="✅",
+                            )
+                        else:
+                            st.toast(
+                                "No unclassified names found",
+                                icon="ℹ️",
+                            )
+                        st.rerun()
+                    except ImportError:
+                        st.toast(
+                            "name2nat not installed. Run: pip install name2nat",
+                            icon="❌",
+                        )
+                    except Exception as e:
+                        st.toast(
+                            f"Classification failed: {e}",
+                            icon="❌",
+                        )
+
+        with col_class2:
+            if st.button(
+                "Classify All", help="Classify all unclassified names (slow)"
+            ):
+                with st.spinner(
+                    "Classifying all names (this may take a while)..."
+                ):
+                    try:
+                        database.init_database()
+                        from classify_origins import classify_all_names
+
+                        classified = classify_all_names(limit=None)
+                        if classified > 0:
+                            st.toast(
+                                f"✅ Classified {classified} names",
+                                icon="✅",
+                            )
+                        else:
+                            st.toast(
+                                "No unclassified names found",
+                                icon="ℹ️",
+                            )
+                        st.rerun()
+                    except ImportError:
+                        st.toast(
+                            "name2nat not installed. Run: pip install name2nat",
+                            icon="❌",
+                        )
+                    except Exception as e:
+                        st.toast(
+                            f"Classification failed: {e}",
+                            icon="❌",
+                        )
+        
+        # Show classification progress
+        try:
+            database.init_database()
+            stats = database.get_stats()
+            total = stats['total_names']
+            classified = stats['classified_names']
+            if total > 0:
+                percentage = classified / total * 100
+                st.caption(
+                    f"Origin classification: {classified}/{total} names "
+                    f"({percentage:.1f}%)"
+                )
+        except Exception:
+            pass  # Silently fail if database not ready
+
+        col1, col2, col3 = st.columns(3)
         with col1:
-            if st.button("Reload Names"):
+            if st.button("Reload Names", help="Fast reload from database"):
                 with st.spinner("Reloading..."):
-                    # Reload gender-categorized data
-                    gender_data = load_names_by_gender()
+                    # Reload gender-categorized data (no sync for speed)
+                    gender_data = load_names_by_gender(
+                        sync_with_submodule=False
+                    )
                     if gender_data and "All" in gender_data:
                         # Update the full dataset
                         st.session_state.all_names_data = gender_data
@@ -92,22 +178,32 @@ def main() -> None:
                         # Reinitialize ratings with all names
                         setup_session_state(gender_data["All"])
                         st.toast(
-                            f"Reloaded {len(gender_data['All'])} total names",
+                            f"Reloaded {len(gender_data['All'])} names",
                             icon="✅",
                         )
-
-                        # Show breakdown
-                        for gender in ["Male", "Female", "Unisex"]:
-                            if gender in gender_data:
-                                st.toast(
-                                    f"{gender}: "
-                                    f"{len(gender_data[gender])} names",
-                                    icon="ℹ️",
-                                )
                         st.rerun()
 
         with col2:
-            if st.button("Check for Updates"):
+            if st.button(
+                "Sync Names", help="Sync database with local submodule"
+            ):
+                with st.spinner("Syncing..."):
+                    from utils import sync_names_from_submodule
+
+                    inserted = sync_names_from_submodule()
+                    if inserted > 0:
+                        # Reload names after sync
+                        gender_data = load_names_by_gender(
+                            sync_with_submodule=False
+                        )
+                        if gender_data and "All" in gender_data:
+                            st.session_state.all_names_data = gender_data
+                            st.session_state.all_names = gender_data["All"]
+                            setup_session_state(gender_data["All"])
+                        st.rerun()
+
+        with col3:
+            if st.button("Check for Updates", help="Pull git updates and sync"):
                 with st.spinner("Checking for updates..."):
                     if pull_submodule_updates(
                         classify_origins=classify_origins

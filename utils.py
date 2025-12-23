@@ -21,7 +21,9 @@ def pull_submodule_updates(classify_origins: bool = False) -> bool:
     If classify_origins is True and name2nat is available, classify origins.
     Returns True if successful.
     """
-    logger.debug("Pulling submodule updates, classify_origins=%s", classify_origins)
+    logger.debug(
+        "Pulling submodule updates, classify_origins=%s", classify_origins
+    )
     try:
         import subprocess  # nosec: B404 - git commands are safe, no user input
         import time
@@ -143,6 +145,35 @@ def select_candidates(names: List[str]) -> Tuple[str, str]:
         return "", ""
 
     return tuple(np.random.choice(names, size=2, replace=False))
+
+
+def sync_names_from_submodule() -> int:
+    """
+    Sync names from submodule JSON to database.
+    Returns number of new names added.
+    """
+    try:
+        database.init_database()
+        with st.spinner("Syncing names from submodule..."):
+            inserted = database.sync_names_with_submodule()
+            if inserted > 0:
+                st.toast(
+                    f"✅ Added {inserted} new names to database",
+                    icon="✅",
+                )
+            else:
+                st.toast(
+                    "Database already up to date with submodule",
+                    icon="ℹ️",
+                )
+            return inserted
+    except Exception as e:
+        st.toast(
+            f"Failed to sync names: {e}",
+            icon="❌",
+            duration="long",
+        )
+        return 0
 
 
 def update_elo_and_save(

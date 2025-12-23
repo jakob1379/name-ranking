@@ -12,9 +12,9 @@ import pandas as pd
 import streamlit as st
 
 import database
+from elo import INITIAL_RATING, initialize_ratings
 
 logger = logging.getLogger(__name__)
-from elo import INITIAL_RATING, initialize_ratings
 
 
 def is_valid_name(name: str) -> bool:
@@ -239,21 +239,38 @@ def load_local_csv(csv_path: str = "alle-navne.csv") -> List[str]:
         return []
 
 
-def load_names_by_gender() -> Dict[str, List[str]]:
+def load_names_by_gender(
+    sync_with_submodule: bool = False,
+) -> Dict[str, List[str]]:
     """
     Load names from database, categorized by gender.
-    Returns dict mapping gender to list of names.
     Unisex names are included in both 'Male' and 'Female' categories.
+
+    Args:
+        sync_with_submodule: If True, sync with submodule before loading.
+                             Default False for faster startup.
     """
     try:
-        # Ensure database is initialized and synced with submodule
         database.init_database()
-        inserted = database.sync_names_with_submodule()
-        if inserted > 0:
-            st.toast(
-                f"Synced {inserted} new names from submodule to database",
-                icon="ℹ️",
-            )
+
+        # Only sync if explicitly requested
+        if sync_with_submodule:
+            inserted = database.sync_names_with_submodule()
+            if inserted > 0:
+                st.toast(
+                    f"Synced {inserted} new names from submodule to database",
+                    icon="ℹ️",
+                )
+        else:
+            # Check if database is empty and warn user
+            with database.get_connection() as conn:
+                count = conn.execute("SELECT COUNT(*) FROM names").fetchone()[0]
+                if count == 0:
+                    st.toast(
+                        "Database empty. Click 'Sync Names' to load names.",
+                        icon="⚠️",
+                    )
+                    return {}
 
         # Get names categorized by gender from database
         gender_data = database.get_names_by_gender()
@@ -265,11 +282,12 @@ def load_names_by_gender() -> Dict[str, List[str]]:
             )
             return {}
 
-        # Log counts
-        for gender, names in gender_data.items():
+        # Log counts (but only if we have many names to avoid toast spam)
+        total_names = sum(len(names) for names in gender_data.values())
+        if total_names > 1000:  # Only show toast for large datasets
             st.toast(
-                f"Loaded {len(names)} {gender.lower()} names",
-                icon="ℹ️",
+                f"Loaded {total_names} names from database",
+                icon="✅",
             )
 
         return gender_data
