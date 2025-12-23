@@ -635,7 +635,7 @@ def render_tournament(names: List[str]) -> None:
     </style>
     """, unsafe_allow_html=True)
 
-    _,col_a,_,_,col_b,_ = st.columns([0.8,1,0.2,0.2,1,0.8])
+    _,col_left,_,col_right,_ = st.columns([0.8,1,0.4,1,0.8])
 
     # Get both ratings before displaying
     rating_a = st.session_state.ratings.get(st.session_state.candidate_a, INITIAL_RATING)
@@ -645,7 +645,7 @@ def render_tournament(names: List[str]) -> None:
     delta_a = rating_a - rating_b  # Positive if A is higher rated
     delta_b = rating_b - rating_a  # Positive if B is higher rated
 
-    with col_a:
+    with col_left:
         display_name_with_rating(st.session_state.candidate_a, rating_a, delta=delta_a)
 
         # Centered button container
@@ -655,8 +655,9 @@ def render_tournament(names: List[str]) -> None:
             button_clicked = st.button(
                 f"👈 Prefer {st.session_state.candidate_a}",
                 key="vote_a",
-                width="content",
-                type="primary"
+                width="stretch",
+                type="primary",
+                shortcut="Left"
             )
             st.markdown("</div>", unsafe_allow_html=True)
 
@@ -669,7 +670,7 @@ def render_tournament(names: List[str]) -> None:
             st.session_state.candidate_a, st.session_state.candidate_b = select_candidates(names)
             st.rerun()
 
-    with col_b:
+    with col_right:
         display_name_with_rating(st.session_state.candidate_b, rating_b, delta=delta_b)
 
         # Centered button container (same as left side)
@@ -679,8 +680,9 @@ def render_tournament(names: List[str]) -> None:
             button_clicked = st.button(
                 f"Prefer {st.session_state.candidate_b} 👉",
                 key="vote_b",
-                width="content",
-                type="primary"
+                width="stretch",
+                type="primary",
+                shortcut="Right"
             )
             st.markdown("</div>", unsafe_allow_html=True)
 
@@ -694,17 +696,15 @@ def render_tournament(names: List[str]) -> None:
             st.rerun()
 
     # Draw button centered below both names
-    st.markdown("<br>", unsafe_allow_html=True)  # Add some spacing
-    draw_container = st.container()
-    with draw_container:
-        st.markdown("<div style='text-align: center'>", unsafe_allow_html=True)
+    _, col_mid, _ = st.columns([1,0.4,1])
+    with col_mid:
         draw_clicked = st.button(
             "🤝 Draw / Equal Preference",
             key="vote_draw",
-            width="content",
-            type="secondary"
+            width="stretch",
+            type="secondary",
+            shortcut="Up"
         )
-        st.markdown("</div>", unsafe_allow_html=True)
 
     if draw_clicked:
         update_elo_draw_and_save(

@@ -1,6 +1,11 @@
 [project]
-name = "name-ranker"
+name = "st-name-ranking"
 version = "0.1.0"
+description = "Streamlit application to rank valid danish names"
+readme = "README.md"
+authors = [
+    { name = "Jakob Stender Guldberg", email = "jakob1379@gmail.com" }
+]
 requires-python = ">=3.13"
 dependencies = [
     "streamlit>=1.52.0",
@@ -9,4 +14,50 @@ dependencies = [
     "rapidfuzz>=3.0.0",
     "httpx>=0.27.0",
     "pandas>=2.2.0",
+]
+
+[dependency-groups]
+dev = [
+    "poethepoet>=0.0.0",
+    "pyrefly>=0.0.0",
+    "ruff>=0.0.0",
+    "prek>=0.0.0",
+    "commitizen>=0.0.0",
+]
+
+[tool.ruff]
+# if this is a library, enter the _minimum_ version you
+# want to support, otherwise do py313
+target-version = "py313"
+line-length = 80  # use whatever number makes you happy
+
+[tool.ruff.lint]
+# you can see the looong list of rules here:
+# https://docs.astral.sh/ruff/rules/
+# here's a couple to start with
+select = [
+  "A",    # warn about shadowing built-ins
+  "E",    # style stuff, whitespaces
+  "F",    # important pyflakes lints
+  "I",    # import sorting
+  "N",    # naming
+  "T100", # breakpoints (probably don't want these in prod!)
+]
+# if you're feeling confident you can do:
+# select = ["ALL"]
+# and then manually ignore annoying ones:
+# ignore = [...]
+
+[tool.ruff.lint.isort]
+# so it knows to group first-party stuff last
+known-first-party = ["st-name-ranking"]
+
+[tool.pyrefly]
+python-version = "3.13"
+search-path = ["src"]
+
+[tool.pytest.ini_options]
+addopts = "--doctest-modules --numprocesses=auto --cov=src/st-name-ranking --cov-report=term-missing --cov-report=json"
+testpaths = [
+    "tests",
 ]

@@ -1,0 +1,15 @@
+# Changes here will be overwritten by Copier; NEVER EDIT MANUALLY
+_commit: 0e52c87
+_src_path: https://github.com/jakob1379/postmodern-python
+description: Streamlit application to rank valid danish names
+include_direnv: false
+include_dockerfile: false
+include_mkdocs: false
+include_precommit: true
+module_name: st-name-ranking
+project_name: st-name-ranking
+python_version: '3.13'
+use_commitizen: true
+user_email: jakob1379@gmail.com
+user_full_name: Jakob Stender Guldberg
+user_name: jakob1379
