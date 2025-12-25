@@ -16,9 +16,11 @@ from elo import initialize_ratings
 from ui import render_similarity, render_tournament
 from utils import pull_submodule_updates, setup_session_state
 
-# Configure logging
+# Configure logging - suppress debug noise
+logging.getLogger("watchdog").setLevel(logging.WARNING)
+logging.getLogger("sqlite3").setLevel(logging.WARNING)
 logging.basicConfig(
-    level=logging.DEBUG,
+    level=logging.INFO,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 
