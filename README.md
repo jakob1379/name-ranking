@@ -1,10 +1,12 @@
 # Name Ranking Application
 
-A Streamlit-based web application for ranking Danish names using Elo rating system, with similarity search and origin classification.
+A Streamlit-based web application for ranking Danish names using Elo rating
+system, with similarity search and origin classification.
 
 ## Features
 
 ### 🏆 Elo Rating Tournament
+
 - Compare two random names side-by-side
 - Vote for preferred name or mark as draw
 - Real-time Elo rating updates
@@ -12,11 +14,13 @@ A Streamlit-based web application for ranking Danish names using Elo rating syst
 - Keyboard shortcuts (← → ↑ arrows)
 
 ### 🔍 Similarity Search
+
 - **String similarity** (Levenshtein distance) for name matching
 - **Vector similarity** (LLM embeddings) for semantic matching
 - Find names similar to a reference name
 
 ### 🌍 Origin Classification
+
 - **Optional classification** - runs only when explicitly requested
 - **Incremental processing** - classify 100 names at a time or all at once
 - Automatic nationality prediction using `name2nat`
@@ -26,6 +30,7 @@ A Streamlit-based web application for ranking Danish names using Elo rating syst
 - **Progress tracking** - shows classification percentage in UI
 
 ### ⚙️ Filtering & Management
+
 - Gender filtering (Male, Female, Unisex, All)
 - Origin region filtering (Nordic, European, International, etc.)
 - Database-backed name storage
@@ -33,6 +38,7 @@ A Streamlit-based web application for ranking Danish names using Elo rating syst
 - Ratings persistence with SQLite
 
 ### 📊 Performance Optimizations
+
 - **Fast startup** - no automatic sync on app launch
 - **Separated operations** - manual control over sync and classification
 - **Batch processing** for origin classification (up to 100 names at once)
@@ -44,40 +50,46 @@ A Streamlit-based web application for ranking Danish names using Elo rating syst
 ## Setup
 
 ### Prerequisites
+
 - Python 3.13 or higher
 - Git (for submodule management)
 
 ### Installation
 
 1. **Clone the repository with submodules:**
+
    ```bash
    git clone --recurse-submodules https://github.com/yourusername/sort-names.git
    cd sort-names
    ```
 
 2. **Set up Python environment:**
+
    ```bash
    python -m venv .venv
    source .venv/bin/activate  # On Windows: .venv\Scripts\activate
    ```
 
 3. **Install dependencies:**
+
    ```bash
-   pip install -e .
+   uv pip install -e .
    ```
 
 4. **Optional: Install name2nat for origin classification:**
    ```bash
-   pip install name2nat
+   uv pip install name2nat
    ```
 
 ### Database Initialization
 
-The application uses SQLite (`names.db`). The database is automatically initialized on first run.
+The application uses SQLite (`names.db`). The database is automatically
+initialized on first run.
 
 #### Using the CLI (Recommended)
 
-A Typer-based CLI provides comprehensive database management via installed scripts:
+A Typer-based CLI provides comprehensive database management via installed
+scripts:
 
 ```bash
 # Show all available commands
@@ -104,13 +116,6 @@ name-db classify              # classify all names
 name-db stats
 ```
 
-Additional installed scripts:
-```bash
-# Direct script access (legacy compatibility)
-init-db --help
-classify-origins --help
-```
-
 #### Using Legacy Scripts
 
 The original scripts are still available inside the package:
@@ -128,6 +133,7 @@ python -m st_name_ranking.classify_origins --limit 100 --stats
 ### Running the Application
 
 Start the Streamlit app:
+
 ```bash
 streamlit run st_name_ranking/main.py
 ```
@@ -137,10 +143,12 @@ The application will be available at `http://localhost:8501`.
 ### Application Interface
 
 1. **Sidebar**
+
    - **Submodule Management** (three separate controls):
      - **Reload Names**: Fast reload from existing database
      - **Sync Names**: Sync database with local submodule (no git pull)
-     - **Check for Updates**: Pull git updates and sync (optional auto-classification)
+     - **Check for Updates**: Pull git updates and sync (optional
+       auto-classification)
    - **Origin Classification**:
      - **Auto-classify after update** checkbox
      - **Classify 100 Names** button (incremental processing)
@@ -158,7 +166,8 @@ The application will be available at `http://localhost:8501`.
 
 The application has been optimized for faster startup and better user control:
 
-1. **Fast Startup**: App loads instantly from existing database without automatic sync
+1. **Fast Startup**: App loads instantly from existing database without
+   automatic sync
 2. **Manual Sync Control**: Three separate buttons for different sync scenarios:
    - **Reload Names**: Quick refresh from database
    - **Sync Names**: Sync with local submodule changes
@@ -171,18 +180,22 @@ The application has been optimized for faster startup and better user control:
 Origin classification can be done in two ways:
 
 #### 1. Via the Web Interface (Recommended)
-- **Auto-classify after update**: Checkbox to automatically classify after git updates
+
+- **Auto-classify after update**: Checkbox to automatically classify after git
+  updates
 - **Classify 100 Names**: Incremental processing for testing or slow systems
 - **Classify All**: Full batch processing (may take several minutes)
 - **Progress tracking**: Shows real-time classification percentage
 
 #### 2. Via Command Line
+
 ```bash
 classify-origins
 # or: name-db classify
 ```
 
 Options:
+
 - `--limit N`: Limit to N names (for testing)
 - `--batch-size N`: Set batch size (default: 100)
 - `--stats`: Show classification statistics
@@ -198,17 +211,20 @@ Options:
 ## Optimization Details
 
 ### Batch Processing
+
 - Origin classification processes up to 100 names simultaneously
 - Reduces API calls to `name2nat` by ~100x
 - Fallback to individual classification if batch fails
 
 ### Database Efficiency
+
 - Bulk inserts using `executemany` for new names
 - Unique constraints prevent duplicates
 - Indexed columns for fast filtering
 - Commit hash tracking avoids redundant processing
 
 ### Logging System
+
 - Structured logging with timestamps and module names
 - **Suppressed debug noise** - watchdog and sqlite3 loggers set to WARNING level
 - INFO level: Milestones (database initialized, names loaded, ratings saved)
@@ -216,6 +232,7 @@ Options:
 - ERROR level: Critical failures
 
 ### Error Handling
+
 - Graceful fallbacks for missing dependencies
 - Individual name classification continues if batch fails
 - Database transactions ensure data consistency
@@ -266,6 +283,7 @@ CREATE TABLE user_settings (
 ## Development
 
 ### Code Structure
+
 - `main.py` - Streamlit application entry point
 - `database.py` - SQLite database operations
 - `data_loader.py` - Name loading and validation
@@ -277,19 +295,23 @@ CREATE TABLE user_settings (
 - `init_database.py` - Database initialization script
 
 ### Testing
+
 Run basic functionality tests:
+
 ```bash
 python verify_imports.py
 ```
 
 ### Code Quality
+
 - Uses `ruff` for linting
 - Follows Python type hints
 - Consistent code formatting
 
 ## Data Sources
 
-Names are sourced from the `godkendtefornavne` submodule, which contains approved Danish names from the Danish government.
+Names are sourced from the `godkendtefornavne` submodule, which contains
+approved Danish names from the Danish government.
 
 ## License
 
@@ -297,6 +319,7 @@ Names are sourced from the `godkendtefornavne` submodule, which contains approve
 
 ## Acknowledgments
 
-- [name2nat](https://github.com/ivarvit/name2nat) for name nationality prediction
+- [name2nat](https://github.com/ivarvit/name2nat) for name nationality
+  prediction
 - Streamlit for the web application framework
 - The Danish government for the name data
