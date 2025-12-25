@@ -1,14 +1,19 @@
 [build-system]
-requires = ["setuptools>=65.0", "wheel"]
+requires = ["setuptools>=80.9.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [dependency-groups]
 dev = [
-  "poethepoet>=0.38.0",
-  "pyrefly>=0.46.0",
+  "poethepoet>=0.39.0",
+  "pyrefly>=0.46.1",
   "ruff>=0.14.10",
   "prek>=0.2.24",
-  "commitizen>=4.10.1"
+  "commitizen>=4.10.1",
+  "pytest>=9.0.2",
+  "pytest-cov>=7.0.0",
+  "pytest-playwright>=0.7.2",
+  "playwright>=1.57.0",
+  "pytest-mock>=3.15.1"
 ]
 
 [project]
@@ -21,20 +26,19 @@ authors = [
 ]
 requires-python = ">=3.13"
 dependencies = [
-  "streamlit>=1.52.2",
-  "sentence-transformers>=5.2.0",
-  "numpy>=2.4.0",
-  "rapidfuzz>=3.14.3",
   "httpx>=0.28.1",
+  "name2nat>=0.5.1",
+  "numpy>=2.4.0",
   "pandas>=2.3.3",
-  "typer>=0.12.3",
-  "rich>=13.7.0"
+  "rapidfuzz>=3.14.3",
+  "rich>=14.2.0",
+  "sentence-transformers>=5.2.0",
+  "streamlit>=1.52.2",
+  "typer>=0.21.0",
 ]
 
 [project.scripts]
 name-db = "st_name_ranking.cli:app"
-init-db = "st_name_ranking.init_database:main"
-classify-origins = "st_name_ranking.classify_origins:main"
 
 [tool.commitizen]
 name = "cz_conventional_commits"
@@ -44,12 +48,16 @@ version_provider = "uv"
 update_changelog_on_bump = true
 major_version_zero = true
 
+[tool.poe.tasks]
+clean = {shell = 'uvx pyclean -d=all .', help = "Clean python residuals"}
+upgrade = {shell = 'uv sync --upgrade && uvx uv-bump; uvx prek autoupdate'}
+
 [tool.pyrefly]
 python-version = "3.13"
 search-path = ["src"]
 
 [tool.pytest.ini_options]
-addopts = "--doctest-modules --numprocesses=auto --cov=src/st-name-ranking --cov-report=term-missing --cov-report=json"
+addopts = "--doctest-modules --cov=src/st-name-ranking --cov-report=term-missing --cov-report=html"
 testpaths = [
   "tests"
 ]

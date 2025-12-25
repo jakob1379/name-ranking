@@ -16,10 +16,7 @@ import argparse
 import sys
 from pathlib import Path
 
-# Add current directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
-
-from database import (
+from st_name_ranking.database import (
     get_stats,
     init_database,
     migrate_ratings_from_json,

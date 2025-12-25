@@ -10,11 +10,11 @@ from datetime import datetime
 
 import streamlit as st
 
-from . import database
-from .data_loader import load_names_by_gender, save_ratings
-from .elo import initialize_ratings
-from .ui import render_similarity, render_tournament
-from .utils import pull_submodule_updates, setup_session_state
+from st_name_ranking import database
+from st_name_ranking.data_loader import load_names_by_gender, save_ratings
+from st_name_ranking.elo import initialize_ratings
+from st_name_ranking.ui import render_similarity, render_tournament
+from st_name_ranking.utils import pull_submodule_updates, setup_session_state
 
 # Configure logging - suppress debug noise
 logging.getLogger("watchdog").setLevel(logging.WARNING)
@@ -153,8 +153,8 @@ def main() -> None:
         try:
             database.init_database()
             stats = database.get_stats()
-            total = stats['total_names']
-            classified = stats['classified_names']
+            total = stats["total_names"]
+            classified = stats["classified_names"]
             if total > 0:
                 percentage = classified / total * 100
                 st.caption(

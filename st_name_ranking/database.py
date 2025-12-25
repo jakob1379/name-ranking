@@ -359,17 +359,43 @@ def sync_names_with_submodule(submodule_path: Path = Path("godkendtefornavne")):
     df = pd.read_json(json_path, encoding="utf-8")
     logger.info(f"Loaded {len(df)} rows from JSON")
 
+    # Handle empty JSON
+    if df.empty:
+        logger.debug("Empty JSON, nothing to sync")
+        return 0
+
     # Validate columns
     if not all(col in df.columns for col in ["name", "gender"]):
         raise ValueError("JSON missing required columns 'name' and/or 'gender'")
 
     # Filter valid names
-    from data_loader import is_valid_name
+    from st_name_ranking.data_loader import is_valid_name
 
     valid_names = []
     for _, row in df.iterrows():
         name = str(row["name"]).strip()
-        gender = str(row["gender"]).strip()
+        gender_raw = str(row["gender"]).strip()
+        # Map gender codes to full names
+        gender_map = {
+            "F": "Female",
+            "M": "Male",
+            "U": "Unisex",
+            "female": "Female",
+            "male": "Male",
+            "unisex": "Unisex",
+            "Female": "Female",
+            "Male": "Male",
+            "Unisex": "Unisex",
+        }
+        gender = gender_map.get(gender_raw)
+        if not gender:
+            # Try case-insensitive match
+            gender = gender_map.get(gender_raw.lower())
+        if not gender:
+            logger.warning(
+                f"Invalid gender '{gender_raw}' for name '{name}', skipping"
+            )
+            continue
         if is_valid_name(name):
             valid_names.append((name, gender))
 
@@ -396,11 +422,33 @@ def sync_names_with_submodule(submodule_path: Path = Path("godkendtefornavne")):
     return inserted_count
 
 
+def get_latest_submodule_version() -> Optional[Dict[str, Any]]:
+    """Get the latest submodule version (commit hash) from source_versions."""
+    with get_connection() as conn:
+        cursor = conn.execute(
+            "SELECT commit_hash FROM source_versions ORDER BY id DESC LIMIT 1"
+        )
+        row = cursor.fetchone()
+        if row:
+            return {"commit_hash": row[0]}
+        return None
+
+
+def update_submodule_version(commit_hash: str, names_count: int):
+    """Update submodule version (commit hash) and names count."""
+    with get_connection() as conn:
+        # Insert new record (always add new row)
+        conn.execute(
+            "INSERT INTO source_versions (commit_hash) VALUES (?)",
+            (commit_hash,),
+        )
+
+
 def get_unclassified_names(limit: Optional[int] = None) -> List[Dict[str, Any]]:
     """Get names that haven't been classified with origin region."""
     with get_connection() as conn:
         query = """
-            SELECT id, name FROM names 
+            SELECT id, name FROM names
             WHERE origin_region IS NULL
             ORDER BY id
         """
@@ -416,8 +464,8 @@ def update_name_origin(name_id: int, region: str, confidence: float):
     with get_connection() as conn:
         conn.execute(
             """
-            UPDATE names 
-            SET origin_region = ?, 
+            UPDATE names
+            SET origin_region = ?,
                 origin_confidence = ?,
                 origin_classified_at = CURRENT_TIMESTAMP,
                 updated_at = CURRENT_TIMESTAMP
@@ -473,7 +521,7 @@ def get_names_by_gender() -> Dict[str, List[str]]:
     with get_connection() as conn:
         # Get all names with gender
         cursor = conn.execute("""
-            SELECT name, gender FROM names 
+            SELECT name, gender FROM names
             WHERE gender IN ('Male', 'Female', 'Unisex')
             ORDER BY name
         """)
@@ -514,10 +562,10 @@ def get_all_origin_regions() -> List[str]:
     including NULL as 'International'."""
     with get_connection() as conn:
         cursor = conn.execute("""
-            SELECT DISTINCT 
-                CASE 
+            SELECT DISTINCT
+                CASE
                     WHEN origin_region IS NULL THEN 'International'
-                    ELSE origin_region 
+                    ELSE origin_region
                 END as region
             FROM names
             ORDER BY region
@@ -551,13 +599,13 @@ def update_rating(name: str, rating: float):
         # Update or insert rating
         conn.execute(
             """
-            INSERT OR REPLACE INTO ratings 
+            INSERT OR REPLACE INTO ratings
             (name_id, rating, matches, last_updated)
             VALUES (
                 ?,
                 ?,
                 COALESCE((
-                    SELECT matches + 1 FROM ratings 
+                    SELECT matches + 1 FROM ratings
                     WHERE name_id = ?
                 ), 1),
                 CURRENT_TIMESTAMP
@@ -617,7 +665,7 @@ def migrate_ratings_from_json(json_path: Path = Path("ratings.json")) -> int:
                 # Insert rating
                 conn.execute(
                     """
-                    INSERT OR REPLACE INTO ratings 
+                    INSERT OR REPLACE INTO ratings
                     (name_id, rating) VALUES (?, ?)
                 """,
                     (name_id, rating),
@@ -638,10 +686,10 @@ def get_stats() -> Dict[str, Any]:
 
         origin_dist = {}
         cursor = conn.execute("""
-            SELECT 
-                CASE 
+            SELECT
+                CASE
                     WHEN origin_region IS NULL THEN 'International'
-                    ELSE origin_region 
+                    ELSE origin_region
                 END as region,
                 COUNT(*) as count
             FROM names

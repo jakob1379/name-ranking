@@ -8,9 +8,9 @@ from typing import Dict, List, Tuple
 import numpy as np
 import streamlit as st
 
-from . import database
-from .data_loader import initialize_or_load_ratings, save_ratings
-from .elo import K_FACTOR, update_elo, update_elo_draw
+from st_name_ranking import database
+from st_name_ranking.data_loader import initialize_or_load_ratings, save_ratings
+from st_name_ranking.elo import K_FACTOR, update_elo, update_elo_draw
 
 logger = logging.getLogger(__name__)
 

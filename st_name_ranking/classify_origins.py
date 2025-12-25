@@ -13,13 +13,13 @@ This script:
 import logging
 import sys
 import time
-from pathlib import Path
 from typing import Optional, Tuple
 
-# Add current directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
-
-from database import get_connection, get_unclassified_names, update_name_origin
+from st_name_ranking.database import (
+    get_connection,
+    get_unclassified_names,
+    update_name_origin,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -289,7 +289,7 @@ def main():
     args = parser.parse_args()
 
     if args.stats:
-        from database import get_stats
+        from st_name_ranking.database import get_stats
 
         stats = get_stats()
         total = stats["total_names"]

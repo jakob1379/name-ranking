@@ -6,7 +6,6 @@ Provides commands for database initialization, synchronization,
 rating migration, and origin classification.
 """
 
-import sys
 from pathlib import Path
 from typing import Optional
 
@@ -15,12 +14,9 @@ from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.table import Table
 
-# Add current directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
-
 # Import database functions
-from classify_origins import classify_all_names
-from database import (
+from st_name_ranking.classify_origins import classify_all_names
+from st_name_ranking.database import (
     get_stats,
     init_database,
     migrate_ratings_from_json,
@@ -128,9 +124,7 @@ def init(
             )
             migrated = migrate_ratings_from_json(ratings_path)
             progress.update(task, completed=True)
-            print_success(
-                f"Migrated {migrated} ratings from {ratings_path}"
-            )
+            print_success(f"Migrated {migrated} ratings from {ratings_path}")
     else:
         print_warning(f"Ratings file not found: {ratings_path}")
 
@@ -244,9 +238,7 @@ def classify_command(
             TextColumn("[progress.description]{task.description}"),
             console=console,
         ) as progress:
-            task = progress.add_task(
-                "Classifying name origins...", total=None
-            )
+            task = progress.add_task("Classifying name origins...", total=None)
             classified = classify_all_names(limit, batch_size)
             progress.update(task, completed=True)
 
@@ -262,11 +254,11 @@ def classify_command(
         console.print("  [bold]pip install name2nat[/bold]")
         console.print()
         console.print("Or add to pyproject.toml dependencies:")
-        console.print('  dependencies = [')
-        console.print('    ...')
+        console.print("  dependencies = [")
+        console.print("    ...")
         console.print('    "name2nat>=0.0.0",')
-        console.print('    ...')
-        console.print('  ]')
+        console.print("    ...")
+        console.print("  ]")
         raise typer.Exit(code=1)
     except Exception as e:
         print_error(f"Classification failed: {e}")
@@ -292,9 +284,7 @@ def stats_command() -> None:
     stats = get_stats()
 
     # Create summary table
-    summary_table = Table(
-        title="Summary", show_header=False, box=None
-    )
+    summary_table = Table(title="Summary", show_header=False, box=None)
     summary_table.add_column("Metric", style="cyan")
     summary_table.add_column("Value", style="bold")
 
