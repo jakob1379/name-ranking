@@ -66,7 +66,7 @@ system, with similarity search and origin classification.
 2. **Set up Python environment:**
 
    ```bash
-   python -m venv .venv
+   uv venv .venv
    source .venv/bin/activate  # On Windows: .venv\Scripts\activate
    ```
 
@@ -93,27 +93,26 @@ scripts:
 
 ```bash
 # Show all available commands
-name-db --help
-# or if not in PATH: uv run name-db --help
+uv run name-db --help
 
 # Initialize database (schema + sync + migrate)
-name-db init
+uv run name-db init
 
 # Initialize with origin classification
-name-db init --classify
+uv run name-db init --classify
 
 # Sync names from submodule
-name-db sync
+uv run name-db sync
 
 # Migrate ratings from JSON
-name-db migrate
+uv run name-db migrate
 
 # Classify name origins
-name-db classify --limit 100  # test with 100 names
-name-db classify              # classify all names
+uv run name-db classify --limit 100  # test with 100 names
+uv run name-db classify              # classify all names
 
 # Show database statistics
-name-db stats
+uv run name-db stats
 ```
 
 #### Using Legacy Scripts
@@ -122,10 +121,10 @@ The original scripts are still available inside the package:
 
 ```bash
 # Initialize database
-python -m st_name_ranking.init_database --classify
+uv run st_name_ranking.init_database --classify
 
 # Classify origins
-python -m st_name_ranking.classify_origins --limit 100 --stats
+uv run st_name_ranking.classify_origins --limit 100 --stats
 ```
 
 ## Usage
@@ -135,7 +134,7 @@ python -m st_name_ranking.classify_origins --limit 100 --stats
 Start the Streamlit app:
 
 ```bash
-streamlit run st_name_ranking/main.py
+uv run streamlit run st_name_ranking/main.py
 ```
 
 The application will be available at `http://localhost:8501`.
@@ -190,8 +189,8 @@ Origin classification can be done in two ways:
 #### 2. Via Command Line
 
 ```bash
-classify-origins
-# or: name-db classify
+uv run classify-origins
+# or: uv run name-db classify
 ```
 
 Options:
@@ -299,7 +298,7 @@ CREATE TABLE user_settings (
 Run basic functionality tests:
 
 ```bash
-python verify_imports.py
+uv run verify_imports.py
 ```
 
 ### Code Quality
