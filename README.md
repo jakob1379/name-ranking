@@ -75,9 +75,52 @@ A Streamlit-based web application for ranking Danish names using Elo rating syst
 
 The application uses SQLite (`names.db`). The database is automatically initialized on first run.
 
-To manually initialize or sync names from the submodule:
+#### Using the CLI (Recommended)
+
+A Typer-based CLI provides comprehensive database management via installed scripts:
+
 ```bash
-python init_database.py
+# Show all available commands
+name-db --help
+# or if not in PATH: uv run name-db --help
+
+# Initialize database (schema + sync + migrate)
+name-db init
+
+# Initialize with origin classification
+name-db init --classify
+
+# Sync names from submodule
+name-db sync
+
+# Migrate ratings from JSON
+name-db migrate
+
+# Classify name origins
+name-db classify --limit 100  # test with 100 names
+name-db classify              # classify all names
+
+# Show database statistics
+name-db stats
+```
+
+Additional installed scripts:
+```bash
+# Direct script access (legacy compatibility)
+init-db --help
+classify-origins --help
+```
+
+#### Using Legacy Scripts
+
+The original scripts are still available inside the package:
+
+```bash
+# Initialize database
+python -m st_name_ranking.init_database --classify
+
+# Classify origins
+python -m st_name_ranking.classify_origins --limit 100 --stats
 ```
 
 ## Usage
@@ -86,7 +129,7 @@ python init_database.py
 
 Start the Streamlit app:
 ```bash
-streamlit run main.py
+streamlit run st_name_ranking/main.py
 ```
 
 The application will be available at `http://localhost:8501`.
@@ -135,7 +178,8 @@ Origin classification can be done in two ways:
 
 #### 2. Via Command Line
 ```bash
-python classify_origins.py
+classify-origins
+# or: name-db classify
 ```
 
 Options:

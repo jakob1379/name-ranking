@@ -11,8 +11,8 @@ import httpx
 import pandas as pd
 import streamlit as st
 
-import database
-from elo import INITIAL_RATING, initialize_ratings
+from . import database
+from .elo import INITIAL_RATING, initialize_ratings
 
 logger = logging.getLogger(__name__)
 

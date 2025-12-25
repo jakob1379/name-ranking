@@ -8,13 +8,13 @@ from typing import List, Literal, Optional, Union
 import pandas as pd
 import streamlit as st
 
-from elo import INITIAL_RATING
-from similarity import (
+from .elo import INITIAL_RATING
+from .similarity import (
     get_string_similarity_scores,
     get_vector_similarity_scores,
     load_embedding_model,
 )
-from utils import (
+from .utils import (
     select_candidates,
     update_elo_and_save,
     update_elo_draw_and_save,

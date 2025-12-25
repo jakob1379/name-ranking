@@ -18,6 +18,9 @@ from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
+# Track initialization status
+_initialized = False
+
 DB_PATH = Path("names.db")
 
 
@@ -38,6 +41,11 @@ def get_connection():
 
 def init_database():
     """Initialize database schema if it doesn't exist."""
+    global _initialized
+    if _initialized:
+        logger.debug("Database already initialized, skipping initialization")
+        return
+
     logger.debug("Initializing database schema")
     with get_connection() as conn:
         # Names table
@@ -110,6 +118,7 @@ def init_database():
             _insert_default_region_mapping(conn)
 
         logger.info("Database initialized successfully")
+        _initialized = True
 
 
 def _insert_default_region_mapping(conn):

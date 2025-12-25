@@ -10,11 +10,11 @@ from datetime import datetime
 
 import streamlit as st
 
-import database
-from data_loader import load_names_by_gender, save_ratings
-from elo import initialize_ratings
-from ui import render_similarity, render_tournament
-from utils import pull_submodule_updates, setup_session_state
+from . import database
+from .data_loader import load_names_by_gender, save_ratings
+from .elo import initialize_ratings
+from .ui import render_similarity, render_tournament
+from .utils import pull_submodule_updates, setup_session_state
 
 # Configure logging - suppress debug noise
 logging.getLogger("watchdog").setLevel(logging.WARNING)
@@ -148,7 +148,7 @@ def main() -> None:
                             f"Classification failed: {e}",
                             icon="❌",
                         )
-        
+
         # Show classification progress
         try:
             database.init_database()
