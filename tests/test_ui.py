@@ -200,7 +200,9 @@ def test_vote_interaction(streamlit_page: Page):
     
     # Get the current names being displayed
     # This is tricky without specific selectors - we'll look for h2 or large text
-    name_elements = streamlit_page.locator("h2, h3").filter(has_text=/.+/)
+    name_elements = streamlit_page.locator("h2, h3").filter(
+        has_text=re.compile(r".+")
+    )
     
     # At least two names should be displayed
     expect(name_elements).to_have_count_at_least(2)
