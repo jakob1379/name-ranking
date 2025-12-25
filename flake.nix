@@ -18,26 +18,25 @@
             # Python and package management
             python
             uv
+            gcc
 
             # Git and development tools
             git
             pre-commit
 
-            # Playwright for UI testing
+            # Browsers for Playwright
             playwright-driver
             playwright-test
-
-            # Browsers for Playwright
-            (playwright.override {
-              enableChromium = true;
-              enableFirefox = true;
-              enableWebkit = true;
+            # Access the overridable browsers attribute
+            (playwright-test {
+              withChromium = true;
+              withFirefox = true;
+              withWebkit = true;
             })
-
-            # System dependencies for Playwright browsers
+            # system dependencies for playwright browsers
             stdenv.cc.cc.lib
             libxkbcommon
-            libGL
+            libgl
             libuuid
             libappindicator
             libdrm
@@ -49,12 +48,12 @@
             cups
             dbus
             expat
-            libX11
-            libXcomposite
-            libXdamage
-            libXext
-            libXfixes
-            libXrandr
+            libx11
+            libxcomposite
+            libxdamage
+            libxext
+            libxfixes
+            libxrandr
             libxcb
             libxshmfence
             pango

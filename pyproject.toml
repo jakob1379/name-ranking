@@ -15,7 +15,9 @@ dev = [
   "playwright>=1.57.0",
   "pytest-mock>=3.15.1",
   "pytest-xdist>=3.6.1",
-  "pytest-timeout>=2.3.1"
+  "pytest-timeout>=2.3.1",
+  "ipython>=9.8.0",
+  "marimo>=0.18.4",
 ]
 
 [project]
