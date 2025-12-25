@@ -2,6 +2,7 @@
 Playwright UI integration tests for the Name Ranking application.
 """
 import os
+import re
 import subprocess
 import tempfile
 import time
@@ -207,7 +208,7 @@ def test_vote_interaction(streamlit_page: Page):
     # Try to click vote left button (if we can identify it)
     # We'll look for buttons with "←" or "Vote Left"
     vote_left_buttons = streamlit_page.get_by_role("button").filter(
-        has_text=/(←|Vote.*Left|Left.*Vote)/i
+        has_text=re.compile(r"(←|Vote.*Left|Left.*Vote)", re.IGNORECASE)
     )
     
     if vote_left_buttons.count() > 0:
@@ -219,7 +220,7 @@ def test_vote_interaction(streamlit_page: Page):
     
     # Try to click vote right button
     vote_right_buttons = streamlit_page.get_by_role("button").filter(
-        has_text=/(→|Vote.*Right|Right.*Vote)/i
+        has_text=re.compile(r"(→|Vote.*Right|Right.*Vote)", re.IGNORECASE)
     )
     
     if vote_right_buttons.count() > 0:
