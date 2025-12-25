@@ -17,10 +17,13 @@ A Streamlit-based web application for ranking Danish names using Elo rating syst
 - Find names similar to a reference name
 
 ### 🌍 Origin Classification
+- **Optional classification** - runs only when explicitly requested
+- **Incremental processing** - classify 100 names at a time or all at once
 - Automatic nationality prediction using `name2nat`
 - Mapping to geographic regions (Nordic, European, Asian, etc.)
 - Confidence scoring for predictions
 - Batch processing for unclassified names
+- **Progress tracking** - shows classification percentage in UI
 
 ### ⚙️ Filtering & Management
 - Gender filtering (Male, Female, Unisex, All)
@@ -29,11 +32,13 @@ A Streamlit-based web application for ranking Danish names using Elo rating syst
 - Git submodule integration for name data updates
 - Ratings persistence with SQLite
 
-### 📊 Optimizations
+### 📊 Performance Optimizations
+- **Fast startup** - no automatic sync on app launch
+- **Separated operations** - manual control over sync and classification
 - **Batch processing** for origin classification (up to 100 names at once)
 - **Efficient database sync** with commit hash tracking
 - **Bulk inserts** for new names
-- **Comprehensive logging** (DEBUG, INFO, WARNING levels)
+- **Selective logging** - suppresses debug noise from watchdog and sqlite3
 - **Fallback mechanisms** for error recovery
 
 ## Setup
@@ -89,7 +94,15 @@ The application will be available at `http://localhost:8501`.
 ### Application Interface
 
 1. **Sidebar**
-   - Submodule management (reload names, check for updates)
+   - **Submodule Management** (three separate controls):
+     - **Reload Names**: Fast reload from existing database
+     - **Sync Names**: Sync database with local submodule (no git pull)
+     - **Check for Updates**: Pull git updates and sync (optional auto-classification)
+   - **Origin Classification**:
+     - **Auto-classify after update** checkbox
+     - **Classify 100 Names** button (incremental processing)
+     - **Classify All** button (full batch processing)
+     - Progress display showing `X/Y names (Z%)`
    - Gender filter selection
    - Origin region filter (multiselect)
    - Ratings management (save, reset, export)
@@ -98,9 +111,29 @@ The application will be available at `http://localhost:8501`.
    - **Tournament tab**: Compare two names, vote, see top rankings
    - **Similarity tab**: Search for names similar to a reference
 
+### Optimized Workflow
+
+The application has been optimized for faster startup and better user control:
+
+1. **Fast Startup**: App loads instantly from existing database without automatic sync
+2. **Manual Sync Control**: Three separate buttons for different sync scenarios:
+   - **Reload Names**: Quick refresh from database
+   - **Sync Names**: Sync with local submodule changes
+   - **Check for Updates**: Pull git updates and sync
+3. **Incremental Classification**: Process 100 names at a time or all at once
+4. **Progress Visibility**: Real-time tracking of classification progress
+
 ### Origin Classification
 
-To classify name origins (requires `name2nat`):
+Origin classification can be done in two ways:
+
+#### 1. Via the Web Interface (Recommended)
+- **Auto-classify after update**: Checkbox to automatically classify after git updates
+- **Classify 100 Names**: Incremental processing for testing or slow systems
+- **Classify All**: Full batch processing (may take several minutes)
+- **Progress tracking**: Shows real-time classification percentage
+
+#### 2. Via Command Line
 ```bash
 python classify_origins.py
 ```
@@ -114,8 +147,9 @@ Options:
 
 - Names are stored in `names.db` SQLite database
 - Ratings are persisted automatically
-- Submodule updates are tracked by commit hash
-- Unclassified names can be processed in batches
+- **Manual sync control** - user decides when to sync with submodule
+- Submodule updates are tracked by commit hash to avoid redundant processing
+- Unclassified names can be processed in batches (100 at a time or all at once)
 
 ## Optimization Details
 
@@ -132,9 +166,10 @@ Options:
 
 ### Logging System
 - Structured logging with timestamps and module names
-- DEBUG level: Detailed operations (file loads, filtering, sync status)
+- **Suppressed debug noise** - watchdog and sqlite3 loggers set to WARNING level
 - INFO level: Milestones (database initialized, names loaded, ratings saved)
 - WARNING level: Potential issues (missing files, classification failures)
+- ERROR level: Critical failures
 
 ### Error Handling
 - Graceful fallbacks for missing dependencies
