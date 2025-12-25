@@ -217,7 +217,7 @@ def classify(
     ),
 ) -> None:
     """
-    Classify name origins using name2nat.
+    Classify name origins using ethnidata.
 
     This command processes unclassified names in batches,
     predicting their nationality and mapping to geographic regions.
@@ -248,15 +248,15 @@ def classify_command(
             print_success(f"Classified {classified} names")
 
     except ImportError:
-        print_error("name2nat is not installed.")
+        print_error("ethnidata is not installed.")
         console.print()
         console.print("Install it with:")
-        console.print("  [bold]pip install name2nat[/bold]")
+        console.print("  [bold]pip install ethnidata[/bold]")
         console.print()
         console.print("Or add to pyproject.toml dependencies:")
         console.print("  dependencies = [")
         console.print("    ...")
-        console.print('    "name2nat>=0.0.0",')
+        console.print('    "ethnidata>=4.1.1",')
         console.print("    ...")
         console.print("  ]")
         raise typer.Exit(code=1)

@@ -31,7 +31,7 @@ def main():
     parser.add_argument(
         "--classify",
         action="store_true",
-        help="Run initial origin classification (requires name2nat)",
+        help="Run initial origin classification (requires ethnidata)",
     )
     parser.add_argument(
         "--ratings-path",
@@ -66,7 +66,7 @@ def main():
             print(f"✓ Classified {classified} names")
         except ImportError:
             print(
-                "✗ name2nat not installed. Install with: pip install name2nat"
+                "✗ ethnidata not installed. Install with: pip install ethnidata"
             )
             print("  Or run later: python classify_origins.py")
         except Exception as e:

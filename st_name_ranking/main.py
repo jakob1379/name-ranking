@@ -106,7 +106,7 @@ def main() -> None:
                         st.rerun()
                     except ImportError:
                         st.toast(
-                            "name2nat not installed. Run: pip install name2nat",
+                            "ethnidata not installed. Run: pip install ethnidata",
                             icon="❌",
                         )
                     except Exception as e:
@@ -140,7 +140,7 @@ def main() -> None:
                         st.rerun()
                     except ImportError:
                         st.toast(
-                            "name2nat not installed. Run: pip install name2nat",
+                            "ethnidata not installed. Run: pip install ethnidata",
                             icon="❌",
                         )
                     except Exception as e:

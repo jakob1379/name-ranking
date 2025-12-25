@@ -23,7 +23,7 @@ system, with similarity search and origin classification.
 
 - **Optional classification** - runs only when explicitly requested
 - **Incremental processing** - classify 100 names at a time or all at once
-- Automatic nationality prediction using `name2nat`
+- Automatic nationality prediction using `ethnidata`
 - Mapping to geographic regions (Nordic, European, Asian, etc.)
 - Confidence scoring for predictions
 - Batch processing for unclassified names
@@ -76,10 +76,8 @@ system, with similarity search and origin classification.
    uv pip install -e .
    ```
 
-4. **Optional: Install name2nat for origin classification:**
-   ```bash
-   uv pip install name2nat
-   ```
+4. **Origin classification with ethnidata:**
+   Origin classification uses the `ethnidata` package (included in dependencies).
 
 ### Database Initialization
 
@@ -212,7 +210,7 @@ Options:
 ### Batch Processing
 
 - Origin classification processes up to 100 names simultaneously
-- Reduces API calls to `name2nat` by ~100x
+- Reduces API calls to `ethnidata` by ~100x
 - Fallback to individual classification if batch fails
 
 ### Database Efficiency
@@ -318,7 +316,7 @@ approved Danish names from the Danish government.
 
 ## Acknowledgments
 
-- [name2nat](https://github.com/ivarvit/name2nat) for name nationality
+- [ethnidata](https://github.com/teyfikoz/ethnidata) for name nationality
   prediction
 - Streamlit for the web application framework
 - The Danish government for the name data

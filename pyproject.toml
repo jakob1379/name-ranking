@@ -31,7 +31,7 @@ authors = [
 requires-python = ">=3.13"
 dependencies = [
   "httpx>=0.28.1",
-  "name2nat>=0.5.1",
+  "ethnidata>=4.1.1",
   "numpy>=2.4.0",
   "pandas>=2.3.3",
   "rapidfuzz>=3.14.3",
@@ -39,6 +39,7 @@ dependencies = [
   "sentence-transformers>=5.2.0",
   "streamlit>=1.52.2",
   "typer>=0.21.0",
+  "ethnicolr>=0.19.0",
 ]
 
 [project.scripts]

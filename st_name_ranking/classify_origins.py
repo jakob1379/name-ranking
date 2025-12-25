@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
-Classify name origins using name2nat package.
+Classify name origins using ethnidata package.
 
 This script:
 1. Gets unclassified names from database
-2. Uses name2nat to predict nationality
+2. Uses ethnidata to predict nationality
 3. Maps nationality to region using region_mapping table
 4. Updates database with region and confidence
 5. Handles batch processing with progress reporting
@@ -25,17 +25,17 @@ logger = logging.getLogger(__name__)
 
 
 def get_classifier():
-    """Get or create the name2nat classifier (lazy load)."""
+    """Get or create the ethnidata classifier (lazy load)."""
     try:
-        from name2nat import Name2nat
+        from ethnidata import EthniData
     except ImportError:
         raise ImportError(
-            "name2nat not installed. Install with: pip install name2nat"
+            "ethnidata not installed. Install with: pip install ethnidata"
         )
 
     if not hasattr(get_classifier, "_classifier"):
-        get_classifier._classifier = Name2nat()
-        logger.debug("Initialized name2nat classifier")
+        get_classifier._classifier = EthniData()
+        logger.debug("Initialized ethnidata classifier")
 
     return get_classifier._classifier
 
@@ -71,31 +71,29 @@ def get_region_for_nationality(nationality: str) -> Tuple[str, float]:
 
 def classify_name(name: str) -> Optional[Tuple[str, float]]:
     """
-    Classify a single name using name2nat.
+    Classify a single name using ethnidata.
     Returns (region, confidence) or None if classification failed.
     """
     try:
         classifier = get_classifier()
 
-        # Predict nationality
-        # name2nat expects a list of names, returns list of
-        # (name, [(nationality, prob), ...])
-        results = classifier([name], top_n=1)
-        if not results:
+        # Predict nationality using ethnidata
+        result = classifier.predict_nationality(name, name_type="first")
+        if not result:
             logger.debug(f"No results for name: {name}")
             return None
 
-        # Extract top prediction
-        name_result = results[0]
-        if not name_result[1]:  # No predictions
+        country_name = result.get('country_name')
+        confidence = result.get('confidence', 0.0)
+        
+        if not country_name or confidence <= 0:
             logger.debug(f"No predictions for name: {name}")
             return None
 
-        nationality, confidence = name_result[1][0]
-        logger.debug(f"Classified {name} -> {nationality} ({confidence:.2f})")
+        logger.debug(f"Classified {name} -> {country_name} ({confidence:.2f})")
 
         # Map nationality to region
-        region, region_confidence = get_region_for_nationality(nationality)
+        region, region_confidence = get_region_for_nationality(country_name)
 
         # Combine confidences
         combined_confidence = confidence * region_confidence
@@ -108,7 +106,7 @@ def classify_name(name: str) -> Optional[Tuple[str, float]]:
 
     except ImportError:
         logger.error(
-            "name2nat not installed. Install with: pip install name2nat"
+            "ethnidata not installed. Install with: pip install ethnidata"
         )
         raise
     except Exception as e:
@@ -118,60 +116,32 @@ def classify_name(name: str) -> Optional[Tuple[str, float]]:
 
 def classify_batch(names_batch: list, batch_size: int = 100) -> int:
     """
-    Classify a batch of names using batch processing.
+    Classify a batch of names using ethnidata.
     Returns number of successfully classified names.
     """
     if not names_batch:
         return 0
 
-    # Extract names for batch classification
-    names = [item["name"] for item in names_batch]
-    name_ids = [item["id"] for item in names_batch]
-
-    logger.debug(f"Classifying batch of {len(names)} names")
-
-    try:
-        classifier = get_classifier()
-
-        # Predict nationalities for all names in batch
-        # name2nat expects a list of names, returns list of
-        # (name, [(nationality, prob), ...])
-        results = classifier(names, top_n=1)
-
-        if not results:
-            logger.warning(f"No results for batch of {len(names)} names")
-            return 0
-
-        classified_count = 0
-
-        # Process each result
-        for idx, (name_result, name_id) in enumerate(zip(results, name_ids)):
-            if not name_result[1]:  # No predictions
-                logger.debug(f"No predictions for name: {names[idx]}")
-                continue
-
-            nationality, confidence = name_result[1][0]
-
-            # Map nationality to region
-            region, region_confidence = get_region_for_nationality(nationality)
-            combined_confidence = confidence * region_confidence
-
-            # Update database
-            update_name_origin(name_id, region, combined_confidence)
+    logger.debug(f"Classifying batch of {len(names_batch)} names")
+    
+    # Process each name individually (ethnidata doesn't support batch)
+    classified_count = 0
+    
+    for i, name_data in enumerate(names_batch):
+        name_id = name_data["id"]
+        name = name_data["name"]
+        
+        result = classify_name(name)
+        if result:
+            region, confidence = result
+            update_name_origin(name_id, region, confidence)
             classified_count += 1
-
-            # Log progress every 10 names
-            if (idx + 1) % 10 == 0:
-                logger.debug(f"  Processed {idx + 1}/{len(names)} names")
-
-        logger.info(f"Batch classified {classified_count}/{len(names)} names")
-        return classified_count
-
-    except Exception as e:
-        logger.error(f"Error classifying batch: {e}")
-        # Fall back to individual classification
-        logger.info("Falling back to individual classification")
-        return _classify_individually(names_batch)
+        
+        if (i + 1) % 10 == 0:
+            logger.debug(f"  Processed {i + 1}/{len(names_batch)} names")
+    
+    logger.info(f"Batch classified {classified_count}/{len(names_batch)} names")
+    return classified_count
 
 
 def _classify_individually(names_batch: list) -> int:
@@ -303,11 +273,11 @@ def main():
     try:
         classify_all_names(args.limit, args.batch_size)
     except ImportError:
-        print("\n❌ name2nat is not installed.")
-        print("Install it with: pip install name2nat")
+        print("\n❌ ethnidata is not installed.")
+        print("Install it with: pip install ethnidata")
         print("Or add to pyproject.toml dependencies:")
         print(
-            '  dependencies = [\n    ...\n    "name2nat>=0.0.0",\n    ...\n  ]'
+            '  dependencies = [\n    ...\n    "ethnidata>=4.1.1",\n    ...\n  ]'
         )
         sys.exit(1)
 

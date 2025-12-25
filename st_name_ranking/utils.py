@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 def pull_submodule_updates(classify_origins: bool = False) -> bool:
     """
     Pull latest updates from the git submodule and sync with database.
-    If classify_origins is True and name2nat is available, classify origins.
+    If classify_origins is True and ethnidata is available, classify origins.
     Returns True if successful.
     """
     logger.debug(
@@ -68,7 +68,7 @@ def pull_submodule_updates(classify_origins: bool = False) -> bool:
                     )
                     # Continue anyway - names will be synced on next load
 
-            # Classify origins if requested and name2nat is available
+            # Classify origins if requested and ethnidata is available
             if classify_origins:
                 try:
                     # Ensure database is initialized before classification
@@ -90,7 +90,7 @@ def pull_submodule_updates(classify_origins: bool = False) -> bool:
                             )
                 except ImportError:
                     st.toast(
-                        "name2nat not installed. Run: pip install name2nat",
+                        "ethnidata not installed. Run: pip install ethnidata",
                         icon="⚠️",
                     )
                 except Exception as classify_error:

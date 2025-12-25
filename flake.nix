@@ -26,9 +26,13 @@
 
             # Browsers for Playwright
             playwright-driver
-            playwright-test
+            (playwright-test.overrideAttrs {
+              withChromium = true;
+              withFirefox = true;
+              withWebkit = true;
+            })
             # Access the overridable browsers attribute
-            (playwright-test {
+            (playwright.overrideAttrs {
               withChromium = true;
               withFirefox = true;
               withWebkit = true;
@@ -36,7 +40,7 @@
             # system dependencies for playwright browsers
             stdenv.cc.cc.lib
             libxkbcommon
-            libgl
+            libGL
             libuuid
             libappindicator
             libdrm

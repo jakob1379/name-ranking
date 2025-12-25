@@ -105,10 +105,15 @@ def mock_submodule_path(tmp_path):
 
 @pytest.fixture
 def mock_classifier():
-    """Mock the name2nat classifier to avoid PyTorch issues."""
+    """Mock the ethnidata classifier to avoid PyTorch issues."""
     with patch('st_name_ranking.classify_origins.get_classifier') as mock_get:
         mock_classifier = mock_get.return_value
-        mock_classifier.predict.return_value = ("DK", 0.85)  # Denmark with high confidence
+        mock_classifier.predict_nationality.return_value = {
+            'country_name': 'Denmark',
+            'confidence': 0.85,
+            'country': 'DK',
+            'region': 'Europe'
+        }
         yield mock_classifier
 
 
