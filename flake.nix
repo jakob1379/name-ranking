@@ -33,6 +33,37 @@
               enableFirefox = true;
               enableWebkit = true;
             })
+
+            # System dependencies for Playwright browsers
+            stdenv.cc.cc.lib
+            libxkbcommon
+            libGL
+            libuuid
+            libappindicator
+            libdrm
+            mesa
+            nss
+            nspr
+            atk
+            at-spi2-atk
+            cups
+            dbus
+            expat
+            libX11
+            libXcomposite
+            libXdamage
+            libXext
+            libXfixes
+            libXrandr
+            libxcb
+            libxshmfence
+            pango
+            cairo
+            gdk-pixbuf
+            glib
+            gtk3
+            alsa-lib
+            at-spi2-core
           ];
 
           shellHook = ''
