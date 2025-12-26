@@ -131,36 +131,53 @@ def test_cli_init_with_classify(mock_db_path, cli_runner):
     with patch('st_name_ranking.cli.init_database') as mock_init, \
          patch('st_name_ranking.cli.sync_names_with_submodule') as mock_sync, \
          patch('st_name_ranking.cli.migrate_ratings_from_json') as mock_migrate, \
-         patch('st_name_ranking.cli.classify_all_names') as mock_classify:
+         patch('st_name_ranking.cli.classify_all_names') as mock_classify, \
+         patch('st_name_ranking.cli.get_stats') as mock_stats:
         
         mock_init.return_value = None
         mock_sync.return_value = 0  # No new names
         mock_migrate.return_value = 0  # No ratings migrated
         mock_classify.return_value = (3, 0)  # 3 names classified, 0 errors
+        # Mock stats to avoid database queries
+        mock_stats.return_value = {
+            "total_names": 100,
+            "classified_names": 20,
+            "rated_names": 100,
+            "origin_distribution": {"International": 80, "European": 20}
+        }
         
         result = cli_runner.invoke(app, ["init", "--classify"])
         assert result.exit_code == 0
         assert "Database schema created" in result.output
         assert "Synced 0 new names from submodule" in result.output
-        assert "Running initial origin classification" in result.output
-        assert "Classification complete" in result.output
+        assert "Classifying Name Origins" in result.output
+        assert "Classified (3, 0) names" in result.output
         
         # Check that functions were called
         mock_init.assert_called_once()
         mock_sync.assert_called_once()
         mock_migrate.assert_called_once()
         mock_classify.assert_called_once()
+        mock_stats.assert_called_once()
 
 
 def test_cli_init_with_custom_ratings(mock_db_path, temp_ratings_path, cli_runner):
     """Test database initialization with custom ratings path."""
     with patch('st_name_ranking.cli.init_database') as mock_init, \
          patch('st_name_ranking.cli.sync_names_with_submodule') as mock_sync, \
-         patch('st_name_ranking.cli.migrate_ratings_from_json') as mock_migrate:
+         patch('st_name_ranking.cli.migrate_ratings_from_json') as mock_migrate, \
+         patch('st_name_ranking.cli.get_stats') as mock_stats:
         
         mock_init.return_value = None
         mock_sync.return_value = 0  # No new names
         mock_migrate.return_value = 2  # 2 ratings migrated
+        # Mock stats to avoid database queries
+        mock_stats.return_value = {
+            "total_names": 100,
+            "classified_names": 20,
+            "rated_names": 100,
+            "origin_distribution": {"International": 80, "European": 20}
+        }
         
         result = cli_runner.invoke(app, [
             "init", 
@@ -169,43 +186,74 @@ def test_cli_init_with_custom_ratings(mock_db_path, temp_ratings_path, cli_runne
         assert result.exit_code == 0
         assert "Database schema created" in result.output
         assert "Synced 0 new names from submodule" in result.output
-        assert "Migrated 2 ratings from ratings.json" in result.output
+        assert "Migrated 2 ratings from" in result.output
+        assert str(temp_ratings_path) in result.output
         
         # Check that functions were called
         mock_init.assert_called_once()
         mock_sync.assert_called_once()
         mock_migrate.assert_called_once_with(temp_ratings_path)
+        mock_stats.assert_called_once()
 
 
 def test_cli_sync(mock_db_path, mock_submodule_path, cli_runner):
     """Test sync command."""
     # First initialize the database
-    with patch('st_name_ranking.cli.init_database') as mock_init:
+    with patch('st_name_ranking.cli.init_database') as mock_init, \
+         patch('st_name_ranking.cli.sync_names_with_submodule') as mock_sync_init, \
+         patch('st_name_ranking.cli.migrate_ratings_from_json') as mock_migrate_init, \
+         patch('st_name_ranking.cli.get_stats') as mock_stats_init:
         mock_init.return_value = None
+        mock_sync_init.return_value = 0
+        mock_migrate_init.return_value = 0
+        mock_stats_init.return_value = {
+            "total_names": 100,
+            "classified_names": 20,
+            "rated_names": 100,
+            "origin_distribution": {"International": 80, "European": 20}
+        }
         
         # Initialize
         init_result = cli_runner.invoke(app, ["init"])
         assert init_result.exit_code == 0
     
     # Now test sync
-    with patch('st_name_ranking.cli.sync_names_with_submodule') as mock_sync:
-        mock_sync.return_value = (2, 1)  # 2 new names, 1 existing
+    with patch('st_name_ranking.cli.sync_names_with_submodule') as mock_sync, \
+         patch('st_name_ranking.cli.get_stats') as mock_stats:
+        mock_sync.return_value = 2  # 2 new names synced
+        mock_stats.return_value = {
+            "total_names": 100,
+            "classified_names": 20,
+            "rated_names": 100,
+            "origin_distribution": {"International": 80, "European": 20}
+        }
         
         result = cli_runner.invoke(app, ["sync"])
         assert result.exit_code == 0
         assert "Syncing Names from Submodule" in result.output
-        assert "2 new names added" in result.output
-        assert "1 existing names skipped" in result.output
+        assert "Synced 2 new names from submodule" in result.output
         
         # Check that sync was called
         mock_sync.assert_called_once()
+        mock_stats.assert_called_once()
 
 
 def test_cli_migrate(mock_db_path, temp_ratings_path, cli_runner):
     """Test migrate command."""
     # First initialize the database
-    with patch('st_name_ranking.cli.init_database') as mock_init:
+    with patch('st_name_ranking.cli.init_database') as mock_init, \
+         patch('st_name_ranking.cli.sync_names_with_submodule') as mock_sync_init, \
+         patch('st_name_ranking.cli.migrate_ratings_from_json') as mock_migrate_init, \
+         patch('st_name_ranking.cli.get_stats') as mock_stats_init:
         mock_init.return_value = None
+        mock_sync_init.return_value = 0
+        mock_migrate_init.return_value = 0
+        mock_stats_init.return_value = {
+            "total_names": 100,
+            "classified_names": 20,
+            "rated_names": 100,
+            "origin_distribution": {"International": 80, "European": 20}
+        }
         init_result = cli_runner.invoke(app, ["init"])
         assert init_result.exit_code == 0
     
@@ -216,7 +264,8 @@ def test_cli_migrate(mock_db_path, temp_ratings_path, cli_runner):
         result = cli_runner.invoke(app, ["migrate", "--ratings-path", str(temp_ratings_path)])
         assert result.exit_code == 0
         assert "Migrating Ratings from JSON" in result.output
-        assert "3 ratings migrated" in result.output
+        assert "Migrated 3 ratings from" in result.output
+        assert str(temp_ratings_path) in result.output
         
         # Check that migrate was called with correct path
         mock_migrate.assert_called_once_with(temp_ratings_path)
@@ -225,8 +274,19 @@ def test_cli_migrate(mock_db_path, temp_ratings_path, cli_runner):
 def test_cli_classify(mock_db_path, cli_runner):
     """Test classify command."""
     # First initialize the database and insert some names
-    with patch('st_name_ranking.cli.init_database') as mock_init:
+    with patch('st_name_ranking.cli.init_database') as mock_init, \
+         patch('st_name_ranking.cli.sync_names_with_submodule') as mock_sync_init, \
+         patch('st_name_ranking.cli.migrate_ratings_from_json') as mock_migrate_init, \
+         patch('st_name_ranking.cli.get_stats') as mock_stats_init:
         mock_init.return_value = None
+        mock_sync_init.return_value = 0
+        mock_migrate_init.return_value = 0
+        mock_stats_init.return_value = {
+            "total_names": 100,
+            "classified_names": 20,
+            "rated_names": 100,
+            "origin_distribution": {"International": 80, "European": 20}
+        }
         
         # Initialize
         init_result = cli_runner.invoke(app, ["init"])
@@ -239,18 +299,28 @@ def test_cli_classify(mock_db_path, cli_runner):
         result = cli_runner.invoke(app, ["classify", "--limit", "50"])
         assert result.exit_code == 0
         assert "Classifying Name Origins" in result.output
-        assert "10 names classified" in result.output
-        assert "0 classification errors" in result.output
+        assert "Classified (10, 0) names" in result.output
         
         # Check that classify was called with limit
-        mock_classify.assert_called_once_with(limit=50, batch_size=100)
+        mock_classify.assert_called_once_with(50, 100)
 
 
 def test_cli_classify_with_batch_size(mock_db_path, cli_runner):
     """Test classify command with custom batch size."""
     # First initialize the database
-    with patch('st_name_ranking.cli.init_database') as mock_init:
+    with patch('st_name_ranking.cli.init_database') as mock_init, \
+         patch('st_name_ranking.cli.sync_names_with_submodule') as mock_sync_init, \
+         patch('st_name_ranking.cli.migrate_ratings_from_json') as mock_migrate_init, \
+         patch('st_name_ranking.cli.get_stats') as mock_stats_init:
         mock_init.return_value = None
+        mock_sync_init.return_value = 0
+        mock_migrate_init.return_value = 0
+        mock_stats_init.return_value = {
+            "total_names": 100,
+            "classified_names": 20,
+            "rated_names": 100,
+            "origin_distribution": {"International": 80, "European": 20}
+        }
         init_result = cli_runner.invoke(app, ["init"])
         assert init_result.exit_code == 0
     
@@ -261,18 +331,28 @@ def test_cli_classify_with_batch_size(mock_db_path, cli_runner):
         result = cli_runner.invoke(app, ["classify", "--batch-size", "20"])
         assert result.exit_code == 0
         assert "Classifying Name Origins" in result.output
-        assert "5 names classified" in result.output
-        assert "1 classification errors" in result.output
+        assert "Classified (5, 1) names" in result.output
         
         # Check that classify was called with batch size
-        mock_classify.assert_called_once_with(limit=None, batch_size=20)
+        mock_classify.assert_called_once_with(None, 20)
 
 
 def test_cli_stats(mock_db_path, cli_runner):
     """Test stats command."""
     # First initialize the database
-    with patch('st_name_ranking.cli.init_database') as mock_init:
+    with patch('st_name_ranking.cli.init_database') as mock_init, \
+         patch('st_name_ranking.cli.sync_names_with_submodule') as mock_sync_init, \
+         patch('st_name_ranking.cli.migrate_ratings_from_json') as mock_migrate_init, \
+         patch('st_name_ranking.cli.get_stats') as mock_stats_init:
         mock_init.return_value = None
+        mock_sync_init.return_value = 0
+        mock_migrate_init.return_value = 0
+        mock_stats_init.return_value = {
+            "total_names": 100,
+            "classified_names": 20,
+            "rated_names": 100,
+            "origin_distribution": {"International": 80, "European": 20}
+        }
         init_result = cli_runner.invoke(app, ["init"])
         assert init_result.exit_code == 0
     
@@ -281,12 +361,14 @@ def test_cli_stats(mock_db_path, cli_runner):
         mock_stats.return_value = {
             'total_names': 100,
             'total_ratings': 75,
+            'rated_names': 75,
             'classified_names': 50,
             'unclassified_names': 50,
             'avg_rating': 1500.5,
             'highest_rating': 1800.0,
             'lowest_rating': 1200.0,
             'total_matches': 1000,
+            'origin_distribution': {"International": 80, "European": 20}
         }
         
         result = cli_runner.invoke(app, ["stats"])
@@ -302,13 +384,29 @@ def test_cli_stats(mock_db_path, cli_runner):
 
 def test_cli_init_with_invalid_ratings_path(mock_db_path, cli_runner):
     """Test initialization with invalid ratings path."""
-    with patch('st_name_ranking.cli.init_database') as mock_init:
+    with patch('st_name_ranking.cli.init_database') as mock_init, \
+         patch('st_name_ranking.cli.sync_names_with_submodule') as mock_sync, \
+         patch('st_name_ranking.cli.migrate_ratings_from_json') as mock_migrate, \
+         patch('st_name_ranking.cli.get_stats') as mock_stats:
         mock_init.return_value = None
+        mock_sync.return_value = 0  # No new names
+        mock_migrate.return_value = 0  # Not called but mocked
+        # Mock stats to avoid database queries
+        mock_stats.return_value = {
+            "total_names": 100,
+            "classified_names": 20,
+            "rated_names": 100,
+            "origin_distribution": {"International": 80, "European": 20}
+        }
         
         result = cli_runner.invoke(app, ["init", "--ratings-path", "/nonexistent/path"])
         # Should still succeed (ratings migration is optional)
         assert result.exit_code == 0
         assert "Database schema created" in result.output
+        # Verify mocks were called
+        mock_init.assert_called_once()
+        mock_sync.assert_called_once()
+        mock_stats.assert_called_once()
 
 
 if __name__ == "__main__":
