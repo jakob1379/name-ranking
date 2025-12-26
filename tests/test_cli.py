@@ -109,6 +109,7 @@ def test_cli_init_basic(mock_db_path, cli_runner):
         mock_stats.return_value = {
             "total_names": 100,
             "classified_names": 20,
+            "unclassified_names": 80,
             "rated_names": 100,
             "origin_distribution": {"International": 80, "European": 20}
         }
@@ -142,6 +143,7 @@ def test_cli_init_with_classify(mock_db_path, cli_runner):
         mock_stats.return_value = {
             "total_names": 100,
             "classified_names": 20,
+            "unclassified_names": 80,
             "rated_names": 100,
             "origin_distribution": {"International": 80, "European": 20}
         }
@@ -175,6 +177,7 @@ def test_cli_init_with_custom_ratings(mock_db_path, temp_ratings_path, cli_runne
         mock_stats.return_value = {
             "total_names": 100,
             "classified_names": 20,
+            "unclassified_names": 80,
             "rated_names": 100,
             "origin_distribution": {"International": 80, "European": 20}
         }
@@ -209,6 +212,7 @@ def test_cli_sync(mock_db_path, mock_submodule_path, cli_runner):
         mock_stats_init.return_value = {
             "total_names": 100,
             "classified_names": 20,
+            "unclassified_names": 80,
             "rated_names": 100,
             "origin_distribution": {"International": 80, "European": 20}
         }
@@ -224,6 +228,7 @@ def test_cli_sync(mock_db_path, mock_submodule_path, cli_runner):
         mock_stats.return_value = {
             "total_names": 100,
             "classified_names": 20,
+            "unclassified_names": 80,
             "rated_names": 100,
             "origin_distribution": {"International": 80, "European": 20}
         }
@@ -251,6 +256,7 @@ def test_cli_migrate(mock_db_path, temp_ratings_path, cli_runner):
         mock_stats_init.return_value = {
             "total_names": 100,
             "classified_names": 20,
+            "unclassified_names": 80,
             "rated_names": 100,
             "origin_distribution": {"International": 80, "European": 20}
         }
@@ -284,6 +290,7 @@ def test_cli_classify(mock_db_path, cli_runner):
         mock_stats_init.return_value = {
             "total_names": 100,
             "classified_names": 20,
+            "unclassified_names": 80,
             "rated_names": 100,
             "origin_distribution": {"International": 80, "European": 20}
         }
@@ -318,6 +325,7 @@ def test_cli_classify_with_batch_size(mock_db_path, cli_runner):
         mock_stats_init.return_value = {
             "total_names": 100,
             "classified_names": 20,
+            "unclassified_names": 80,
             "rated_names": 100,
             "origin_distribution": {"International": 80, "European": 20}
         }
@@ -350,6 +358,7 @@ def test_cli_stats(mock_db_path, cli_runner):
         mock_stats_init.return_value = {
             "total_names": 100,
             "classified_names": 20,
+            "unclassified_names": 80,
             "rated_names": 100,
             "origin_distribution": {"International": 80, "European": 20}
         }
@@ -395,6 +404,7 @@ def test_cli_init_with_invalid_ratings_path(mock_db_path, cli_runner):
         mock_stats.return_value = {
             "total_names": 100,
             "classified_names": 20,
+            "unclassified_names": 80,
             "rated_names": 100,
             "origin_distribution": {"International": 80, "European": 20}
         }

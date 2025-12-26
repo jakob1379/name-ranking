@@ -55,11 +55,6 @@ A Streamlit-based web application for ranking Danish names using Elo rating syst
    cd sort-names
    ```
 
-2. **Set up the environment and install dependencies:**
-   ```bash
-   uv sync
-   ```
-
 ### Database Setup
 Initialize the database with names and optional origin classification:
 

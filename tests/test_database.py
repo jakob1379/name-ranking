@@ -413,6 +413,7 @@ class TestStatistics:
         
         assert stats["total_names"] == 0
         assert stats["classified_names"] == 0
+        assert stats["unclassified_names"] == 0
         assert stats["rated_names"] == 0
         assert "origin_distribution" in stats
         assert isinstance(stats["origin_distribution"], dict)
@@ -456,6 +457,7 @@ class TestStatistics:
         # Verify statistics
         assert stats["total_names"] == 3
         assert stats["classified_names"] == 1
+        assert stats["unclassified_names"] == 2
         assert stats["rated_names"] == 3
         assert "origin_distribution" in stats
         origin_dist = stats["origin_distribution"]
