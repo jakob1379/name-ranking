@@ -48,7 +48,7 @@ A Streamlit-based web application for ranking Danish names using Elo rating syst
 - Git (for submodule management)
 - [uv](https://github.com/astral-sh/uv) - fast Python package manager
 
-### Installation
+### Quickstart
 1. **Clone the repository with submodules:**
    ```bash
    git clone --recurse-submodules https://github.com/yourusername/sort-names.git
@@ -57,8 +57,6 @@ A Streamlit-based web application for ranking Danish names using Elo rating syst
 
 2. **Set up the environment and install dependencies:**
    ```bash
-   uv venv .venv
-   source .venv/bin/activate  # On Windows: .venv\Scripts\activate
    uv sync
    ```
 
