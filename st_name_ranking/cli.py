@@ -11,7 +11,7 @@ from typing import Optional
 
 import typer
 from rich.console import Console
-from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn
+from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn
 from rich.table import Table
 
 # Import database functions
@@ -293,6 +293,11 @@ def stats_command() -> None:
         "Classified names",
         f"{stats['classified_names']} "
         f"({stats['classified_names'] / stats['total_names'] * 100:.1f}%)",
+    )
+    summary_table.add_row(
+        "Unclassified names",
+        f"{stats['unclassified_names']} "
+        f"({stats['unclassified_names'] / stats['total_names'] * 100:.1f}%)",
     )
     summary_table.add_row(
         "Rated names",

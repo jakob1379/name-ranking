@@ -740,9 +740,12 @@ def get_stats() -> Dict[str, Any]:
         for row in cursor.fetchall():
             origin_dist[row[0]] = row[1]
 
+        unclassified_names = total_names - classified_names
+        
         return {
             "total_names": total_names,
             "classified_names": classified_names,
+            "unclassified_names": unclassified_names,
             "rated_names": rated_names,
             "origin_distribution": origin_dist,
         }
@@ -755,4 +758,5 @@ if __name__ == "__main__":
     stats = get_stats()
     print(f"Total names: {stats['total_names']}")
     print(f"Classified names: {stats['classified_names']}")
+    print(f"Unclassified names: {stats['unclassified_names']}")
     print(f"Rated names: {stats['rated_names']}")
