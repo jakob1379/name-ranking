@@ -98,42 +98,68 @@ def test_cli_help(cli_runner):
 def test_cli_init_basic(mock_db_path, cli_runner):
     """Test basic database initialization."""
     # Mock the database initialization to avoid submodule dependency
-    with patch('st_name_ranking.cli.init_database') as mock_init:
+    with patch('st_name_ranking.cli.init_database') as mock_init, \
+         patch('st_name_ranking.cli.sync_names_with_submodule') as mock_sync, \
+         patch('st_name_ranking.cli.migrate_ratings_from_json') as mock_migrate, \
+         patch('st_name_ranking.cli.get_stats') as mock_stats:
         mock_init.return_value = None
+        mock_sync.return_value = 0  # No new names
+        mock_migrate.return_value = 0  # No ratings migrated
+        # Mock stats to avoid database queries
+        mock_stats.return_value = {
+            "total_names": 100,
+            "classified_names": 20,
+            "rated_names": 100,
+            "origin_distribution": {"International": 80, "European": 20}
+        }
         
         result = cli_runner.invoke(app, ["init"])
         assert result.exit_code == 0
         assert "Initializing Name Ranking Database" in result.output
         assert "Database schema created" in result.output
+        assert "Synced 0 new names from submodule" in result.output
         
-        # Check that init_database was called
+        # Check that functions were called
         mock_init.assert_called_once()
+        mock_sync.assert_called_once()
+        mock_migrate.assert_called_once()
+        mock_stats.assert_called_once()
 
 
 def test_cli_init_with_classify(mock_db_path, cli_runner):
     """Test database initialization with classification."""
     with patch('st_name_ranking.cli.init_database') as mock_init, \
+         patch('st_name_ranking.cli.sync_names_with_submodule') as mock_sync, \
+         patch('st_name_ranking.cli.migrate_ratings_from_json') as mock_migrate, \
          patch('st_name_ranking.cli.classify_all_names') as mock_classify:
         
         mock_init.return_value = None
+        mock_sync.return_value = 0  # No new names
+        mock_migrate.return_value = 0  # No ratings migrated
         mock_classify.return_value = (3, 0)  # 3 names classified, 0 errors
         
         result = cli_runner.invoke(app, ["init", "--classify"])
         assert result.exit_code == 0
         assert "Database schema created" in result.output
+        assert "Synced 0 new names from submodule" in result.output
         assert "Running initial origin classification" in result.output
         assert "Classification complete" in result.output
         
-        # Check that classify was called
+        # Check that functions were called
+        mock_init.assert_called_once()
+        mock_sync.assert_called_once()
+        mock_migrate.assert_called_once()
         mock_classify.assert_called_once()
 
 
 def test_cli_init_with_custom_ratings(mock_db_path, temp_ratings_path, cli_runner):
     """Test database initialization with custom ratings path."""
     with patch('st_name_ranking.cli.init_database') as mock_init, \
+         patch('st_name_ranking.cli.sync_names_with_submodule') as mock_sync, \
          patch('st_name_ranking.cli.migrate_ratings_from_json') as mock_migrate:
         
         mock_init.return_value = None
+        mock_sync.return_value = 0  # No new names
         mock_migrate.return_value = 2  # 2 ratings migrated
         
         result = cli_runner.invoke(app, [
@@ -142,9 +168,12 @@ def test_cli_init_with_custom_ratings(mock_db_path, temp_ratings_path, cli_runne
         ])
         assert result.exit_code == 0
         assert "Database schema created" in result.output
-        assert "Migrating ratings" in result.output
+        assert "Synced 0 new names from submodule" in result.output
+        assert "Migrated 2 ratings from ratings.json" in result.output
         
-        # Check that migrate was called with correct path
+        # Check that functions were called
+        mock_init.assert_called_once()
+        mock_sync.assert_called_once()
         mock_migrate.assert_called_once_with(temp_ratings_path)
 
 
