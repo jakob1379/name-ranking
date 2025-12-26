@@ -11,6 +11,8 @@
       let
         pkgs = nixpkgs.legacyPackages.${system};
         python = pkgs.python314;
+        # Use playwright 1.56.1 from nixpkgs to match Python package version
+        playwright-pkgs = pkgs.playwright-driver.browsers;
       in
       {
         devShells.default = pkgs.mkShell {
@@ -24,19 +26,9 @@
             git
             pre-commit
 
-            # Browsers for Playwright
-            playwright-driver
-            (playwright-test.overrideAttrs {
-              withChromium = true;
-              withFirefox = true;
-              withWebkit = true;
-            })
-            # Access the overridable browsers attribute
-            (playwright.overrideAttrs {
-              withChromium = true;
-              withFirefox = true;
-              withWebkit = true;
-            })
+            # Browsers for Playwright - use the browsers package
+            playwright-driver.browsers
+            
             # system dependencies for playwright browsers
             stdenv.cc.cc.lib
             libxkbcommon
@@ -70,11 +62,16 @@
           ];
 
           shellHook = ''
-            # Install playwright browsers
-            export PLAYWRIGHT_BROWSERS_PATH=${pkgs.playwright-driver}/bin
+            # Set Playwright browser path to use Nix-provided browsers
+            export PLAYWRIGHT_BROWSERS_PATH=${playwright-pkgs}
+            # Skip browser download and host validation
+            export PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
+            export PLAYWRIGHT_SKIP_VALIDATE_HOST_REQUIREMENTS=true
+            
             echo "Development environment ready"
+            echo "Playwright browsers available at: ${playwright-pkgs}"
             echo "To install Python dependencies: uv sync"
-            echo "To install Playwright browsers: playwright install"
+            echo "Note: Playwright browsers already installed via Nix"
           '';
         };
       }
