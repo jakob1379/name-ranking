@@ -62,3 +62,8 @@ ratings.json
 .idea/
 *.swp
 *.swo
+
+# Test coverage
+.coverage
+htmlcov/
+.coverage.*
