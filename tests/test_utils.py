@@ -16,7 +16,7 @@ from st_name_ranking.elo import update_elo, update_elo_draw
 class TestPullSubmoduleUpdates:
     """Tests for pull_submodule_updates function."""
     
-    @patch('st_name_ranking.utils.subprocess.run')
+    @patch('subprocess.run')
     @patch('st_name_ranking.utils.st')
     @patch('st_name_ranking.utils.database')
     def test_successful_pull_without_classification(self, mock_db, mock_st, mock_run):
@@ -52,10 +52,10 @@ class TestPullSubmoduleUpdates:
         # Should return True
         assert result is True
     
-    @patch('st_name_ranking.utils.subprocess.run')
+    @patch('subprocess.run')
     @patch('st_name_ranking.utils.st')
     @patch('st_name_ranking.utils.database')
-    @patch('st_name_ranking.utils.time.sleep')
+    @patch('time.sleep')
     def test_successful_pull_with_classification(self, mock_sleep, mock_db, mock_st, mock_run):
         """Test successful submodule pull with origin classification."""
         mock_result = MagicMock()
@@ -65,21 +65,24 @@ class TestPullSubmoduleUpdates:
         mock_db.sync_names_with_submodule.return_value = 3
         
         # Mock classify_origins import and function
-        with patch('st_name_ranking.utils.classify_origins') as mock_classify:
-            mock_classify.classify_all_names.return_value = 2
-            
-            result = utils.pull_submodule_updates(classify_origins=True)
-            
-            # Verify classification was attempted
-            mock_db.init_database.assert_called()
-            mock_classify.classify_all_names.assert_called_once_with(limit=None)
-            
-            # Verify sleep was called for reload delay
-            mock_sleep.assert_called_once_with(2)
+        ethnidata_mock = MagicMock()
+        ethnidata_mock.EthniData = MagicMock()
+        with patch.dict('sys.modules', {'ethnidata': ethnidata_mock}):
+            with patch('st_name_ranking.classify_origins.classify_all_names') as mock_classify:
+                mock_classify.return_value = 2
+                
+                result = utils.pull_submodule_updates(classify_origins=True)
+                
+                # Verify classification was attempted
+                mock_db.init_database.assert_called()
+                mock_classify.assert_called_once_with(limit=None)
+                
+                # Verify sleep was called for reload delay
+                mock_sleep.assert_called_once_with(2)
             
             assert result is True
     
-    @patch('st_name_ranking.utils.subprocess.run')
+    @patch('subprocess.run')
     @patch('st_name_ranking.utils.st')
     def test_failed_pull(self, mock_st, mock_run):
         """Test when git pull fails."""
@@ -98,7 +101,7 @@ class TestPullSubmoduleUpdates:
         )
         assert result is False
     
-    @patch('st_name_ranking.utils.subprocess.run')
+    @patch('subprocess.run')
     @patch('st_name_ranking.utils.st')
     @patch('st_name_ranking.utils.database')
     def test_sync_error(self, mock_db, mock_st, mock_run):
@@ -118,7 +121,7 @@ class TestPullSubmoduleUpdates:
             duration="long",
         )
     
-    @patch('st_name_ranking.utils.subprocess.run')
+    @patch('subprocess.run')
     @patch('st_name_ranking.utils.st')
     @patch('st_name_ranking.utils.database')
     def test_classification_import_error(self, mock_db, mock_st, mock_run):
@@ -129,7 +132,7 @@ class TestPullSubmoduleUpdates:
         mock_db.sync_names_with_submodule.return_value = 0
         
         # Simulate ImportError when importing classify_origins
-        with patch('st_name_ranking.utils.classify_origins', side_effect=ImportError):
+        with patch('st_name_ranking.classify_origins', side_effect=ImportError, create=True):
             result = utils.pull_submodule_updates(classify_origins=True)
             
             # Should show warning toast
@@ -139,7 +142,7 @@ class TestPullSubmoduleUpdates:
             )
             assert result is True
     
-    @patch('st_name_ranking.utils.subprocess.run')
+    @patch('subprocess.run')
     @patch('st_name_ranking.utils.st')
     def test_general_exception(self, mock_st, mock_run):
         """Test handling of general exceptions."""
