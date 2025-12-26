@@ -5,7 +5,6 @@ Refactored version with modular imports.
 
 import json
 import logging
-import os
 from datetime import datetime
 
 import streamlit as st
