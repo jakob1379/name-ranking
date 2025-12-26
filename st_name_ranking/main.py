@@ -34,41 +34,34 @@ def main() -> None:
         # Auto-load from submodule on first run
         if "all_names_data" not in st.session_state:
             with st.spinner("Loading names from submodule..."):
-                # Load gender-categorized data (no sync for faster startup)
                 gender_data = load_names_by_gender(sync_with_submodule=False)
-                if gender_data and "All" in gender_data:
-                    # Store the full dataset
-                    st.session_state.all_names_data = gender_data
-                    st.session_state.all_names = gender_data["All"]
+            
+            if gender_data and "All" in gender_data:
+                # Store the full dataset
+                st.session_state.all_names_data = gender_data
+                st.session_state.all_names = gender_data["All"]
 
-                    # Initialize with all names for ratings
-                    setup_session_state(gender_data["All"])
-                    st.toast(
-                        f"Loaded {len(gender_data['All'])} total names",
-                        icon="✅",
-                    )
+                # Initialize with all names for ratings
+                setup_session_state(gender_data["All"])
+                st.toast(
+                    f"Loaded {len(gender_data['All'])} total names",
+                    icon="✅",
+                )
 
-                    # Show breakdown
-                    for gender in ["Male", "Female", "Unisex"]:
-                        if gender in gender_data:
-                            st.toast(
-                                f"{gender}: {len(gender_data[gender])} names",
-                                icon="ℹ️",
-                            )
-
-                    # Auto-save ratings after loading new dataset
-                    if save_ratings(st.session_state.ratings):
+                # Show breakdown
+                for gender in ["Male", "Female", "Unisex"]:
+                    if gender in gender_data:
                         st.toast(
-                            "Ratings saved automatically",
+                            f"{gender}: {len(gender_data[gender])} names",
                             icon="ℹ️",
                         )
-                else:
-                    st.toast(
-                        "Failed to load names from submodule",
-                        icon="❌",
-                        duration="long",
-                    )
-                    return
+            else:
+                st.toast(
+                    "Failed to load names from submodule",
+                    icon="❌",
+                    duration="long",
+                )
+                return
 
         # Submodule management
         st.subheader("Submodule Management")
