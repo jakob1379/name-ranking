@@ -57,8 +57,14 @@ def render_tournament(names: List[str]) -> None:
         "Right arrow (→) for right name, Up arrow (↑) for draw"
     )
 
-    # Pick candidates if not set or just reset
-    if not st.session_state.candidate_a or not st.session_state.candidate_b:
+    # Create set for efficient membership tests
+    names_set = set(names)
+
+    # Ensure candidates are in current filtered names, reset if not
+    if (st.session_state.candidate_a not in names_set or 
+        st.session_state.candidate_b not in names_set or
+        not st.session_state.candidate_a or 
+        not st.session_state.candidate_b):
         c_a, c_b = select_candidates(names)
         st.session_state.candidate_a = c_a
         st.session_state.candidate_b = c_b
@@ -215,8 +221,14 @@ def render_tournament(names: List[str]) -> None:
 
     st.divider()
     st.subheader("Current Top 10")
+
+    filtered_ratings = {
+        name: rating
+        for name, rating in st.session_state.ratings.items()
+        if name in names_set
+    }
     sorted_ratings = sorted(
-        st.session_state.ratings.items(), key=lambda x: x[1], reverse=True
+        filtered_ratings.items(), key=lambda x: x[1], reverse=True
     )
     df = pd.DataFrame(sorted_ratings[:10], columns=["Name", "Rating"])
     st.dataframe(
