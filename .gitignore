@@ -67,3 +67,6 @@ ratings.json
 .coverage
 htmlcov/
 .coverage.*
+
+# Environment management
+.direnv/
