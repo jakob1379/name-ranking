@@ -11,7 +11,7 @@ from typing import Optional
 
 import typer
 from rich.console import Console
-from rich.progress import Progress, SpinnerColumn, TextColumn
+from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn
 from rich.table import Table
 
 # Import database functions
@@ -190,7 +190,7 @@ def migrate(
         raise typer.Exit(code=1)
 
     with Progress(
-        SpinnerColumn(),
+        BarColumn(),
         TextColumn("[progress.description]{task.description}"),
         console=console,
     ) as progress:
