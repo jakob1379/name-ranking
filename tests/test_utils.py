@@ -64,23 +64,28 @@ class TestPullSubmoduleUpdates:
         mock_run.return_value = mock_result
         mock_db.sync_names_with_submodule.return_value = 3
         
-        # Mock classify_origins import and function
+        # Mock ethnidata module
         ethnidata_mock = MagicMock()
         ethnidata_mock.EthniData = MagicMock()
-        with patch.dict('sys.modules', {'ethnidata': ethnidata_mock}):
-            with patch('st_name_ranking.classify_origins.classify_all_names') as mock_classify:
-                mock_classify.return_value = 2
-                
-                result = utils.pull_submodule_updates(classify_origins=True)
-                
-                # Verify classification was attempted
-                mock_db.init_database.assert_called()
-                mock_classify.assert_called_once_with(limit=None)
-                
-                # Verify sleep was called for reload delay
-                mock_sleep.assert_called_once_with(2)
+        # Mock classify_origins module
+        classify_origins_mock = MagicMock()
+        classify_origins_mock.classify_all_names = MagicMock(return_value=2)
+        # Replace both modules in sys.modules
+        with patch.dict('sys.modules', {
+            'ethnidata': ethnidata_mock,
+            'st_name_ranking.classify_origins': classify_origins_mock,
+            'classify_origins': classify_origins_mock
+        }):
+            result = utils.pull_submodule_updates(classify_origins=True)
             
-            assert result is True
+            # Verify classification was attempted
+            mock_db.init_database.assert_called()
+            classify_origins_mock.classify_all_names.assert_called_once_with(limit=None)
+            
+            # Verify sleep was called for reload delay
+            mock_sleep.assert_called_once_with(2)
+        
+        assert result is True
     
     @patch('subprocess.run')
     @patch('st_name_ranking.utils.st')
@@ -125,7 +130,7 @@ class TestPullSubmoduleUpdates:
     @patch('st_name_ranking.utils.st')
     @patch('st_name_ranking.utils.database')
     def test_classification_import_error(self, mock_db, mock_st, mock_run):
-        """Test when name2nat is not installed."""
+        """Test when ethnidata is not installed."""
         mock_result = MagicMock()
         mock_result.returncode = 0
         mock_run.return_value = mock_result
@@ -137,7 +142,7 @@ class TestPullSubmoduleUpdates:
             
             # Should show warning toast
             mock_st.toast.assert_any_call(
-                "name2nat not installed. Run: pip install name2nat",
+                "ethnidata not installed. Run: pip install ethnidata",
                 icon="⚠️",
             )
             assert result is True

@@ -123,16 +123,16 @@ def pull_submodule_updates(classify_origins: bool = False) -> bool:
 
 def setup_session_state(names: List[str]) -> None:
     if "ratings" not in st.session_state:
-        st.session_state.ratings = initialize_or_load_ratings(names)
+        st.session_state["ratings"] = initialize_or_load_ratings(names)
 
     if "candidate_a" not in st.session_state:
-        st.session_state.candidate_a = ""
+        st.session_state["candidate_a"] = ""
 
     if "candidate_b" not in st.session_state:
-        st.session_state.candidate_b = ""
+        st.session_state["candidate_b"] = ""
 
     if "names" not in st.session_state:
-        st.session_state.names = names
+        st.session_state["names"] = names
 
 
 def select_candidates(names: List[str]) -> Tuple[str, str]:
