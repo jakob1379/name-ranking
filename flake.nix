@@ -28,7 +28,7 @@
 
             # Browsers for Playwright - use the browsers package
             playwright-driver.browsers
-            
+
             # system dependencies for playwright browsers
             stdenv.cc.cc.lib
             libxkbcommon
@@ -67,7 +67,7 @@
             # Skip browser download and host validation
             export PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
             export PLAYWRIGHT_SKIP_VALIDATE_HOST_REQUIREMENTS=true
-            
+
             echo "Development environment ready"
             echo "Playwright browsers available at: ${playwright-pkgs}"
             echo "To install Python dependencies: uv sync"
