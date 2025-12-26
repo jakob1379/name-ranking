@@ -184,11 +184,9 @@ def update_elo_and_save(
     """
     updated_ratings = update_elo(ratings, winner, loser, k)
 
-    # Save in background (non-blocking)
+    # Save in background (non-blocking) - only update winner and loser
     try:
-        # Use a simple thread or just save synchronously for now
-        # In production, we might use asyncio or a proper background task
-        save_ratings(updated_ratings)
+        save_ratings(updated_ratings, names_to_update=[winner, loser])
     except Exception as e:
         # Don't break the UI if save fails
         st.toast(
@@ -207,9 +205,9 @@ def update_elo_draw_and_save(
     """
     updated_ratings = update_elo_draw(ratings, player_a, player_b, k)
 
-    # Save in background (non-blocking)
+    # Save in background (non-blocking) - only update the two players
     try:
-        save_ratings(updated_ratings)
+        save_ratings(updated_ratings, names_to_update=[player_a, player_b])
     except Exception as e:
         st.toast(
             f"Failed to save ratings: {e}",

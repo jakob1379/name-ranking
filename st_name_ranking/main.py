@@ -218,12 +218,28 @@ def main() -> None:
     # Empty list means no origin filtering (show all regions)
     origins_to_filter = current_origins if current_origins else None
 
-    # Get filtered names using database
-    database.init_database()
-    filtered_names = database.get_names_by_filters(
-        gender=current_gender if current_gender != "All" else None,
-        origins=origins_to_filter,
+    # Get filtered names using database with caching
+    cache_key = (
+        f"filtered_names_{current_gender}_"
+        f"{tuple(sorted(current_origins)) if current_origins else 'all'}"
     )
+    
+    if (
+        "filtered_names_cache" in st.session_state and
+        "filtered_cache_key" in st.session_state and
+        st.session_state.filtered_cache_key == cache_key
+    ):
+        # Use cached filtered names
+        filtered_names = st.session_state.filtered_names_cache
+    else:
+        # Compute and cache
+        database.init_database()
+        filtered_names = database.get_names_by_filters(
+            gender=current_gender if current_gender != "All" else None,
+            origins=origins_to_filter,
+        )
+        st.session_state.filtered_names_cache = filtered_names
+        st.session_state.filtered_cache_key = cache_key
 
     if not filtered_names:
         if current_origins:

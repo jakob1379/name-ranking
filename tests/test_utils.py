@@ -300,7 +300,7 @@ class TestUpdateEloAndSave:
         result = utils.update_elo_and_save(ratings, "Anna", "Peter")
         
         mock_update_elo.assert_called_once_with(ratings, "Anna", "Peter", 32.0)
-        mock_save_ratings.assert_called_once_with(updated_ratings)
+        mock_save_ratings.assert_called_once_with(updated_ratings, names_to_update=["Anna", "Peter"])
         assert result == updated_ratings
         # No error toast
         assert not mock_st.toast.called
@@ -341,7 +341,7 @@ class TestUpdateEloDrawAndSave:
         result = utils.update_elo_draw_and_save(ratings, "Anna", "Peter")
         
         mock_update_elo_draw.assert_called_once_with(ratings, "Anna", "Peter", 32.0)
-        mock_save_ratings.assert_called_once_with(updated_ratings)
+        mock_save_ratings.assert_called_once_with(updated_ratings, names_to_update=["Anna", "Peter"])
         assert result == updated_ratings
     
     @patch('st_name_ranking.utils.save_ratings')

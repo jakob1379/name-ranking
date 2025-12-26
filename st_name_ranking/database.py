@@ -620,6 +620,47 @@ def update_rating_with_match(name: str, rating: float):
     update_rating(name, rating)
 
 
+def update_ratings_batch(ratings_dict: Dict[str, float]) -> None:
+    """
+    Update multiple ratings efficiently in a single transaction.
+    
+    Args:
+        ratings_dict: Dictionary mapping name -> new rating
+    """
+    if not ratings_dict:
+        return
+    
+    with get_connection() as conn:
+        for name, rating in ratings_dict.items():
+            # Get name_id
+            name_id = conn.execute(
+                "SELECT id FROM names WHERE name = ?", (name,)
+            ).fetchone()
+            if not name_id:
+                logger.warning(f"Name not found in database: {name}")
+                continue
+            
+            name_id = name_id[0]
+            
+            # Update or insert rating
+            conn.execute(
+                """
+                INSERT OR REPLACE INTO ratings
+                (name_id, rating, matches, last_updated)
+                VALUES (
+                    ?,
+                    ?,
+                    COALESCE((
+                        SELECT matches + 1 FROM ratings
+                        WHERE name_id = ?
+                    ), 1),
+                    CURRENT_TIMESTAMP
+                )
+            """,
+                (name_id, rating, name_id),
+            )
+
+
 def save_user_setting(key: str, value: str):
     """Save a user setting."""
     with get_connection() as conn:
