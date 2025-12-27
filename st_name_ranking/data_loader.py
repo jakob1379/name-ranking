@@ -70,7 +70,7 @@ def is_valid_name(name: str) -> bool:
     return True
 
 
-def load_ratings(file_path: str = "ratings.json") -> Optional[Dict[str, float]]:
+def load_ratings() -> Optional[Dict[str, float]]:
     """
     Load saved ratings from database.
     Returns ratings dict or None if database not initialized.
@@ -87,40 +87,38 @@ def load_ratings(file_path: str = "ratings.json") -> Optional[Dict[str, float]]:
 
 
 def save_ratings(
-    ratings: Dict[str, float], 
-    file_path: str = "ratings.json",
-    names_to_update: Optional[List[str]] = None
+    ratings: Dict[str, float],
+    names_to_update: Optional[List[str]] = None,
 ) -> bool:
     """
     Save ratings to database.
-    
+
     Args:
         ratings: Dictionary mapping name -> rating
-        file_path: Kept for backward compatibility (not used)
         names_to_update: Optional list of names to update. If None, updates all.
-    
+
     Returns:
         True if successful.
     """
     try:
         database.init_database()
-        
+
         # Filter ratings to update only specified names
         if names_to_update is not None:
             ratings_to_save = {
-                name: rating 
-                for name, rating in ratings.items() 
+                name: rating
+                for name, rating in ratings.items()
                 if name in names_to_update
             }
         else:
             ratings_to_save = ratings
-        
+
         if not ratings_to_save:
             return True
-        
+
         # Use batch update for efficiency
         database.update_ratings_batch(ratings_to_save)
-        
+
         st.toast(
             f"Updated {len(ratings_to_save)} ratings in database",
             icon="ℹ️",

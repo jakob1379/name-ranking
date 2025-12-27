@@ -2,16 +2,16 @@
 """
 Typer CLI for Name Ranking Database Management.
 
-Provides commands for database initialization, synchronization,
-rating migration, and origin classification.
+Provides commands for database initialization, data processing,
+and statistics.
 """
 
-from pathlib import Path
+
 from typing import Optional
 
 import typer
 from rich.console import Console
-from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn
+from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.table import Table
 
 # Import database functions
@@ -19,12 +19,11 @@ from st_name_ranking.classify_origins import classify_all_names
 from st_name_ranking.database import (
     get_stats,
     init_database,
-    migrate_ratings_from_json,
     sync_names_with_submodule,
 )
 
 app = typer.Typer(
-    help="Name Ranking Database Management CLI",
+    help="Name Ranking Database Management CLI - Uses SQLite database",
     add_completion=False,
 )
 console = Console()
@@ -67,12 +66,6 @@ def init(
         "-c",
         help="Run initial origin classification after initialization",
     ),
-    ratings_path: Path = typer.Option(
-        Path("ratings.json"),
-        "--ratings-path",
-        "-r",
-        help="Path to ratings.json file",
-    ),
 ) -> None:
     """
     Initialize the name ranking database.
@@ -80,8 +73,7 @@ def init(
     This command:
     1. Creates the database schema (if not exists)
     2. Syncs names from godkendtefornavne submodule
-    3. Migrates ratings from ratings.json (if exists)
-    4. Optionally runs initial origin classification
+    3. Optionally runs initial origin classification
     """
     console.print("[bold blue]Initializing Name Ranking Database[/bold blue]")
     console.print()
@@ -112,97 +104,23 @@ def init(
             print_error(f"Failed to sync names: {e}")
             raise typer.Exit(code=1)
 
-    # 3. Migrate ratings from JSON
-    if ratings_path.exists():
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            console=console,
-        ) as progress:
-            task = progress.add_task(
-                "Migrating ratings from JSON...", total=None
-            )
-            migrated = migrate_ratings_from_json(ratings_path)
-            progress.update(task, completed=True)
-            print_success(f"Migrated {migrated} ratings from {ratings_path}")
-    else:
-        print_warning(f"Ratings file not found: {ratings_path}")
 
-    # 4. Optional origin classification
+
+    # 3. Optional origin classification
     if classify:
-        classify_command(limit=None, batch_size=100)
+        process_command(limit=None, batch_size=100)
 
     # Show final statistics
     stats_command()
 
 
-@app.command()
-def sync() -> None:
-    """
-    Sync names from the godkendtefornavne submodule.
 
-    This updates the database with any new names from the submodule,
-    skipping names that already exist in the database.
-    """
-    console.print("[bold blue]Syncing Names from Submodule[/bold blue]")
-    console.print()
 
-    with Progress(
-        SpinnerColumn(),
-        TextColumn("[progress.description]{task.description}"),
-        console=console,
-    ) as progress:
-        task = progress.add_task("Syncing names...", total=None)
-        try:
-            inserted = sync_names_with_submodule()
-            progress.update(task, completed=True)
-            print_success(f"Synced {inserted} new names from submodule")
-        except Exception as e:
-            print_error(f"Failed to sync names: {e}")
-            raise typer.Exit(code=1)
 
-    # Show updated statistics
-    stats = get_stats()
-    console.print()
-    console.print(f"Total names in database: {stats['total_names']}")
 
 
 @app.command()
-def migrate(
-    ratings_path: Path = typer.Option(
-        Path("ratings.json"),
-        "--ratings-path",
-        "-r",
-        help="Path to ratings.json file",
-    ),
-) -> None:
-    """
-    Migrate ratings from JSON file to database.
-
-    This imports ratings from the legacy ratings.json file
-    into the SQLite database.
-    """
-    console.print("[bold blue]Migrating Ratings from JSON[/bold blue]")
-    console.print()
-
-    if not ratings_path.exists():
-        print_error(f"Ratings file not found: {ratings_path}")
-        raise typer.Exit(code=1)
-
-    with Progress(
-        BarColumn(),
-        TextColumn("[progress.description]{task.description}"),
-        console=console,
-    ) as progress:
-        task = progress.add_task("Migrating ratings...", total=None)
-        migrated = migrate_ratings_from_json(ratings_path)
-        progress.update(task, completed=True)
-
-    print_success(f"Migrated {migrated} ratings from {ratings_path}")
-
-
-@app.command()
-def classify(
+def process(
     limit: Optional[int] = typer.Option(
         None,
         "--limit",
@@ -217,19 +135,19 @@ def classify(
     ),
 ) -> None:
     """
-    Classify name origins using ethnidata.
+    Process data enrichment tasks (origin classification).
 
     This command processes unclassified names in batches,
     predicting their nationality and mapping to geographic regions.
     """
-    classify_command(limit, batch_size)
+    process_command(limit, batch_size)
 
 
-def classify_command(
+def process_command(
     limit: Optional[int] = None, batch_size: int = 100
 ) -> None:
     """Internal classification function with rich output."""
-    console.print("[bold blue]Classifying Name Origins[/bold blue]")
+    console.print("[bold blue]Processing Data Enrichment[/bold blue]")
     console.print()
 
     try:
@@ -238,7 +156,7 @@ def classify_command(
             TextColumn("[progress.description]{task.description}"),
             console=console,
         ) as progress:
-            task = progress.add_task("Classifying name origins...", total=None)
+            task = progress.add_task("Processing data enrichment...", total=None)
             classified = classify_all_names(limit, batch_size)
             progress.update(task, completed=True)
 

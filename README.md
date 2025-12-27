@@ -1,10 +1,12 @@
 # Name Ranking Application
 
-A Streamlit-based web application for ranking Danish names using Elo rating system, with similarity search and origin classification.
+A Streamlit-based web application for ranking Danish names using Elo rating
+system, with similarity search and origin classification.
 
 ## ✨ Features
 
 ### 🏆 Elo Rating Tournament
+
 - Compare two random names side-by-side
 - Vote for preferred name or mark as draw
 - Real-time Elo rating updates
@@ -12,11 +14,13 @@ A Streamlit-based web application for ranking Danish names using Elo rating syst
 - Keyboard shortcuts (← → ↑ arrows)
 
 ### 🔍 Similarity Search
+
 - **String similarity** (Levenshtein distance) for name matching
 - **Vector similarity** (LLM embeddings) for semantic matching
 - Find names similar to a reference name
 
 ### 🌍 Origin Classification
+
 - **Optional classification** - runs only when explicitly requested
 - **Incremental processing** - classify 100 names at a time or all at once
 - Automatic nationality prediction using `ethnidata`
@@ -26,6 +30,7 @@ A Streamlit-based web application for ranking Danish names using Elo rating syst
 - **Progress tracking** - shows classification percentage in UI
 
 ### ⚙️ Filtering & Management
+
 - Gender filtering (Male, Female, Unisex, All)
 - Origin region filtering (Nordic, European, International, etc.)
 - Database-backed name storage
@@ -33,6 +38,7 @@ A Streamlit-based web application for ranking Danish names using Elo rating syst
 - Ratings persistence with SQLite
 
 ### 📊 Performance Optimizations
+
 - **Fast startup** - no automatic sync on app launch
 - **Separated operations** - manual control over sync and classification
 - **Batch processing** for origin classification (up to 100 names at a time)
@@ -44,11 +50,13 @@ A Streamlit-based web application for ranking Danish names using Elo rating syst
 ## 🚀 Quickstart
 
 ### Prerequisites
+
 - Python 3.13 or higher
 - Git (for submodule management)
 - [uv](https://github.com/astral-sh/uv) - fast Python package manager
 
 ### Quickstart
+
 1. **Clone the repository with submodules:**
    ```bash
    git clone --recurse-submodules https://github.com/yourusername/sort-names.git
@@ -56,6 +64,7 @@ A Streamlit-based web application for ranking Danish names using Elo rating syst
    ```
 
 ### Database Setup
+
 Initialize the database with names and optional origin classification:
 
 ```bash
@@ -66,13 +75,13 @@ uv run name-db init
 uv run name-db init --classify
 
 # Or use individual commands for more control:
-uv run name-db sync      # Sync names from submodule
-uv run name-db migrate   # Migrate ratings from ratings.json
-uv run name-db classify  # Classify name origins
+uv run name-db init      # Initialize database and sync names
+uv run name-db process   # Process data enrichment (origin classification)
 uv run name-db stats     # Show database statistics
 ```
 
 ### Running the Application
+
 Start the Streamlit web application:
 
 ```bash
@@ -82,6 +91,7 @@ uv run streamlit run st_name_ranking/main.py
 The application will be available at `http://localhost:8501`.
 
 ### Basic Usage
+
 1. **Tournament Mode**: Compare two names, vote for your preference
 2. **Similarity Search**: Find names similar to a reference name
 3. **Sidebar Controls**:
@@ -92,6 +102,7 @@ The application will be available at `http://localhost:8501`.
 ## 🛠️ Development
 
 ### Project Structure
+
 ```
 st_name_ranking/
 ├── main.py              # Streamlit application entry point
@@ -108,6 +119,7 @@ st_name_ranking/
 ```
 
 ### Testing
+
 Run the test suite:
 
 ```bash
@@ -120,6 +132,7 @@ uv run pytest tests/test_cli.py
 ```
 
 ### Code Quality
+
 - Uses `ruff` for linting and formatting
 - Follows Python type hints
 - Consistent code formatting with `ruff format`
@@ -133,6 +146,7 @@ uv run ruff check .
 ```
 
 ### Database Schema
+
 The application uses SQLite (`names.db`) with the following schema:
 
 ```sql
@@ -171,14 +185,18 @@ CREATE TABLE source_versions (
 ```
 
 ### Origin Classification
-The application uses `ethnidata` for name nationality prediction. Classification can be controlled via:
+
+The application uses `ethnidata` for name nationality prediction. Classification
+can be controlled via:
 
 **Web Interface:**
+
 - Auto-classify after update checkbox
 - Classify 100 Names (incremental)
 - Classify All (full batch)
 
 **Command Line:**
+
 ```bash
 uv run name-db classify --limit 100    # Test with 100 names
 uv run name-db classify --batch-size 50 # Custom batch size
@@ -188,6 +206,7 @@ uv run name-db classify                 # Classify all names
 ## 📖 Detailed Usage
 
 ### CLI Reference
+
 The `name-db` CLI provides comprehensive database management:
 
 ```bash
@@ -211,21 +230,26 @@ uv run name-db stats
 ```
 
 ### Web Application Workflow
+
 1. **Fast Startup**: Application loads instantly without automatic sync
 2. **Manual Control**: Separate buttons for reload, sync, and git updates
 3. **Incremental Processing**: Classify names in batches of 100
 4. **Real-time Progress**: See classification percentage as it processes
 
 ### Performance Optimizations
+
 - **Batch processing**: Reduces `ethnidata` API calls by ~100x
 - **Efficient sync**: Commit hash tracking avoids redundant processing
 - **Bulk inserts**: `executemany` for fast database operations
 - **Selective logging**: Suppresses debug noise for cleaner output
 
 ## 📝 License
+
 [Add your license here]
 
 ## 🙏 Acknowledgments
-- [ethnidata](https://github.com/teyfikoz/ethnidata) for name nationality prediction
+
+- [ethnidata](https://github.com/teyfikoz/ethnidata) for name nationality
+  prediction
 - Streamlit for the web application framework
 - The Danish government for the name data

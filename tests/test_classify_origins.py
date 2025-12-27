@@ -1,11 +1,12 @@
 """
 Tests for st_name_ranking.classify_origins module.
 """
-from unittest.mock import patch, MagicMock, call
+
+from unittest.mock import MagicMock, patch
 
 import pytest
 
-from st_name_ranking import classify_origins, database
+from st_name_ranking import classify_origins
 
 
 class TestGetClassifier:
@@ -20,12 +21,12 @@ class TestGetClassifier:
         """Test successful classifier loading."""
         # Mock ethnidata import
         mock_n2n = MagicMock()
-        with patch('ethnidata.EthniData', return_value=mock_n2n):
+        with patch("ethnidata.EthniData", return_value=mock_n2n):
             classifier = classify_origins.get_classifier()
             assert classifier == mock_n2n
 
             # Second call should return cached classifier
-            with patch('ethnidata.EthniData') as mock_ctor:
+            with patch("ethnidata.EthniData") as mock_ctor:
                 classifier2 = classify_origins.get_classifier()
                 assert classifier2 == mock_n2n
 
@@ -33,7 +34,7 @@ class TestGetClassifier:
 
     def test_get_classifier_import_error(self):
         """Test when ethnidata is not installed."""
-        with patch('ethnidata.EthniData', side_effect=ImportError):
+        with patch("ethnidata.EthniData", side_effect=ImportError):
             with pytest.raises(ImportError):
                 classify_origins.get_classifier()
 
@@ -45,15 +46,21 @@ class TestGetRegionForNationality:
         """Test when nationality mapping exists in database."""
         # Use a country not in default mapping
         from st_name_ranking.database import get_connection
+
         with get_connection() as conn:
             # First delete if exists (to avoid primary key conflict)
-            conn.execute("DELETE FROM region_mapping WHERE nationality = ?", ("TestCountry",))
+            conn.execute(
+                "DELETE FROM region_mapping WHERE nationality = ?",
+                ("TestCountry",),
+            )
             conn.execute(
                 "INSERT INTO region_mapping (nationality, region) VALUES (?, ?)",
-                ("TestCountry", "TestRegion")
+                ("TestCountry", "TestRegion"),
             )
 
-        region, confidence = classify_origins.get_region_for_nationality("TestCountry")
+        region, confidence = classify_origins.get_region_for_nationality(
+            "TestCountry"
+        )
         assert region == "TestRegion"
         assert confidence == 1.0  # Default confidence adjustment
 
@@ -66,15 +73,21 @@ class TestGetRegionForNationality:
     def test_region_with_confidence(self, initialized_db):
         """Test region mapping with confidence adjustment."""
         from st_name_ranking.database import get_connection
+
         with get_connection() as conn:
             # Use different country to avoid default mapping conflict
-            conn.execute("DELETE FROM region_mapping WHERE nationality = ?", ("TestCountry2",))
+            conn.execute(
+                "DELETE FROM region_mapping WHERE nationality = ?",
+                ("TestCountry2",),
+            )
             conn.execute(
                 "INSERT INTO region_mapping (nationality, region) VALUES (?, ?)",
-                ("TestCountry2", "TestRegion2")
+                ("TestCountry2", "TestRegion2"),
             )
 
-        region, confidence = classify_origins.get_region_for_nationality("TestCountry2")
+        region, confidence = classify_origins.get_region_for_nationality(
+            "TestCountry2"
+        )
         assert region == "TestRegion2"
         assert confidence == 1.0  # Exact match
 
@@ -86,34 +99,42 @@ class TestClassifyName:
         """Test successful name classification."""
         # Setup region mapping
         from st_name_ranking.database import get_connection
+
         with get_connection() as conn:
             # Use unique country to avoid default mapping conflict
-            conn.execute("DELETE FROM region_mapping WHERE nationality = ?", ("TestCountry3",))
+            conn.execute(
+                "DELETE FROM region_mapping WHERE nationality = ?",
+                ("TestCountry3",),
+            )
             conn.execute(
                 "INSERT INTO region_mapping (nationality, region) VALUES (?, ?)",
-                ("TestCountry3", "TestRegion3")
+                ("TestCountry3", "TestRegion3"),
             )
 
         # Mock classifier returns TestCountry3 with high confidence
         mock_classifier.predict_nationality.return_value = {
-            'country_name': 'TestCountry3',
-            'confidence': 0.85,
-            'country': 'TC',
-            'region': 'Test'
+            "country_name": "TestCountry3",
+            "confidence": 0.85,
+            "country": "TC",
+            "region": "Test",
         }
 
         result = classify_origins.classify_name("Anna")
 
         assert result == ("TestRegion3", 0.85)
-        mock_classifier.predict_nationality.assert_called_once_with("Anna", name_type="first")
+        mock_classifier.predict_nationality.assert_called_once_with(
+            "Anna", name_type="first"
+        )
 
-    def test_classify_name_unknown_region(self, mock_classifier, initialized_db):
+    def test_classify_name_unknown_region(
+        self, mock_classifier, initialized_db
+    ):
         """Test classification with unknown nationality."""
         mock_classifier.predict_nationality.return_value = {
-            'country_name': 'XX',
-            'confidence': 0.75,
-            'country': 'XX',
-            'region': 'Unknown'
+            "country_name": "XX",
+            "confidence": 0.75,
+            "country": "XX",
+            "region": "Unknown",
         }
 
         result = classify_origins.classify_name("UnknownName")
@@ -122,28 +143,34 @@ class TestClassifyName:
 
     def test_classify_name_import_error(self):
         """Test when ethnidata is not installed."""
-        with patch('st_name_ranking.classify_origins.get_classifier', side_effect=ImportError):
+        with patch(
+            "st_name_ranking.classify_origins.get_classifier",
+            side_effect=ImportError,
+        ):
             with pytest.raises(ImportError):
                 classify_origins.classify_name("Anna")
 
     def test_classify_name_exception(self, mock_classifier):
         """Test handling of classifier exceptions."""
-        mock_classifier.predict_nationality.side_effect = Exception("Classifier error")
+        mock_classifier.predict_nationality.side_effect = Exception(
+            "Classifier error"
+        )
 
         result = classify_origins.classify_name("Anna")
         assert result is None
 
 
-
-
-
 class TestClassifyAllNames:
     """Tests for classify_all_names function."""
 
-    @patch('st_name_ranking.classify_origins.classify_batch')
-    @patch('st_name_ranking.classify_origins.get_unclassified_names')
-    @patch('st_name_ranking.classify_origins.update_name_origin')
-    @patch('st_name_ranking.classify_origins.st', new_callable=MagicMock, create=True)
+    @patch("st_name_ranking.classify_origins.classify_batch")
+    @patch("st_name_ranking.classify_origins.get_unclassified_names")
+    @patch("st_name_ranking.classify_origins.update_name_origin")
+    @patch(
+        "st_name_ranking.classify_origins.st",
+        new_callable=MagicMock,
+        create=True,
+    )
     @pytest.mark.skip(reason="UI integration optional")
     def test_classify_all_names_success(
         self, mock_st, mock_update, mock_get_unclassified, mock_classify_batch
@@ -152,7 +179,7 @@ class TestClassifyAllNames:
         mock_get_unclassified.return_value = [
             {"id": 1, "name": "Anna"},
             {"id": 2, "name": "Peter"},
-            {"id": 3, "name": "Maria"}
+            {"id": 3, "name": "Maria"},
         ]
         mock_classify_batch.return_value = 2  # 2 names classified (limit=2)
 
@@ -181,8 +208,12 @@ class TestClassifyAllNames:
 
         assert result == 2  # mock returns 2
 
-    @patch('st_name_ranking.classify_origins.get_unclassified_names')
-    @patch('st_name_ranking.classify_origins.st', new_callable=MagicMock, create=True)
+    @patch("st_name_ranking.classify_origins.get_unclassified_names")
+    @patch(
+        "st_name_ranking.classify_origins.st",
+        new_callable=MagicMock,
+        create=True,
+    )
     @pytest.mark.skip(reason="UI integration optional")
     def test_classify_all_names_no_unclassified(
         self, mock_st, mock_get_unclassified
@@ -198,8 +229,12 @@ class TestClassifyAllNames:
             icon="ℹ️",
         )
 
-    @patch('st_name_ranking.classify_origins.get_unclassified_names')
-    @patch('st_name_ranking.classify_origins.st', new_callable=MagicMock, create=True)
+    @patch("st_name_ranking.classify_origins.get_unclassified_names")
+    @patch(
+        "st_name_ranking.classify_origins.st",
+        new_callable=MagicMock,
+        create=True,
+    )
     @pytest.mark.skip(reason="UI integration optional")
     def test_classify_all_names_import_error(
         self, mock_st, mock_get_unclassified
@@ -207,10 +242,13 @@ class TestClassifyAllNames:
         """Test when ethnidata is not installed."""
         mock_get_unclassified.return_value = [
             {"id": 1, "name": "Anna"},
-            {"id": 2, "name": "Peter"}
+            {"id": 2, "name": "Peter"},
         ]
 
-        with patch('st_name_ranking.classify_origins.get_classifier', side_effect=ImportError):
+        with patch(
+            "st_name_ranking.classify_origins.get_classifier",
+            side_effect=ImportError,
+        ):
             result = classify_origins.classify_all_names()
 
             assert result == 0

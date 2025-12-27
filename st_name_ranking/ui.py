@@ -61,10 +61,12 @@ def render_tournament(names: List[str]) -> None:
     names_set = set(names)
 
     # Ensure candidates are in current filtered names, reset if not
-    if (st.session_state.candidate_a not in names_set or 
-        st.session_state.candidate_b not in names_set or
-        not st.session_state.candidate_a or 
-        not st.session_state.candidate_b):
+    if (
+        st.session_state.candidate_a not in names_set
+        or st.session_state.candidate_b not in names_set
+        or not st.session_state.candidate_a
+        or not st.session_state.candidate_b
+    ):
         c_a, c_b = select_candidates(names)
         st.session_state.candidate_a = c_a
         st.session_state.candidate_b = c_b

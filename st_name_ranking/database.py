@@ -9,7 +9,7 @@ Handles:
 - Submodule version tracking
 """
 
-import json
+
 import logging
 import sqlite3
 from contextlib import contextmanager
@@ -623,13 +623,13 @@ def update_rating_with_match(name: str, rating: float):
 def update_ratings_batch(ratings_dict: Dict[str, float]) -> None:
     """
     Update multiple ratings efficiently in a single transaction.
-    
+
     Args:
         ratings_dict: Dictionary mapping name -> new rating
     """
     if not ratings_dict:
         return
-    
+
     with get_connection() as conn:
         for name, rating in ratings_dict.items():
             # Get name_id
@@ -639,9 +639,9 @@ def update_ratings_batch(ratings_dict: Dict[str, float]) -> None:
             if not name_id:
                 logger.warning(f"Name not found in database: {name}")
                 continue
-            
+
             name_id = name_id[0]
-            
+
             # Update or insert rating
             conn.execute(
                 """
@@ -680,40 +680,7 @@ def load_user_setting(key: str, default: str = "") -> str:
         return row[0] if row else default
 
 
-def migrate_ratings_from_json(json_path: Path = Path("ratings.json")) -> int:
-    """
-    Migrate ratings from JSON file to database.
-    Returns number of ratings migrated.
-    """
-    if not json_path.exists():
-        return 0
 
-    with open(json_path, "r", encoding="utf-8") as f:
-        data = json.load(f)
-
-    ratings = data.get("ratings", data) if isinstance(data, dict) else data
-
-    migrated = 0
-    with get_connection() as conn:
-        for name, rating in ratings.items():
-            # Find name_id
-            cursor = conn.execute(
-                "SELECT id FROM names WHERE name = ?", (name,)
-            )
-            row = cursor.fetchone()
-            if row:
-                name_id = row[0]
-                # Insert rating
-                conn.execute(
-                    """
-                    INSERT OR REPLACE INTO ratings
-                    (name_id, rating) VALUES (?, ?)
-                """,
-                    (name_id, rating),
-                )
-                migrated += 1
-
-    return migrated
 
 
 def get_stats() -> Dict[str, Any]:
@@ -741,7 +708,7 @@ def get_stats() -> Dict[str, Any]:
             origin_dist[row[0]] = row[1]
 
         unclassified_names = total_names - classified_names
-        
+
         return {
             "total_names": total_names,
             "classified_names": classified_names,

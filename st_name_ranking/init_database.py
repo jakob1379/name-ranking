@@ -5,11 +5,10 @@ Initialize the SQLite database for name ranking application.
 This script:
 1. Creates the database schema (if not exists)
 2. Syncs names from godkendtefornavne submodule
-3. Migrates ratings from ratings.json (if exists)
-4. Optionally runs initial origin classification
+3. Optionally runs initial origin classification
 
 Usage:
-    python init_database.py [--classify] [--ratings-path PATH]
+    python init_database.py [--classify]
 """
 
 import argparse
@@ -19,7 +18,6 @@ from pathlib import Path
 from st_name_ranking.database import (
     get_stats,
     init_database,
-    migrate_ratings_from_json,
     sync_names_with_submodule,
 )
 
@@ -33,12 +31,7 @@ def main():
         action="store_true",
         help="Run initial origin classification (requires ethnidata)",
     )
-    parser.add_argument(
-        "--ratings-path",
-        type=Path,
-        default=Path("../sort-names/ratings.json"),
-        help="Path to ratings.json file (default: ../sort-names/ratings.json)",
-    )
+
     args = parser.parse_args()
 
     print("Initializing database...")
@@ -53,9 +46,7 @@ def main():
         print(f"✗ Failed to sync names: {e}")
         sys.exit(1)
 
-    print("Migrating ratings from JSON...")
-    migrated = migrate_ratings_from_json(args.ratings_path)
-    print(f"✓ Migrated {migrated} ratings from {args.ratings_path}")
+
 
     if args.classify:
         print("Running initial origin classification...")

@@ -70,3 +70,4 @@ htmlcov/
 
 # Environment management
 .direnv/
+.droid

@@ -34,7 +34,7 @@ def main() -> None:
         if "all_names_data" not in st.session_state:
             with st.spinner("Loading names from submodule..."):
                 gender_data = load_names_by_gender(sync_with_submodule=False)
-            
+
             if gender_data and "All" in gender_data:
                 # Store the full dataset
                 st.session_state.all_names_data = gender_data
@@ -61,7 +61,6 @@ def main() -> None:
                     duration="long",
                 )
                 return
-
 
         # Gender Filtering
         st.subheader("Gender Filter")
@@ -222,11 +221,11 @@ def main() -> None:
         f"filtered_names_{current_gender}_"
         f"{tuple(sorted(current_origins)) if current_origins else 'all'}"
     )
-    
+
     if (
-        "filtered_names_cache" in st.session_state and
-        "filtered_cache_key" in st.session_state and
-        st.session_state.filtered_cache_key == cache_key
+        "filtered_names_cache" in st.session_state
+        and "filtered_cache_key" in st.session_state
+        and st.session_state.filtered_cache_key == cache_key
     ):
         # Use cached filtered names
         filtered_names = st.session_state.filtered_names_cache

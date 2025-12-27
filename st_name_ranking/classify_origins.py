@@ -83,9 +83,9 @@ def classify_name(name: str) -> Optional[Tuple[str, float]]:
             logger.debug(f"No results for name: {name}")
             return None
 
-        country_name = result.get('country_name')
-        confidence = result.get('confidence', 0.0)
-        
+        country_name = result.get("country_name")
+        confidence = result.get("confidence", 0.0)
+
         if not country_name or confidence <= 0:
             logger.debug(f"No predictions for name: {name}")
             return None
@@ -123,23 +123,23 @@ def classify_batch(names_batch: list, batch_size: int = 100) -> int:
         return 0
 
     logger.debug(f"Classifying batch of {len(names_batch)} names")
-    
+
     # Process each name individually (ethnidata doesn't support batch)
     classified_count = 0
-    
+
     for i, name_data in enumerate(names_batch):
         name_id = name_data["id"]
         name = name_data["name"]
-        
+
         result = classify_name(name)
         if result:
             region, confidence = result
             update_name_origin(name_id, region, confidence)
             classified_count += 1
-        
+
         if (i + 1) % 10 == 0:
             logger.debug(f"  Processed {i + 1}/{len(names_batch)} names")
-    
+
     logger.info(f"Batch classified {classified_count}/{len(names_batch)} names")
     return classified_count
 
