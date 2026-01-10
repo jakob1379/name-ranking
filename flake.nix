@@ -18,7 +18,22 @@
         python = pkgs.python314;
         # Use playwright 1.56.1 from nixpkgs to match Python package version
         playwright-pkgs = pkgs.playwright-driver.browsers;
-
+        claude-app = pkgs.writeShellApplication {
+          name = "claude";
+          runtimeInputs = with pkgs; [ claude-code socat bubblewrap ];
+          text = ''
+          export ANTHROPIC_BASE_URL=https://api.deepseek.com/anthropic
+          export ANTHROPIC_MODEL=deepseek-reasoner
+          export ANTHROPIC_SMALL_FAST_MODEL=deepseek-chat
+          export API_TIMEOUT_MS=600000
+          export BASH_MAX_OUTPUT_LENGTH=10000
+          export CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1
+          export CLAUDE_CODE_FILE_READ_MAX_OUTPUT_TOKENS=12000
+          export CLAUDE_CODE_MAX_OUTPUT_TOKENS=4096
+          export MAX_THINKING_TOKENS=8192
+          ${pkgs.claude-code}/bin/claude --allow-dangerously-skip-permissions "$@"
+          '';
+        };
       in
         {
           devShells.default = pkgs.mkShell {
@@ -28,7 +43,8 @@
               uv
               gcc
 
-              claude-code
+              #claude code
+              claude-app
 
               # Git and development tools
               git
@@ -82,11 +98,6 @@
             echo "Note: Playwright browsers already installed via Nix"
 
             export ANTHROPIC_AUTH_TOKEN=$(keyring get deepseek-jgalabs api_key)
-            export ANTHROPIC_BASE_URL=https://api.deepseek.com/anthropic
-            export ANTHROPIC_MODEL=deepseek-reasoner
-            export API_TIMEOUT_MS=600000
-            export ANTHROPIC_SMALL_FAST_MODEL=deepseek-chat
-            export CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1
           '';
           };
         }
