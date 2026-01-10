@@ -19,6 +19,8 @@ dev = [
   "ipython>=9.8.0",
   "ty>=0.0.7",
   "scalene>=2.0.1",
+  "mkdocstrings-python>=2.0.1",
+  "zensical>=0.0.15"
 ]
 
 [project]
