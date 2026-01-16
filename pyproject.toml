@@ -102,55 +102,55 @@ ignore = [
   "G004", # logging-f-string (refurb warning)
   "BLE001", # Blind except Exception (common in scripts/data loading)
   # New ignores for code quality cleanup
-  "RUF001",   # Ambiguous unicode characters (intentional in UI)
-  "RUF002",   # Ambiguous unicode characters in docstrings
-  "RUF003",   # Ambiguous unicode characters in comments
-  "SLF001",   # Private member access (lazy loading patterns)
-  "C901",     # Function too complex (refactor later)
-  "PLR0912",  # Too many branches (refactor later)
-  "PLR0915",  # Too many statements (refactor later)
-  "S301",     # Pickle usage (internal/trusted data)
-  "B904",     # Raise without from inside except
-  "TRY003",   # Avoid specifying long messages outside exception class
-  "EM101",    # Exception must not use a string literal
-  "EM102",    # Exception must not use an f-string literal
-  "FBT001",   # Boolean-typed positional argument
-  "FBT002",   # Boolean default positional argument
-  "PERF401",  # Manual list comprehension (performance)
-  "PERF402",  # Use list.extend (performance)
-  "PTH118",   # os.path.join should be replaced by Path
-  "PTH110",   # os.path.exists should be replaced by Path.exists()
-  "PTH123",   # open() should be replaced by Path.open()
-  "SIM108",   # If-else block instead of if expression
-  "SIM103",   # Return condition directly
-  "DTZ005",   # datetime.now() without tz
-  "S603",     # subprocess call - check for untrusted input (git commands safe)
-  "S607",     # Starting a process with partial executable path (git)
-  "S608",     # Possible SQL injection (safe with placeholders)
-  "ERA001",   # Commented-out code
-  "RSE102",   # Unnecessary parentheses on raised exception
-  "RET504",   # Unnecessary assignment before return
-  "PLW0603",  # Global statement discouraged (legacy initialization)
-  "ARG001",   # Unused function argument
-  "ARG002",   # Unused method argument
-  "F401",     # Unused import
-  "B905",     # zip() without explicit strict parameter
-  "B007",     # Unused loop control variable
-  "C414",     # Unnecessary double cast or process
-  "TRY300",   # try-consider-else
-  "RUF059",   # unused-unpacked-variable
-  "TRY400",   # error-instead-of-exception
-  "C405",     # unnecessary-literal-set
-  "FBT003",   # boolean-positional-value-in-call
-  "FIX002",   # line-contains-todo
-  "NPY002",   # numpy-legacy-random (remaining)
-  "PERF102",  # incorrect-dict-iterator
-  "PLR0913",  # too-many-arguments
-  "SIM102",   # collapsible-if
-  "SIM117",   # multiple-with-statements
-  "TD002",    # missing-todo-author
-  "TD003",    # missing-todo-link
-  "TRY301",   # raise-within-try
+  "RUF001", # Ambiguous unicode characters (intentional in UI)
+  "RUF002", # Ambiguous unicode characters in docstrings
+  "RUF003", # Ambiguous unicode characters in comments
+  "SLF001", # Private member access (lazy loading patterns)
+  "C901", # Function too complex (refactor later)
+  "PLR0912", # Too many branches (refactor later)
+  "PLR0915", # Too many statements (refactor later)
+  "S301", # Pickle usage (internal/trusted data)
+  "B904", # Raise without from inside except
+  "TRY003", # Avoid specifying long messages outside exception class
+  "EM101", # Exception must not use a string literal
+  "EM102", # Exception must not use an f-string literal
+  "FBT001", # Boolean-typed positional argument
+  "FBT002", # Boolean default positional argument
+  "PERF401", # Manual list comprehension (performance)
+  "PERF402", # Use list.extend (performance)
+  "PTH118", # os.path.join should be replaced by Path
+  "PTH110", # os.path.exists should be replaced by Path.exists()
+  "PTH123", # open() should be replaced by Path.open()
+  "SIM108", # If-else block instead of if expression
+  "SIM103", # Return condition directly
+  "DTZ005", # datetime.now() without tz
+  "S603", # subprocess call - check for untrusted input (git commands safe)
+  "S607", # Starting a process with partial executable path (git)
+  "S608", # Possible SQL injection (safe with placeholders)
+  "ERA001", # Commented-out code
+  "RSE102", # Unnecessary parentheses on raised exception
+  "RET504", # Unnecessary assignment before return
+  "PLW0603", # Global statement discouraged (legacy initialization)
+  "ARG001", # Unused function argument
+  "ARG002", # Unused method argument
+  "F401", # Unused import
+  "B905", # zip() without explicit strict parameter
+  "B007", # Unused loop control variable
+  "C414", # Unnecessary double cast or process
+  "TRY300", # try-consider-else
+  "RUF059", # unused-unpacked-variable
+  "TRY400", # error-instead-of-exception
+  "C405", # unnecessary-literal-set
+  "FBT003", # boolean-positional-value-in-call
+  "FIX002", # line-contains-todo
+  "NPY002", # numpy-legacy-random (remaining)
+  "PERF102", # incorrect-dict-iterator
+  "PLR0913", # too-many-arguments
+  "SIM102", # collapsible-if
+  "SIM117", # multiple-with-statements
+  "TD002", # missing-todo-author
+  "TD003", # missing-todo-link
+  "TRY301" # raise-within-try
 ]
 
 [tool.ruff.lint.isort]
