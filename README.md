@@ -23,6 +23,7 @@ classification.
   - [Project Structure](#project-structure)
   - [Testing](#testing)
   - [Code Quality](#code-quality)
+  - [Generating Screenshots](#generating-screenshots)
 - [Database Schema](#database-schema)
 - [Origin Classification](#origin-classification-1)
 - [Detailed Usage](#detailed-usage)
@@ -236,6 +237,16 @@ uv run pytest tests/test_cli.py
 - Uses `ruff` for linting and formatting
 - Follows Python type hints
 - Consistent code formatting with `ruff format`
+
+### Generating Screenshots
+
+For documentation purposes, you can generate screenshots of the application using Playwright. First, ensure the application is running on `http://localhost:8501`, then run:
+
+```bash
+uv run python scripts/take_screenshots.py
+```
+
+This requires Playwright and browser binaries. See the script for installation instructions.
 
 ```bash
 # Format code
