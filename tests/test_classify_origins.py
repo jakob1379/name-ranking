@@ -1,6 +1,4 @@
-"""
-Tests for st_name_ranking.classify_origins module.
-"""
+"""Tests for st_name_ranking.classify_origins module."""
 
 from unittest.mock import MagicMock, patch
 
@@ -34,9 +32,8 @@ class TestGetClassifier:
 
     def test_get_classifier_import_error(self):
         """Test when ethnidata is not installed."""
-        with patch("ethnidata.EthniData", side_effect=ImportError):
-            with pytest.raises(ImportError):
-                classify_origins.get_classifier()
+        with patch("ethnidata.EthniData", side_effect=ImportError), pytest.raises(ImportError):
+            classify_origins.get_classifier()
 
 
 class TestGetRegionForNationality:
@@ -59,7 +56,7 @@ class TestGetRegionForNationality:
             )
 
         region, confidence = classify_origins.get_region_for_nationality(
-            "TestCountry"
+            "TestCountry",
         )
         assert region == "TestRegion"
         assert confidence == 1.0  # Default confidence adjustment
@@ -86,7 +83,7 @@ class TestGetRegionForNationality:
             )
 
         region, confidence = classify_origins.get_region_for_nationality(
-            "TestCountry2"
+            "TestCountry2",
         )
         assert region == "TestRegion2"
         assert confidence == 1.0  # Exact match
@@ -122,12 +119,12 @@ class TestClassifyName:
         result = classify_origins.classify_name("Anna")
 
         assert result == ("TestRegion3", 0.85)
-        mock_classifier.predict_nationality.assert_called_once_with(
-            "Anna", name_type="first"
-        )
+        mock_classifier.predict_nationality.assert_called_once_with("Anna")
 
     def test_classify_name_unknown_region(
-        self, mock_classifier, initialized_db
+        self,
+        mock_classifier,
+        initialized_db,
     ):
         """Test classification with unknown nationality."""
         mock_classifier.predict_nationality.return_value = {
@@ -141,23 +138,22 @@ class TestClassifyName:
 
         assert result == ("International", 0.375)  # 0.75 * 0.5 penalty
 
-    def test_classify_name_import_error(self):
+    def test_classify_name_import_error(self, initialized_db):
         """Test when ethnidata is not installed."""
-        with patch(
-            "st_name_ranking.classify_origins.get_classifier",
-            side_effect=ImportError,
-        ):
-            with pytest.raises(ImportError):
-                classify_origins.classify_name("Anna")
+        with patch("ethnidata.EthniData", side_effect=ImportError):
+            # Should return None because classification fails
+            result = classify_origins.classify_name("Anna")
+            assert result is None
 
-    def test_classify_name_exception(self, mock_classifier):
+    def test_classify_name_exception(self, mock_classifier, initialized_db):
         """Test handling of classifier exceptions."""
         mock_classifier.predict_nationality.side_effect = Exception(
-            "Classifier error"
+            "Classifier error",
         )
 
         result = classify_origins.classify_name("Anna")
-        assert result is None
+        # Should fall back to International with low confidence
+        assert result == ("International", 0.1)
 
 
 class TestClassifyAllNames:
@@ -173,7 +169,11 @@ class TestClassifyAllNames:
     )
     @pytest.mark.skip(reason="UI integration optional")
     def test_classify_all_names_success(
-        self, mock_st, mock_update, mock_get_unclassified, mock_classify_batch
+        self,
+        mock_st,
+        mock_update,
+        mock_get_unclassified,
+        mock_classify_batch,
     ):
         """Test successful classification of all unclassified names."""
         mock_get_unclassified.return_value = [
@@ -216,7 +216,9 @@ class TestClassifyAllNames:
     )
     @pytest.mark.skip(reason="UI integration optional")
     def test_classify_all_names_no_unclassified(
-        self, mock_st, mock_get_unclassified
+        self,
+        mock_st,
+        mock_get_unclassified,
     ):
         """Test when no unclassified names exist."""
         mock_get_unclassified.return_value = []
@@ -237,7 +239,9 @@ class TestClassifyAllNames:
     )
     @pytest.mark.skip(reason="UI integration optional")
     def test_classify_all_names_import_error(
-        self, mock_st, mock_get_unclassified
+        self,
+        mock_st,
+        mock_get_unclassified,
     ):
         """Test when ethnidata is not installed."""
         mock_get_unclassified.return_value = [

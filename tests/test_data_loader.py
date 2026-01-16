@@ -1,6 +1,4 @@
-"""
-Tests for st_name_ranking.data_loader module.
-"""
+"""Tests for st_name_ranking.data_loader module."""
 
 from unittest.mock import patch
 
@@ -185,7 +183,7 @@ class TestInitializeOrLoadRatings:
         assert len(ratings) == 3
         for name in names:
             assert name in ratings
-            assert ratings[name] == 1500.0  # Default Elo rating
+            assert ratings[name] == 1500.0  # Default preference score
 
     def test_load_existing_ratings(self, initialized_db):
         """Test loading existing ratings without reinitializing."""

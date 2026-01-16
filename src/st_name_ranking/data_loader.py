@@ -1,25 +1,20 @@
-"""
-Data loading and persistence functions.
-"""
+"""Data loading and persistence functions."""
 
 import logging
 import os
 import re
-from typing import Dict, List, Optional
 
-import httpx
 import pandas as pd
 import streamlit as st
 
 from st_name_ranking import database
-from st_name_ranking.elo import INITIAL_RATING, initialize_ratings
+from st_name_ranking.database import INITIAL_SCORE, initialize_ratings
 
 logger = logging.getLogger(__name__)
 
 
 def is_valid_name(name: str) -> bool:
-    """
-    Check if a string is a valid name (not a header or placeholder).
+    """Check if a string is a valid name (not a header or placeholder).
     Filters out strings like 'name1', 'Navn', 'name', etc.
     """
     if not name or not isinstance(name, str):
@@ -70,9 +65,8 @@ def is_valid_name(name: str) -> bool:
     return True
 
 
-def load_ratings() -> Optional[Dict[str, float]]:
-    """
-    Load saved ratings from database.
+def load_ratings() -> dict[str, float] | None:
+    """Load saved ratings from database.
     Returns ratings dict or None if database not initialized.
     """
     try:
@@ -87,11 +81,10 @@ def load_ratings() -> Optional[Dict[str, float]]:
 
 
 def save_ratings(
-    ratings: Dict[str, float],
-    names_to_update: Optional[List[str]] = None,
+    ratings: dict[str, float],
+    names_to_update: list[str] | None = None,
 ) -> bool:
-    """
-    Save ratings to database.
+    """Save ratings to database.
 
     Args:
         ratings: Dictionary mapping name -> rating
@@ -99,17 +92,14 @@ def save_ratings(
 
     Returns:
         True if successful.
+
     """
     try:
         database.init_database()
 
         # Filter ratings to update only specified names
         if names_to_update is not None:
-            ratings_to_save = {
-                name: rating
-                for name, rating in ratings.items()
-                if name in names_to_update
-            }
+            ratings_to_save = {name: rating for name, rating in ratings.items() if name in names_to_update}
         else:
             ratings_to_save = ratings
 
@@ -133,10 +123,9 @@ def save_ratings(
         return False
 
 
-def initialize_or_load_ratings(names: List[str]) -> Dict[str, float]:
-    """
-    Initialize ratings for names, loading existing ratings from file.
-    Merges saved ratings with new names (new names get INITIAL_RATING).
+def initialize_or_load_ratings(names: list[str]) -> dict[str, float]:
+    """Initialize ratings for names, loading existing ratings from file.
+    Merges saved ratings with new names (new names get INITIAL_SCORE).
     """
     saved = load_ratings()
     if saved is None:
@@ -148,22 +137,20 @@ def initialize_or_load_ratings(names: List[str]) -> Dict[str, float]:
     new_names_added = 0
     for name in names:
         if name not in ratings:
-            ratings[name] = INITIAL_RATING
+            ratings[name] = INITIAL_SCORE
             new_names_added += 1
 
     if new_names_added > 0:
         st.toast(
-            f"Added {new_names_added} new names with initial rating "
-            f"{INITIAL_RATING}",
+            f"Added {new_names_added} new names with initial rating {INITIAL_SCORE}",
             icon="ℹ️",
         )
 
     return ratings
 
 
-def load_submodule_json() -> List[Dict[str, str]]:
-    """
-    Load name-gender pairs from local git submodule JSON file.
+def load_submodule_json() -> list[dict[str, str]]:
+    """Load name-gender pairs from local git submodule JSON file.
     Returns list of dicts with 'name' and 'gender' keys.
     """
     json_path = os.path.join("godkendtefornavne", "allenavne.json")
@@ -218,48 +205,16 @@ def load_submodule_json() -> List[Dict[str, str]]:
         return []
 
 
-def load_local_csv(csv_path: str = "alle-navne.csv") -> List[str]:
-    """
-    Load names from local CSV file (Navn column).
-    Returns list of names.
-    """
-    try:
-        df = pd.read_csv(csv_path, encoding="utf-8-sig")
-        if "Navn" not in df.columns:
-            st.toast(
-                "CSV file missing 'Navn' column. "
-                f"Columns found: {df.columns.tolist()}",
-                icon="❌",
-                duration="long",
-            )
-            return []
-        names = df["Navn"].astype(str).str.strip().tolist()
-        # Filter out empty strings and deduplicate
-        names = sorted(list(set([name for name in names if name])))
-        st.toast(
-            f"Loaded {len(names)} names from local CSV",
-            icon="✅",
-        )
-        return names
-    except Exception as e:
-        st.toast(
-            f"Failed to load local CSV: {e}",
-            icon="❌",
-            duration="long",
-        )
-        return []
-
-
 def load_names_by_gender(
     sync_with_submodule: bool = False,
-) -> Dict[str, List[str]]:
-    """
-    Load names from database, categorized by gender.
+) -> dict[str, list[str]]:
+    """Load names from database, categorized by gender.
     Unisex names are included in both 'Male' and 'Female' categories.
 
     Args:
         sync_with_submodule: If True, sync with submodule before loading.
                              Default False for faster startup.
+
     """
     try:
         database.init_database()
@@ -311,43 +266,8 @@ def load_names_by_gender(
         return {}
 
 
-def load_submodule_names(gender: str = "All") -> List[str]:
-    """
-    Load names from local git submodule JSON file.
-    Returns list of names for the specified gender.
-    gender: "Male", "Female", "Unisex", or "All"
-    """
-    try:
-        gender_data = load_names_by_gender()
-        if not gender_data:
-            return []
-
-        if gender not in gender_data:
-            st.toast(
-                f"Unknown gender filter: {gender}. Using 'All'",
-                icon="⚠️",
-            )
-            gender = "All"
-
-        names = gender_data.get(gender, [])
-        st.toast(
-            f"Loaded {len(names)} names for {gender}",
-            icon="✅",
-        )
-        return names
-    except Exception as e:
-        st.toast(
-            f"Failed to load from submodule JSON: {e}",
-            icon="❌",
-            duration="long",
-        )
-        # Fallback to CSV files for compatibility
-        return load_submodule_csv_fallback()
-
-
-def load_submodule_csv_fallback() -> List[str]:
-    """
-    Fallback: Load names from local git submodule CSV files.
+def load_submodule_csv_fallback() -> list[str]:
+    """Fallback: Load names from local git submodule CSV files.
     Used when JSON is not available.
     """
     submodule_path = "godkendtefornavne"
@@ -359,7 +279,7 @@ def load_submodule_csv_fallback() -> List[str]:
         for csv_file in csv_files:
             file_path = os.path.join(submodule_path, csv_file)
             if os.path.exists(file_path):
-                with open(file_path, "r", encoding="utf-8") as f:
+                with open(file_path, encoding="utf-8") as f:
                     for line in f:
                         name = line.strip()
                         if name:  # Skip empty lines
@@ -367,9 +287,7 @@ def load_submodule_csv_fallback() -> List[str]:
                                 all_names.append(name)
                             else:
                                 invalid_count += 1
-                                if (
-                                    invalid_count <= 5
-                                ):  # Log first few invalid names
+                                if invalid_count <= 5:  # Log first few invalid names
                                     st.toast(
                                         f"Skipping invalid CSV entry: '{name}'",
                                         icon="⚠️",
@@ -403,77 +321,6 @@ def load_submodule_csv_fallback() -> List[str]:
     except Exception as e:
         st.toast(
             f"Failed to load from CSV fallback: {e}",
-            icon="❌",
-            duration="long",
-        )
-        return []
-
-
-def fetch_danish_names() -> List[str]:
-    """
-    Attempts to fetch the approved names from the mirror repository.
-    """
-    urls = [
-        "https://koldfront.dk/git/godkendtefornavne/plain/pigenavne.txt",
-        "https://koldfront.dk/git/godkendtefornavne/plain/drengenavne.txt",
-    ]
-
-    all_names = []
-    try:
-        with httpx.Client(timeout=10.0) as client:
-            for url in urls:
-                response = client.get(url)
-                response.raise_for_status()
-                # Split by newline and filter
-                names = [
-                    line.strip()
-                    for line in response.text.splitlines()
-                    if line.strip()
-                ]
-                all_names.extend(names)
-        return sorted(list(set(all_names)))
-    except Exception as e:
-        st.toast(
-            f"Failed to fetch remote names: {e}",
-            icon="❌",
-            duration="long",
-        )
-        return []
-
-
-def fetch_koldfront_csv() -> List[str]:
-    """
-    Fetch names from Koldfront CSV files (boy/girl/unisex).
-    Returns list of names.
-    """
-    urls = [
-        "https://koldfront.dk/git/godkendtefornavne/plain/drengenavne.csv",
-        "https://koldfront.dk/git/godkendtefornavne/plain/pigenavne.csv",
-        "https://koldfront.dk/git/godkendtefornavne/plain/unisexnavne.csv",
-    ]
-
-    all_names = []
-    try:
-        with httpx.Client(timeout=15.0) as client:
-            for url in urls:
-                response = client.get(url)
-                response.raise_for_status()
-                # CSV files have one name per line (no header)
-                names = [
-                    line.strip()
-                    for line in response.text.splitlines()
-                    if line.strip()
-                ]
-                all_names.extend(names)
-        names = sorted(list(set(all_names)))
-        st.toast(
-            f"Fetched {len(names)} names from Koldfront",
-            icon="✅",
-        )
-        return names
-    except Exception as e:
-        st.toast(
-            f"Failed to fetch from Koldfront: {e}",
             icon="❌",
             duration="long",
         )

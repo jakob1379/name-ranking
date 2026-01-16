@@ -4,11 +4,12 @@ build-backend = "setuptools.build_meta"
 
 [dependency-groups]
 dev = [
-  "poethepoet>=0.39.0",
-  "pyrefly>=0.46.1",
-  "ruff>=0.14.10",
-  "prek>=0.2.25",
-  "commitizen>=4.10.1",
+  "poethepoet>=0.40.0",
+  "pyrefly>=0.48.1",
+  "skylos",
+  "ruff>=0.14.13",
+  "prek>=0.2.28",
+  "commitizen>=4.11.6",
   "pytest>=9.0.2",
   "pytest-cov>=7.0.0",
   "pytest-playwright>=0.7.2",
@@ -16,11 +17,11 @@ dev = [
   "pytest-mock>=3.15.1",
   "pytest-xdist>=3.8.0",
   "pytest-timeout>=2.4.0",
-  "ipython>=9.8.0",
-  "ty>=0.0.7",
+  "ipython>=9.9.0",
+  "ty>=0.0.12",
   "scalene>=2.0.1",
   "mkdocstrings-python>=2.0.1",
-  "zensical>=0.0.15"
+  "zensical>=0.0.16"
 ]
 
 [project]
@@ -35,13 +36,15 @@ requires-python = ">=3.13,<3.14"
 dependencies = [
   "httpx>=0.28.1",
   "ethnidata>=4.1.1",
-  "numpy>=2.4.0",
+  "numpy>=2.4.1",
   "pandas>=2.3.3",
   "rapidfuzz>=3.14.3",
+  "metaphone",
+  "pyphen>=0.17.2",
   "rich>=14.2.0",
   "sentence-transformers>=5.2.0",
-  "streamlit>=1.52.2",
-  "typer>=0.21.0"
+  "streamlit>=1.53.0",
+  "typer>=0.21.1"
 ]
 
 [project.scripts]
@@ -73,19 +76,81 @@ testpaths = ["tests"]
 # if this is a library, enter the _minimum_ version you
 # want to support, otherwise do py313
 target-version = "py313"
-line-length = 80 # use whatever number makes you happy
+line-length = 120 # use whatever number makes you happy
 
 [tool.ruff.lint]
 # you can see the looong list of rules here:
 # https://docs.astral.sh/ruff/rules/
 # here's a couple to start with
-select = [
-  "A", # warn about shadowing built-ins
-  "E", # style stuff, whitespaces
-  "F", # important pyflakes lints
-  "I", # import sorting
-  "N", # naming
-  "T100" # breakpoints (probably don't want these in prod!)
+# select = [
+# "A", # warn about shadowing built-ins
+# "E", # style stuff, whitespaces
+# "F", # important pyflakes lints
+# "I", # import sorting
+# "N", # naming
+# "T100" # breakpoints (probably don't want these in prod!)
+# ]
+select = ["ALL"]
+ignore = [
+  "ANN", # Type annotations (optional, can add later)
+  "D", # Docstrings (optional)
+  "T", # Print statements (scripts need them)
+  "S101", # Assert in tests is fine
+  "N806", # Matrix variables in model.py (X, W, XW, A)
+  "PLC0415", # Conditional imports and script imports
+  "PLR2004", # Magic value comparisons (common in tests)
+  "G004", # logging-f-string (refurb warning)
+  "BLE001", # Blind except Exception (common in scripts/data loading)
+  # New ignores for code quality cleanup
+  "RUF001",   # Ambiguous unicode characters (intentional in UI)
+  "RUF002",   # Ambiguous unicode characters in docstrings
+  "RUF003",   # Ambiguous unicode characters in comments
+  "SLF001",   # Private member access (lazy loading patterns)
+  "C901",     # Function too complex (refactor later)
+  "PLR0912",  # Too many branches (refactor later)
+  "PLR0915",  # Too many statements (refactor later)
+  "S301",     # Pickle usage (internal/trusted data)
+  "B904",     # Raise without from inside except
+  "TRY003",   # Avoid specifying long messages outside exception class
+  "EM101",    # Exception must not use a string literal
+  "EM102",    # Exception must not use an f-string literal
+  "FBT001",   # Boolean-typed positional argument
+  "FBT002",   # Boolean default positional argument
+  "PERF401",  # Manual list comprehension (performance)
+  "PERF402",  # Use list.extend (performance)
+  "PTH118",   # os.path.join should be replaced by Path
+  "PTH110",   # os.path.exists should be replaced by Path.exists()
+  "PTH123",   # open() should be replaced by Path.open()
+  "SIM108",   # If-else block instead of if expression
+  "SIM103",   # Return condition directly
+  "DTZ005",   # datetime.now() without tz
+  "S603",     # subprocess call - check for untrusted input (git commands safe)
+  "S607",     # Starting a process with partial executable path (git)
+  "S608",     # Possible SQL injection (safe with placeholders)
+  "ERA001",   # Commented-out code
+  "RSE102",   # Unnecessary parentheses on raised exception
+  "RET504",   # Unnecessary assignment before return
+  "PLW0603",  # Global statement discouraged (legacy initialization)
+  "ARG001",   # Unused function argument
+  "ARG002",   # Unused method argument
+  "F401",     # Unused import
+  "B905",     # zip() without explicit strict parameter
+  "B007",     # Unused loop control variable
+  "C414",     # Unnecessary double cast or process
+  "TRY300",   # try-consider-else
+  "RUF059",   # unused-unpacked-variable
+  "TRY400",   # error-instead-of-exception
+  "C405",     # unnecessary-literal-set
+  "FBT003",   # boolean-positional-value-in-call
+  "FIX002",   # line-contains-todo
+  "NPY002",   # numpy-legacy-random (remaining)
+  "PERF102",  # incorrect-dict-iterator
+  "PLR0913",  # too-many-arguments
+  "SIM102",   # collapsible-if
+  "SIM117",   # multiple-with-statements
+  "TD002",    # missing-todo-author
+  "TD003",    # missing-todo-link
+  "TRY301",   # raise-within-try
 ]
 
 [tool.ruff.lint.isort]
@@ -93,7 +158,7 @@ select = [
 known-first-party = ["st_name_ranking"]
 
 [tool.setuptools.packages.find]
-where = ["."]
+where = ["src"]
 
 [tool.uv]
 package = true

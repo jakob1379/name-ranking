@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
-"""
-Classify name origins using ethnidata package.
+"""Classify name origins using ethnidata package.
 
 This script:
 1. Gets unclassified names from database
@@ -13,12 +12,15 @@ This script:
 import logging
 import sys
 import time
-from typing import Optional, Tuple
 
 from st_name_ranking.database import (
     get_connection,
+    get_names_with_origins,
     get_unclassified_names,
     update_name_origin,
+)
+from st_name_ranking.origin_classifier import (
+    get_classifier as get_origin_classifier,
 )
 
 logger = logging.getLogger(__name__)
@@ -30,7 +32,7 @@ def get_classifier():
         from ethnidata import EthniData
     except ImportError:
         raise ImportError(
-            "ethnidata not installed. Install with: pip install ethnidata"
+            "ethnidata not installed. Install with: pip install ethnidata",
         )
 
     if not hasattr(get_classifier, "_classifier"):
@@ -40,9 +42,8 @@ def get_classifier():
     return get_classifier._classifier
 
 
-def get_region_for_nationality(nationality: str) -> Tuple[str, float]:
-    """
-    Map nationality to region using database mapping.
+def get_region_for_nationality(nationality: str) -> tuple[str, float]:
+    """Map nationality to region using database mapping.
     Returns (region, confidence_adjustment).
     """
     with get_connection() as conn:
@@ -69,54 +70,50 @@ def get_region_for_nationality(nationality: str) -> Tuple[str, float]:
         return "International", 0.5
 
 
-def classify_name(name: str) -> Optional[Tuple[str, float]]:
-    """
-    Classify a single name using ethnidata.
+def classify_name(name: str) -> tuple[str, float] | None:
+    """Classify a single name using hierarchical classifier.
     Returns (region, confidence) or None if classification failed.
     """
     try:
-        classifier = get_classifier()
+        # Get reference names from already classified names in database
+        reference_names = _get_reference_names()
+        classifier = get_origin_classifier(reference_names)
 
-        # Predict nationality using ethnidata
-        result = classifier.predict_nationality(name, name_type="first")
-        if not result:
-            logger.debug(f"No results for name: {name}")
+        region, confidence = classifier.classify(name)
+
+        if confidence < 0.1:  # Fallback if classifier returns minimal confidence
             return None
 
-        country_name = result.get("country_name")
-        confidence = result.get("confidence", 0.0)
-
-        if not country_name or confidence <= 0:
-            logger.debug(f"No predictions for name: {name}")
-            return None
-
-        logger.debug(f"Classified {name} -> {country_name} ({confidence:.2f})")
-
-        # Map nationality to region
-        region, region_confidence = get_region_for_nationality(country_name)
-
-        # Combine confidences
-        combined_confidence = confidence * region_confidence
         logger.debug(
-            f"Mapped to region: {region} "
-            f"(confidence: {combined_confidence:.2f})"
+            f"Classified {name} -> {region} (confidence: {confidence:.2f})",
         )
+        return region, confidence
 
-        return region, combined_confidence
-
-    except ImportError:
-        logger.error(
-            "ethnidata not installed. Install with: pip install ethnidata"
-        )
-        raise
     except Exception as e:
         logger.warning(f"Error classifying name '{name}': {e}")
         return None
 
 
-def classify_batch(names_batch: list, batch_size: int = 100) -> int:
+def _get_reference_names() -> dict[str, tuple[str, float, str, str]]:
+    """Get dictionary of known name -> (region, confidence, phonetic_primary, phonetic_secondary) from database.
+    Cached for performance.
     """
-    Classify a batch of names using ethnidata.
+    if not hasattr(_get_reference_names, "_cache"):
+        try:
+            _get_reference_names._cache = get_names_with_origins(
+                confidence_threshold=0.5,
+            )
+            logger.debug(
+                f"Loaded {len(_get_reference_names._cache)} reference names",
+            )
+        except Exception as e:
+            logger.warning(f"Failed to load reference names: {e}")
+            _get_reference_names._cache = {}
+    return _get_reference_names._cache
+
+
+def classify_batch(names_batch: list, batch_size: int = 100) -> int:
+    """Classify a batch of names using ethnidata.
     Returns number of successfully classified names.
     """
     if not names_batch:
@@ -145,9 +142,7 @@ def classify_batch(names_batch: list, batch_size: int = 100) -> int:
 
 
 def _classify_individually(names_batch: list) -> int:
-    """
-    Fallback: classify names individually (used when batch processing fails).
-    """
+    """Fallback: classify names individually (used when batch processing fails)."""
     classified_count = 0
 
     for i, name_data in enumerate(names_batch):
@@ -162,20 +157,20 @@ def _classify_individually(names_batch: list) -> int:
 
         if (i + 1) % 10 == 0:
             logger.debug(
-                f"  Individually processed {i + 1}/{len(names_batch)} names"
+                f"  Individually processed {i + 1}/{len(names_batch)} names",
             )
 
     logger.info(
-        f"Individually classified {classified_count}/{len(names_batch)} names"
+        f"Individually classified {classified_count}/{len(names_batch)} names",
     )
     return classified_count
 
 
 def classify_all_names(
-    limit: Optional[int] = None, batch_size: int = 100
+    limit: int | None = None,
+    batch_size: int = 100,
 ) -> int:
-    """
-    Classify all unclassified names.
+    """Classify all unclassified names.
     Returns total number of names classified.
     """
     logger.info("Fetching unclassified names...")
@@ -204,7 +199,7 @@ def classify_all_names(
     for i in range(0, total, batch_size):
         batch = unclassified[i : i + batch_size]
         logger.debug(
-            f"Processing batch {i // batch_size + 1} ({len(batch)} names)"
+            f"Processing batch {i // batch_size + 1} ({len(batch)} names)",
         )
 
         batch_classified = classify_batch(batch, batch_size)
@@ -216,11 +211,10 @@ def classify_all_names(
         eta = remaining / rate if rate > 0 else 0
 
         logger.info(
-            f"Batch {i // batch_size + 1}: Classified "
-            f"{batch_classified}/{len(batch)}"
+            f"Batch {i // batch_size + 1}: Classified {batch_classified}/{len(batch)}",
         )
         logger.info(
-            f"Total: {classified}/{total} ({classified / total * 100:.1f}%)"
+            f"Total: {classified}/{total} ({classified / total * 100:.1f}%)",
         )
         logger.debug(f"Rate: {rate:.1f} names/sec, ETA: {eta:.0f} seconds")
 
@@ -228,7 +222,7 @@ def classify_all_names(
     logger.info("✅ Classification complete!")
     logger.info(f"   Classified {classified} of {total} names")
     logger.info(
-        f"   Time: {elapsed:.1f} seconds ({elapsed / total:.2f} sec/name)"
+        f"   Time: {elapsed:.1f} seconds ({elapsed / total:.2f} sec/name)",
     )
 
     return classified
@@ -277,7 +271,7 @@ def main():
         print("Install it with: pip install ethnidata")
         print("Or add to pyproject.toml dependencies:")
         print(
-            '  dependencies = [\n    ...\n    "ethnidata>=4.1.1",\n    ...\n  ]'
+            '  dependencies = [\n    ...\n    "ethnidata>=4.1.1",\n    ...\n  ]',
         )
         sys.exit(1)
 

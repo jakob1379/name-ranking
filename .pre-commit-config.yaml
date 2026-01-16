@@ -51,6 +51,24 @@ repos:
       - id: ruff-format  # Run Ruff formatter
         types_or: [python, pyi]
 
+  # Code quality and security with Skylos
+  - repo: local
+    hooks:
+      - id: skylos
+        name: skylos
+        entry: skylos --danger --quality --secrets
+        language: python
+        types: [python]
+        pass_filenames: false
+        always_run: true
+      - id: pyrefly
+        name: pyrefly
+        entry: pyrefly check
+        language: python
+        types: [python]
+        pass_filenames: false
+        always_run: true
+
   # Formatting for various file types with Prettier
   - repo: https://github.com/rbubley/mirrors-prettier  # Using rbubley mirror
     rev: v3.7.4
@@ -111,14 +129,6 @@ repos:
       - id: validate-pyproject
         additional_dependencies: ['validate-pyproject-schema-store[all]']
 
-  # Dead code detection
-  # - repo: https://github.com/albertas/deadcode
-  #   rev: 2.4.1
-  #   hooks:
-  #     - id: deadcode
-  #       name: deadcode
-  #       skip: true
-
   # check for code insecurities
   - repo: https://github.com/PyCQA/bandit
     rev: 1.9.2
@@ -146,19 +156,4 @@ repos:
         stages: [commit-msg]
       - id: commitizen-branch  # Optional: Check branch name format
         stages: [pre-push]
-        args: [--rev-range, origin/main..HEAD]  # Example: Check against main branch
-
-  # Optional: Static Typing with MyPy (Uncomment if needed)
-  # - repo: https://github.com/pre-commit/mirrors-mypy
-  #   rev: v1.15.0  # Use a recent version of mypy
-  #   hooks:
-  #     - id: mypy
-  #       args: [--strict]  # Example: Use strict mode
-  #       additional_dependencies: [types-requests]  # Add project-specific types
-
-  # Optional: Markdown linting
-  # - repo: https://github.com/markdownlint/markdownlint
-  #   rev: v0.12.0  # Note: This uses Ruby, requires Ruby environment
-  #   hooks:
-  #     - id: markdownlint
-  #       files: \.(md|mdown|markdown)$
+        args: [--rev-range, origin/main..HEAD]  # Example: Check against main

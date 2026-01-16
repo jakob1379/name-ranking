@@ -2,166 +2,130 @@
 icon: lucide/rocket
 ---
 
-# Get started
+# Name Ranking Application
 
-For full documentation visit [zensical.org](https://zensical.org/docs/).
+A Streamlit-based web application for ranking Danish names using Bayesian
+preference learning with active learning, with similarity search, origin
+classification, and intelligent pair selection.
 
-## Commands
+## Features
 
-- [`zensical new`][new] - Create a new project
-- [`zensical serve`][serve] - Start local web server
-- [`zensical build`][build] - Build your site
+### Name Ranking Tournament
 
-  [new]: https://zensical.org/docs/usage/new/
-  [serve]: https://zensical.org/docs/usage/preview/
-  [build]: https://zensical.org/docs/usage/build/
+- Compare two names selected by active learning (Thompson sampling)
+- Vote for preferred name or mark as draw
+- Real-time Bayesian preference updates with comparison tracking
+- Top 10 rankings display based on learned preferences
+- Keyboard shortcuts (arrow keys)
 
-## Examples
+### Multi-method Similarity Search
 
-### Admonitions
+- **String similarity** (Levenshtein distance) for name matching
+- **Vector similarity** (LLM embeddings) for semantic matching
+- **Phonetic similarity** (Double Metaphone) for phonetic name matching
+- Find names similar to a reference name using multiple criteria
 
-> Go to [documentation](https://zensical.org/docs/authoring/admonitions/)
+### Origin Classification
 
-!!! note
+- **Optional classification** - runs only when explicitly requested
+- **Incremental processing** - classify 100 names at a time or all at once
+- Automatic nationality prediction using `ethnidata`
+- Mapping to geographic regions (Nordic, European, Asian, etc.)
+- Confidence scoring for predictions
 
-    This is a **note** admonition. Use it to provide helpful information.
+### Intelligent Pair Selection
 
-!!! warning
+- **Comparison tracking** - records every pairwise vote to understand name
+  popularity
+- **Phonetic similarity** - uses Double Metaphone algorithm to find phonetically
+  similar names
+- **Smart candidate selection** - prioritizes names with fewer comparisons and
+  phonetically interesting pairs
+- **Automatic metadata collection** - builds a feature dataset for Bayesian
+  preference learning
 
-    This is a **warning** admonition. Be careful!
+### Filtering & Management
 
-### Details
+- Gender filtering (Male, Female, Unisex, All)
+- Origin region filtering (Nordic, European, International, etc.)
+- Database-backed name storage with SQLite
+- Git submodule integration for name data updates
+- Ratings persistence with automatic comparison logging
 
-> Go to
-> [documentation](https://zensical.org/docs/authoring/admonitions/#collapsible-blocks)
+## Quick Start
 
-??? info "Click to expand for more info"
+### Prerequisites
 
-    This content is hidden until you click to expand it.
-    Great for FAQs or long explanations.
+- Python 3.13 or higher
+- Git (for submodule management)
+- [uv](https://github.com/astral-sh/uv) - fast Python package manager
 
-## Code Blocks
+### Installation & Setup
 
-> Go to [documentation](https://zensical.org/docs/authoring/code-blocks/)
+```bash
+# Clone repository with submodules
+git clone --recurse-submodules https://github.com/yourusername/sort-names.git
+cd sort-names
 
-```python hl_lines="2" title="Code blocks"
-def greet(name):
-    print(f"Hello, {name}!") # (1)!
+# Install dependencies
+uv sync
 
-greet("Python")
+# Initialize database
+uv run name-db init
+
+# Start the application
+uv run streamlit run st_name_ranking/main.py
 ```
 
-1.  > Go to
-    > [documentation](https://zensical.org/docs/authoring/code-blocks/#code-annotations)
+The application will be available at `http://localhost:8501`.
 
-    Code annotations allow to attach notes to lines of code.
+## Documentation
 
-Code can also be highlighted inline: `#!python print("Hello, Python!")`.
+### Overview Documentation
 
-## Content tabs
+- [README.md](../README.md) - Complete project overview, features, and
+  quickstart guide
 
-> Go to [documentation](https://zensical.org/docs/authoring/content-tabs/)
+### Technical Documentation
 
-=== "Python"
+- [Active Learning System](active_learning.md) - Bayesian preference modeling,
+  feature engineering, and Thompson sampling
+- [System Architecture](architecture.md) - Component architecture, data flow,
+  and design principles
 
-    ``` python
-    print("Hello from Python!")
-    ```
+### Reference Documentation
 
-=== "Rust"
+- **Database Schema**: Complete SQL schema documentation
+- **CLI Reference**: Command-line interface usage and options
+- **API Reference**: Python module interfaces and functions
+- **Testing Guide**: Test suite organization and execution
 
-    ``` rs
-    println!("Hello from Rust!");
-    ```
+### Development Resources
 
-## Diagrams
+- **Project Structure**: Module organization and responsibilities
+- **Code Quality**: Linting, formatting, and type checking
+- **Deployment**: Local development and production considerations
 
-> Go to [documentation](https://zensical.org/docs/authoring/diagrams/)
+## Development
 
-```mermaid
-graph LR
-  A[Start] --> B{Error?};
-  B -->|Yes| C[Hmm...];
-  C --> D[Debug];
-  D --> B;
-  B ---->|No| E[Yay!];
+### Project Structure
+
+See the [README.md](../README.md) for the complete project structure and module
+descriptions.
+
+### Testing
+
+```bash
+# Run all non-UI tests
+uv run pytest -m "not playwright"
+
+# Run specific test modules
+uv run pytest tests/test_database.py
+uv run pytest tests/test_utils.py
 ```
 
-## Footnotes
+### Code Quality
 
-> Go to [documentation](https://zensical.org/docs/authoring/footnotes/)
-
-Here's a sentence with a footnote.[^1]
-
-Hover it, to see a tooltip.
-
-[^1]: This is the footnote.
-
-## Formatting
-
-> Go to [documentation](https://zensical.org/docs/authoring/formatting/)
-
-- ==This was marked (highlight)==
-- ^^This was inserted (underline)^^
-- ~~This was deleted (strikethrough)~~
-- H~2~O
-- A^T^A
-- ++ctrl+alt+del++
-
-## Icons, Emojis
-
-> Go to [documentation](https://zensical.org/docs/authoring/icons-emojis/)
-
-- :sparkles: `:sparkles:`
-- :rocket: `:rocket:`
-- :tada: `:tada:`
-- :memo: `:memo:`
-- :eyes: `:eyes:`
-
-## Maths
-
-> Go to [documentation](https://zensical.org/docs/authoring/math/)
-
-$$
-\cos x=\sum_{k=0}^{\infty}\frac{(-1)^k}{(2k)!}x^{2k}
-$$
-
-!!! warning "Needs configuration" Note that MathJax is included via a `script`
-tag on this page and is not configured in the generated default configuration to
-avoid including it in a pages that do not need it. See the documentation for
-details on how to configure it on all your pages if they are more Maths-heavy
-than these simple starter pages.
-
-<script id="MathJax-script" async src="https://unpkg.com/mathjax@3/es5/tex-mml-chtml.js"></script>
-<script>
-  window.MathJax = {
-    tex: {
-      inlineMath: [["\\(", "\\)"]],
-      displayMath: [["\\[", "\\]"]],
-      processEscapes: true,
-      processEnvironments: true
-    },
-    options: {
-      ignoreHtmlClass: ".*|",
-      processHtmlClass: "arithmatex"
-    }
-  };
-</script>
-
-## Task Lists
-
-> Go to
-> [documentation](https://zensical.org/docs/authoring/lists/#using-task-lists)
-
-- [x] Install Zensical
-- [x] Configure `zensical.toml`
-- [x] Write amazing documentation
-- [ ] Deploy anywhere
-
-## Tooltips
-
-> Go to [documentation](https://zensical.org/docs/authoring/tooltips/)
-
-[Hover me][example]
-
-[example]: https://example.com "I'm a tooltip!"
+- Uses `ruff` for linting and formatting
+- Follows Python type hints
+- Consistent code formatting with `ruff format`

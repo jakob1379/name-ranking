@@ -1,6 +1,4 @@
-"""
-Pytest fixtures for st_name_ranking tests.
-"""
+"""Pytest fixtures for st_name_ranking tests."""
 
 import tempfile
 from pathlib import Path
@@ -123,24 +121,27 @@ def mock_submodule_path(tmp_path):
 @pytest.fixture
 def mock_classifier():
     """Mock the ethnidata classifier to avoid PyTorch issues."""
-    with patch("st_name_ranking.classify_origins.get_classifier") as mock_get:
-        mock_classifier = mock_get.return_value
-        mock_classifier.predict_nationality.return_value = {
+    with patch("ethnidata.EthniData") as mock_ethnidata:
+        mock_instance = mock_ethnidata.return_value
+        mock_instance.predict_nationality.return_value = {
             "country_name": "Denmark",
             "confidence": 0.85,
             "country": "DK",
             "region": "Europe",
         }
-        yield mock_classifier
+        yield mock_instance
 
 
 @pytest.fixture(autouse=True)
 def cleanup_db_state():
     """Clean up database state before each test."""
-    from st_name_ranking import database
+    from st_name_ranking import database, origin_classifier
 
     # Reset initialization flag before each test
     database._initialized = False
+    # Reset classifier singleton
+    origin_classifier._default_classifier = None
     yield
     # Reset after test
     database._initialized = False
+    origin_classifier._default_classifier = None

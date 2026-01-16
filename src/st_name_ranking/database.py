@@ -1,5 +1,4 @@
-"""
-SQLite database for name ranking application.
+"""SQLite database for name ranking application.
 
 Handles:
 - Names from godkendtefornavne submodule
@@ -9,19 +8,26 @@ Handles:
 - Submodule version tracking
 """
 
-
 import logging
 import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
+
+from metaphone import doublemetaphone
 
 logger = logging.getLogger(__name__)
 
 # Track initialization status
 _initialized = False
 
-DB_PATH = Path("names.db")
+DB_PATH = Path("data/names.db")
+
+# Default rating for new names
+INITIAL_SCORE = 1500.0
+
+# SQLite parameter limit (safely below 999)
+MAX_SQL_PARAMS = 500
 
 
 @contextmanager
@@ -37,6 +43,49 @@ def get_connection():
         raise
     finally:
         conn.close()
+
+
+def _compute_phonetic_codes(name: str) -> tuple[str, str]:
+    """Compute Double Metaphone phonetic codes for a name.
+    Returns (primary_code, secondary_code).
+    """
+    primary, secondary = doublemetaphone(name)
+    return (primary or "", secondary or "")
+
+
+def update_phonetic_codes(limit: int | None = None) -> int:
+    """Update phonetic codes for names where phonetic_primary is NULL.
+    Returns number of names updated.
+    """
+    with get_connection() as conn:
+        # Get names missing phonetic codes
+        query = """
+            SELECT id, name FROM names
+            WHERE phonetic_primary IS NULL
+            OR phonetic_secondary IS NULL
+        """
+        if limit:
+            query += f" LIMIT {limit}"
+
+        cursor = conn.execute(query)
+        rows = cursor.fetchall()
+
+        updated = 0
+        for row in rows:
+            name_id, name = row
+            primary, secondary = _compute_phonetic_codes(name)
+            conn.execute(
+                """
+                UPDATE names
+                SET phonetic_primary = ?, phonetic_secondary = ?
+                WHERE id = ?
+                """,
+                (primary, secondary, name_id),
+            )
+            updated += 1
+
+        logger.info(f"Updated phonetic codes for {updated} names")
+        return updated
 
 
 def init_database():
@@ -57,6 +106,8 @@ def init_database():
                 origin_region TEXT,
                 origin_confidence REAL,
                 origin_classified_at TIMESTAMP,
+                phonetic_primary TEXT,
+                phonetic_secondary TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
@@ -98,23 +149,74 @@ def init_database():
             )
         """)
 
+        # Model state table for Bradley-Terry model
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS model_state (
+                id INTEGER PRIMARY KEY,
+                feature_weights BLOB NOT NULL,
+                uncertainty_matrix BLOB NOT NULL,
+                training_samples INTEGER DEFAULT 0,
+                feature_names_json TEXT NOT NULL,
+                last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
+        # Comparisons table for tracking user preferences
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS comparisons (
+                id INTEGER PRIMARY KEY,
+                name_a_id INTEGER NOT NULL REFERENCES names(id),
+                name_b_id INTEGER NOT NULL REFERENCES names(id),
+                preference INTEGER NOT NULL CHECK(preference IN (-1, 0, 1)),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(name_a_id, name_b_id, preference)  -- Prevent duplicate comparisons
+            )
+        """)
+
+        # Ensure phonetic columns exist (migration for existing databases)
+        cursor = conn.execute("PRAGMA table_info(names)")
+        columns = [row[1] for row in cursor.fetchall()]
+        if "phonetic_primary" not in columns:
+            conn.execute("ALTER TABLE names ADD COLUMN phonetic_primary TEXT")
+            logger.debug("Added phonetic_primary column")
+        if "phonetic_secondary" not in columns:
+            conn.execute("ALTER TABLE names ADD COLUMN phonetic_secondary TEXT")
+            logger.debug("Added phonetic_secondary column")
+
+        # Update phonetic codes for existing names if missing
+        update_phonetic_codes()
+
         # Create indexes
         conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_names_gender ON names(gender)"
+            "CREATE INDEX IF NOT EXISTS idx_names_gender ON names(gender)",
         )
         conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_names_origin "
-            "ON names(origin_region)"
+            "CREATE INDEX IF NOT EXISTS idx_names_origin ON names(origin_region)",
         )
         conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_ratings_rating ON ratings(rating)"
+            "CREATE INDEX IF NOT EXISTS idx_ratings_rating ON ratings(rating)",
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_names_phonetic_primary ON names(phonetic_primary)",
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_names_phonetic_secondary ON names(phonetic_secondary)",
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_comparisons_name_a ON comparisons(name_a_id)",
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_comparisons_name_b ON comparisons(name_b_id)",
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_comparisons_created ON comparisons(created_at)",
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_model_state_updated ON model_state(last_updated)",
         )
 
         # Insert default region mapping if empty
-        if (
-            conn.execute("SELECT COUNT(*) FROM region_mapping").fetchone()[0]
-            == 0
-        ):
+        if conn.execute("SELECT COUNT(*) FROM region_mapping").fetchone()[0] == 0:
             _insert_default_region_mapping(conn)
 
         logger.info("Database initialized successfully")
@@ -311,15 +413,13 @@ def _insert_default_region_mapping(conn):
         mappings.append(("Oceanian", country))
 
     conn.executemany(
-        "INSERT OR IGNORE INTO region_mapping "
-        "(region, nationality) VALUES (?, ?)",
+        "INSERT OR IGNORE INTO region_mapping (region, nationality) VALUES (?, ?)",
         mappings,
     )
 
 
 def sync_names_with_submodule(submodule_path: Path = Path("godkendtefornavne")):
-    """
-    Sync names from submodule JSON file to database.
+    """Sync names from submodule JSON file to database.
     Only inserts new names that don't exist in the database.
     Tracks submodule commit hash to avoid redundant processing.
     """
@@ -334,6 +434,7 @@ def sync_names_with_submodule(submodule_path: Path = Path("godkendtefornavne")):
     try:
         result = subprocess.run(
             ["git", "-C", str(submodule_path), "rev-parse", "HEAD"],
+            check=False,
             capture_output=True,
             text=True,
             timeout=5,
@@ -346,7 +447,7 @@ def sync_names_with_submodule(submodule_path: Path = Path("godkendtefornavne")):
     # Check if we've already synced this commit
     with get_connection() as conn:
         last_sync = conn.execute(
-            "SELECT commit_hash FROM source_versions ORDER BY id DESC LIMIT 1"
+            "SELECT commit_hash FROM source_versions ORDER BY id DESC LIMIT 1",
         ).fetchone()
 
         if last_sync and last_sync[0] == current_commit:
@@ -393,11 +494,15 @@ def sync_names_with_submodule(submodule_path: Path = Path("godkendtefornavne")):
             gender = gender_map.get(gender_raw.lower())
         if not gender:
             logger.warning(
-                f"Invalid gender '{gender_raw}' for name '{name}', skipping"
+                f"Invalid gender '{gender_raw}' for name '{name}', skipping",
             )
             continue
         if is_valid_name(name):
-            valid_names.append((name, gender))
+            # Compute phonetic codes for similarity matching
+            primary, secondary = doublemetaphone(name)
+            primary = primary or ""
+            secondary = secondary or ""
+            valid_names.append((name, gender, primary, secondary))
 
     logger.debug(f"Filtered {len(valid_names)} valid names")
     # Insert new names
@@ -406,7 +511,7 @@ def sync_names_with_submodule(submodule_path: Path = Path("godkendtefornavne")):
         if valid_names:
             before = conn.total_changes
             conn.executemany(
-                "INSERT OR IGNORE INTO names (name, gender) VALUES (?, ?)",
+                "INSERT OR IGNORE INTO names (name, gender, phonetic_primary, phonetic_secondary) VALUES (?, ?, ?, ?)",
                 valid_names,
             )
             inserted_count = conn.total_changes - before
@@ -422,11 +527,11 @@ def sync_names_with_submodule(submodule_path: Path = Path("godkendtefornavne")):
     return inserted_count
 
 
-def get_latest_submodule_version() -> Optional[Dict[str, Any]]:
+def get_latest_submodule_version() -> dict[str, Any] | None:
     """Get the latest submodule version (commit hash) from source_versions."""
     with get_connection() as conn:
         cursor = conn.execute(
-            "SELECT commit_hash FROM source_versions ORDER BY id DESC LIMIT 1"
+            "SELECT commit_hash FROM source_versions ORDER BY id DESC LIMIT 1",
         )
         row = cursor.fetchone()
         if row:
@@ -444,7 +549,7 @@ def update_submodule_version(commit_hash: str, names_count: int):
         )
 
 
-def get_unclassified_names(limit: Optional[int] = None) -> List[Dict[str, Any]]:
+def get_unclassified_names(limit: int | None = None) -> list[dict[str, Any]]:
     """Get names that haven't been classified with origin region."""
     with get_connection() as conn:
         query = """
@@ -475,11 +580,40 @@ def update_name_origin(name_id: int, region: str, confidence: float):
         )
 
 
-def get_names_by_filters(
-    gender: Optional[str] = None, origins: Optional[List[str]] = None
-) -> List[str]:
+def get_names_with_origins(
+    confidence_threshold: float = 0.5,
+) -> dict[str, tuple[str, float, str, str]]:
+    """Get dictionary of known name -> (region, confidence, phonetic_primary, phonetic_secondary)
+    for names with origin classification above confidence threshold.
+
+    Useful for phonetic similarity classification.
     """
-    Get names filtered by gender and origin regions.
+    with get_connection() as conn:
+        cursor = conn.execute(
+            """
+            SELECT name, origin_region, origin_confidence, phonetic_primary, phonetic_secondary
+            FROM names
+            WHERE origin_region IS NOT NULL
+            AND origin_confidence >= ?
+            """,
+            (confidence_threshold,),
+        )
+        result = {}
+        for row in cursor:
+            result[row["name"]] = (
+                row["origin_region"],
+                row["origin_confidence"],
+                row["phonetic_primary"] or "",
+                row["phonetic_secondary"] or "",
+            )
+        return result
+
+
+def get_names_by_filters(
+    gender: str | None = None,
+    origins: list[str] | None = None,
+) -> list[str]:
+    """Get names filtered by gender and origin regions.
     Returns list of names.
     """
     query = "SELECT name FROM names WHERE 1=1"
@@ -495,10 +629,7 @@ def get_names_by_filters(
         if "International" in origins:
             # Include both NULL and specified regions
             placeholders = ", ".join(["?"] * (len(origins) - 1))
-            query += (
-                f" AND (origin_region IN ({placeholders}) "
-                f"OR origin_region IS NULL)"
-            )
+            query += f" AND (origin_region IN ({placeholders}) OR origin_region IS NULL)"
             params.extend([o for o in origins if o != "International"])
         else:
             placeholders = ", ".join(["?"] * len(origins))
@@ -512,9 +643,8 @@ def get_names_by_filters(
         return [row[0] for row in cursor.fetchall()]
 
 
-def get_names_by_gender() -> Dict[str, List[str]]:
-    """
-    Get names categorized by gender.
+def get_names_by_gender() -> dict[str, list[str]]:
+    """Get names categorized by gender.
     Returns dict with keys: "Male", "Female", "Unisex", "All".
     Unisex names are included in both "Male" and "Female" categories.
     """
@@ -557,9 +687,10 @@ def get_names_by_gender() -> Dict[str, List[str]]:
         return result
 
 
-def get_all_origin_regions() -> List[str]:
+def get_all_origin_regions() -> list[str]:
     """Get distinct origin regions from names table,
-    including NULL as 'International'."""
+    including NULL as 'International'.
+    """
     with get_connection() as conn:
         cursor = conn.execute("""
             SELECT DISTINCT
@@ -573,7 +704,7 @@ def get_all_origin_regions() -> List[str]:
         return [row[0] for row in cursor.fetchall()]
 
 
-def get_ratings() -> Dict[str, float]:
+def get_ratings() -> dict[str, float]:
     """Get all ratings as name -> rating dictionary."""
     with get_connection() as conn:
         cursor = conn.execute("""
@@ -589,7 +720,8 @@ def update_rating(name: str, rating: float):
     with get_connection() as conn:
         # Get name_id
         name_id = conn.execute(
-            "SELECT id FROM names WHERE name = ?", (name,)
+            "SELECT id FROM names WHERE name = ?",
+            (name,),
         ).fetchone()
         if not name_id:
             raise ValueError(f"Name not found: {name}")
@@ -620,12 +752,44 @@ def update_rating_with_match(name: str, rating: float):
     update_rating(name, rating)
 
 
-def update_ratings_batch(ratings_dict: Dict[str, float]) -> None:
-    """
-    Update multiple ratings efficiently in a single transaction.
+def update_rating_value(name: str, rating: float):
+    """Update rating value without incrementing match count."""
+    with get_connection() as conn:
+        # Get name_id
+        name_id = conn.execute(
+            "SELECT id FROM names WHERE name = ?",
+            (name,),
+        ).fetchone()
+        if not name_id:
+            raise ValueError(f"Name not found: {name}")
+
+        name_id = name_id[0]
+
+        # Update or insert rating, preserving existing matches or default 0
+        conn.execute(
+            """
+            INSERT OR REPLACE INTO ratings
+            (name_id, rating, matches, last_updated)
+            VALUES (
+                ?,
+                ?,
+                COALESCE((
+                    SELECT matches FROM ratings
+                    WHERE name_id = ?
+                ), 0),
+                CURRENT_TIMESTAMP
+            )
+        """,
+            (name_id, rating, name_id),
+        )
+
+
+def update_ratings_batch(ratings_dict: dict[str, float]) -> None:
+    """Update multiple ratings efficiently in a single transaction.
 
     Args:
         ratings_dict: Dictionary mapping name -> new rating
+
     """
     if not ratings_dict:
         return
@@ -634,7 +798,8 @@ def update_ratings_batch(ratings_dict: Dict[str, float]) -> None:
         for name, rating in ratings_dict.items():
             # Get name_id
             name_id = conn.execute(
-                "SELECT id FROM names WHERE name = ?", (name,)
+                "SELECT id FROM names WHERE name = ?",
+                (name,),
             ).fetchone()
             if not name_id:
                 logger.warning(f"Name not found in database: {name}")
@@ -661,6 +826,48 @@ def update_ratings_batch(ratings_dict: Dict[str, float]) -> None:
             )
 
 
+def update_ratings_batch_values(ratings_dict: dict[str, float]) -> None:
+    """Update multiple ratings efficiently without incrementing match counts.
+
+    Args:
+        ratings_dict: Dictionary mapping name -> new rating
+
+    """
+    if not ratings_dict:
+        return
+
+    with get_connection() as conn:
+        for name, rating in ratings_dict.items():
+            # Get name_id
+            name_id = conn.execute(
+                "SELECT id FROM names WHERE name = ?",
+                (name,),
+            ).fetchone()
+            if not name_id:
+                logger.warning(f"Name not found in database: {name}")
+                continue
+
+            name_id = name_id[0]
+
+            # Update or insert rating, preserving existing matches
+            conn.execute(
+                """
+                INSERT OR REPLACE INTO ratings
+                (name_id, rating, matches, last_updated)
+                VALUES (
+                    ?,
+                    ?,
+                    COALESCE((
+                        SELECT matches FROM ratings
+                        WHERE name_id = ?
+                    ), 0),
+                    CURRENT_TIMESTAMP
+                )
+            """,
+                (name_id, rating, name_id),
+            )
+
+
 def save_user_setting(key: str, value: str):
     """Save a user setting."""
     with get_connection() as conn:
@@ -674,21 +881,19 @@ def load_user_setting(key: str, default: str = "") -> str:
     """Load a user setting."""
     with get_connection() as conn:
         cursor = conn.execute(
-            "SELECT value FROM user_settings WHERE key = ?", (key,)
+            "SELECT value FROM user_settings WHERE key = ?",
+            (key,),
         )
         row = cursor.fetchone()
         return row[0] if row else default
 
 
-
-
-
-def get_stats() -> Dict[str, Any]:
+def get_stats() -> dict[str, Any]:
     """Get database statistics."""
     with get_connection() as conn:
         total_names = conn.execute("SELECT COUNT(*) FROM names").fetchone()[0]
         classified_names = conn.execute(
-            "SELECT COUNT(*) FROM names WHERE origin_region IS NOT NULL"
+            "SELECT COUNT(*) FROM names WHERE origin_region IS NOT NULL",
         ).fetchone()[0]
         rated_names = conn.execute("SELECT COUNT(*) FROM ratings").fetchone()[0]
 
@@ -716,6 +921,79 @@ def get_stats() -> Dict[str, Any]:
             "rated_names": rated_names,
             "origin_distribution": origin_dist,
         }
+
+
+def get_comparison_count(name: str) -> int:
+    """Get number of comparisons involving a name."""
+    with get_connection() as conn:
+        # Get name ID
+        cursor = conn.execute("SELECT id FROM names WHERE name = ?", (name,))
+        row = cursor.fetchone()
+        if not row:
+            return 0
+        name_id = row[0]
+
+        # Count comparisons where name appears as name_a or name_b
+        cursor = conn.execute(
+            """
+            SELECT COUNT(*) FROM comparisons
+            WHERE name_a_id = ? OR name_b_id = ?
+            """,
+            (name_id, name_id),
+        )
+        return cursor.fetchone()[0]
+
+
+def get_name_details_batch(
+    names: list[str],
+) -> list[tuple[str | None, str | None]]:
+    """Get gender and origin_region for multiple names in batch.
+    Returns list of (gender, origin_region) tuples.
+    """
+    if not names:
+        return []
+
+    # Process in chunks to avoid SQL parameter limit
+    chunk_size = MAX_SQL_PARAMS
+    result = []
+
+    for i in range(0, len(names), chunk_size):
+        chunk = names[i : i + chunk_size]
+
+        with get_connection() as conn:
+            placeholders = ", ".join(["?"] * len(chunk))
+            query = f"""
+                SELECT name, gender, origin_region FROM names
+                WHERE name IN ({placeholders})
+            """
+            cursor = conn.execute(query, chunk)
+            rows = cursor.fetchall()
+
+            # Create mapping for fast lookup
+            details_map = {row[0]: (row[1], row[2]) for row in rows}
+
+            # Append results for this chunk in order
+            for name in chunk:
+                if name in details_map:
+                    gender, origin = details_map[name]
+                    result.append((gender, origin))
+                else:
+                    result.append((None, None))
+
+    return result
+
+
+def initialize_ratings(names: list[str]) -> dict[str, float]:
+    """Initialize ratings for a list of names with default score.
+
+    Args:
+        names: List of names
+
+    Returns:
+        Dictionary mapping name -> INITIAL_SCORE
+
+    """
+    return dict.fromkeys(names, INITIAL_SCORE)
 
 
 if __name__ == "__main__":

@@ -1,6 +1,4 @@
-"""
-Tests for st_name_ranking.database module.
-"""
+"""Tests for st_name_ranking.database module."""
 
 import json
 
@@ -67,7 +65,7 @@ class TestDatabaseInitialization:
 
             # Check some expected regions exist
             cursor.execute(
-                "SELECT region FROM region_mapping WHERE nationality = 'Denmark'"
+                "SELECT region FROM region_mapping WHERE nationality = 'Denmark'",
             )
             result = cursor.fetchone()
             assert result is not None
@@ -150,7 +148,8 @@ class TestNameOperations:
             assert result[0] == "Female"
 
             cursor.execute(
-                "SELECT gender FROM names WHERE name = ?", ("Peter",)
+                "SELECT gender FROM names WHERE name = ?",
+                ("Peter",),
             )
             result = cursor.fetchone()
             assert result[0] == "Male"
@@ -494,7 +493,9 @@ class TestSyncOperations:
     """Tests for sync operations with submodule."""
 
     def test_sync_names_with_submodule(
-        self, mock_submodule_path, initialized_db
+        self,
+        mock_submodule_path,
+        initialized_db,
     ):
         """Test syncing names from submodule directory."""
         from unittest.mock import patch
@@ -525,7 +526,7 @@ class TestSyncOperations:
 
             # Sync names with mock path
             result = sync_names_with_submodule(
-                submodule_path=mock_submodule_path
+                submodule_path=mock_submodule_path,
             )
             print(f"sync result: {result}")
             assert isinstance(result, int)

@@ -1,36 +1,37 @@
-"""
-UI rendering functions for the name ranking application.
-"""
+"""UI rendering functions for the name ranking application."""
 
 import logging
-from typing import List, Literal, Optional, Union
+from typing import Literal
 
 import pandas as pd
 import streamlit as st
 
-from st_name_ranking.elo import INITIAL_RATING
+from st_name_ranking.database import INITIAL_SCORE
 from st_name_ranking.similarity import (
     get_string_similarity_scores,
     get_vector_similarity_scores,
     load_embedding_model,
 )
 from st_name_ranking.utils import (
+    get_names_features,
+    select_candidate_batch,
     select_candidates,
-    update_elo_and_save,
-    update_elo_draw_and_save,
+    update_preference_and_save,
+    update_preference_draw_and_save,
 )
 
 logger = logging.getLogger(__name__)
 
 
 def display_name_with_rating(
-    name: str, rating: float, delta: Optional[Union[int, float, str]] = None
+    name: str,
+    rating: float,
+    delta: float | str | None = None,
 ) -> None:
-    """
-    Display name much larger than rating using st.metric with custom styling.
+    """Display name much larger than rating using st.metric with custom styling.
     CSS is injected in render_tournament to make the value (name) larger
     and label (rating) smaller.
-    delta: difference in Elo compared to opponent (positive if higher,
+    delta: difference in preference score compared to opponent (positive if higher,
     negative if lower).
     """
     # Format delta for display
@@ -48,17 +49,35 @@ def display_name_with_rating(
     st.metric(value=name, label=f"{rating:.0f}", delta=delta_str, border=True)
 
 
-def render_tournament(names: List[str]) -> None:
+def render_tournament(names: list[str]) -> None:
     logger.debug("Rendering tournament with %d names", len(names))
-    st.header("Elo Rating Tournament")
+    st.header("Name Ranking Tournament")
     st.write(f"Comparing {len(names)} names")
     st.caption(
         "💡 **Keyboard shortcuts**: Left arrow (←) for left name, "
-        "Right arrow (→) for right name, Up arrow (↑) for draw"
+        "Right arrow (→) for right name, Up arrow (↑) for draw",
     )
 
     # Create set for efficient membership tests
     names_set = set(names)
+
+    # Precompute features for filtered names if needed
+    if (
+        "filtered_names" not in st.session_state
+        or "filtered_features" not in st.session_state
+        or tuple(st.session_state.filtered_names) != tuple(names)
+    ):
+        logger.debug("Computing features for %d filtered names", len(names))
+        features_matrix = get_names_features(names)
+        st.session_state.filtered_names = names.copy()
+        st.session_state.filtered_features = features_matrix
+        st.session_state.candidate_queue = []  # Clear queue because filtered names changed
+    else:
+        features_matrix = st.session_state.filtered_features
+
+    # Initialize candidate queue if not exists
+    if "candidate_queue" not in st.session_state:
+        st.session_state.candidate_queue = []
 
     # Ensure candidates are in current filtered names, reset if not
     if (
@@ -67,9 +86,28 @@ def render_tournament(names: List[str]) -> None:
         or not st.session_state.candidate_a
         or not st.session_state.candidate_b
     ):
-        c_a, c_b = select_candidates(names)
-        st.session_state.candidate_a = c_a
-        st.session_state.candidate_b = c_b
+        # If queue has pairs, use them first
+        if st.session_state.candidate_queue:
+            c_a, c_b = st.session_state.candidate_queue.pop(0)
+            st.session_state.candidate_a = c_a
+            st.session_state.candidate_b = c_b
+        else:
+            # Generate a batch of pairs
+            batch = select_candidate_batch(names, features_matrix, batch_size=3)
+            # Filter pairs where both names are in current filtered set
+            valid_batch = [(a, b) for a, b in batch if a in names_set and b in names_set]
+            if valid_batch:
+                # Pop first pair for immediate display
+                c_a, c_b = valid_batch.pop(0)
+                st.session_state.candidate_a = c_a
+                st.session_state.candidate_b = c_b
+                # Store remaining pairs in queue
+                st.session_state.candidate_queue = valid_batch
+            else:
+                # Fallback to single pair selection
+                c_a, c_b = select_candidates(names, features_matrix)
+                st.session_state.candidate_a = c_a
+                st.session_state.candidate_b = c_b
 
     # Inject CSS for metric styling and equal column heights
     st.markdown(
@@ -117,10 +155,12 @@ def render_tournament(names: List[str]) -> None:
 
     # Get both ratings before displaying
     rating_a = st.session_state.ratings.get(
-        st.session_state.candidate_a, INITIAL_RATING
+        st.session_state.candidate_a,
+        INITIAL_SCORE,
     )
     rating_b = st.session_state.ratings.get(
-        st.session_state.candidate_b, INITIAL_RATING
+        st.session_state.candidate_b,
+        INITIAL_SCORE,
     )
 
     # Calculate rating differences for delta display
@@ -129,14 +169,17 @@ def render_tournament(names: List[str]) -> None:
 
     with col_left:
         display_name_with_rating(
-            st.session_state.candidate_a, rating_a, delta=delta_a
+            st.session_state.candidate_a,
+            rating_a,
+            delta=delta_a,
         )
 
         # Centered button container
         button_container = st.container()
         with button_container:
             st.markdown(
-                "<div style='text-align: center'>", unsafe_allow_html=True
+                "<div style='text-align: center'>",
+                unsafe_allow_html=True,
             )
             button_clicked = st.button(
                 f"👈 Prefer {st.session_state.candidate_a}",
@@ -144,34 +187,49 @@ def render_tournament(names: List[str]) -> None:
                 width="stretch",
                 type="primary",
                 shortcut="Left",
-                help=(
-                    f"Select {st.session_state.candidate_a} as preferred "
-                    "(Left arrow key)"
-                ),
+                help=(f"Select {st.session_state.candidate_a} as preferred (Left arrow key)"),
             )
             st.markdown("</div>", unsafe_allow_html=True)
 
         if button_clicked:
-            update_elo_and_save(
+            update_preference_and_save(
                 st.session_state.ratings,
                 st.session_state.candidate_a,
                 st.session_state.candidate_b,
             )
-            st.session_state.candidate_a, st.session_state.candidate_b = (
-                select_candidates(names)
-            )
+            # Clear queue because model has changed
+            st.session_state.candidate_queue = []
+            # Generate new batch of pairs
+            batch = select_candidate_batch(names, features_matrix, batch_size=3)
+            # Filter valid pairs (should be all)
+            valid_batch = [(a, b) for a, b in batch if a in names_set and b in names_set]
+            if valid_batch:
+                # Pop first pair for immediate display
+                c_a, c_b = valid_batch.pop(0)
+                st.session_state.candidate_a = c_a
+                st.session_state.candidate_b = c_b
+                # Store remaining pairs in queue
+                st.session_state.candidate_queue = valid_batch
+            else:
+                # Fallback to single pair selection
+                c_a, c_b = select_candidates(names, features_matrix)
+                st.session_state.candidate_a = c_a
+                st.session_state.candidate_b = c_b
             st.rerun()
 
     with col_right:
         display_name_with_rating(
-            st.session_state.candidate_b, rating_b, delta=delta_b
+            st.session_state.candidate_b,
+            rating_b,
+            delta=delta_b,
         )
 
         # Centered button container (same as left side)
         button_container = st.container()
         with button_container:
             st.markdown(
-                "<div style='text-align: center'>", unsafe_allow_html=True
+                "<div style='text-align: center'>",
+                unsafe_allow_html=True,
             )
             button_clicked = st.button(
                 f"Prefer {st.session_state.candidate_b} 👉",
@@ -179,22 +237,34 @@ def render_tournament(names: List[str]) -> None:
                 width="stretch",
                 type="primary",
                 shortcut="Right",
-                help=(
-                    f"Select {st.session_state.candidate_b} as preferred "
-                    "(Right arrow key)"
-                ),
+                help=(f"Select {st.session_state.candidate_b} as preferred (Right arrow key)"),
             )
             st.markdown("</div>", unsafe_allow_html=True)
 
         if button_clicked:
-            update_elo_and_save(
+            update_preference_and_save(
                 st.session_state.ratings,
                 st.session_state.candidate_b,
                 st.session_state.candidate_a,
             )
-            st.session_state.candidate_a, st.session_state.candidate_b = (
-                select_candidates(names)
-            )
+            # Clear queue because model has changed
+            st.session_state.candidate_queue = []
+            # Generate new batch of pairs
+            batch = select_candidate_batch(names, features_matrix, batch_size=3)
+            # Filter valid pairs (should be all)
+            valid_batch = [(a, b) for a, b in batch if a in names_set and b in names_set]
+            if valid_batch:
+                # Pop first pair for immediate display
+                c_a, c_b = valid_batch.pop(0)
+                st.session_state.candidate_a = c_a
+                st.session_state.candidate_b = c_b
+                # Store remaining pairs in queue
+                st.session_state.candidate_queue = valid_batch
+            else:
+                # Fallback to single pair selection
+                c_a, c_b = select_candidates(names, features_matrix)
+                st.session_state.candidate_a = c_a
+                st.session_state.candidate_b = c_b
             st.rerun()
 
     # Draw button centered below both names
@@ -211,26 +281,39 @@ def render_tournament(names: List[str]) -> None:
 
     if draw_clicked:
         st.toast("you chose a draw!", duration="long")
-        update_elo_draw_and_save(
+        update_preference_draw_and_save(
             st.session_state.ratings,
             st.session_state.candidate_a,
             st.session_state.candidate_b,
         )
-        st.session_state.candidate_a, st.session_state.candidate_b = (
-            select_candidates(names)
-        )
+        # Clear queue because model has changed
+        st.session_state.candidate_queue = []
+        # Generate new batch of pairs
+        batch = select_candidate_batch(names, features_matrix, batch_size=3)
+        # Filter valid pairs (should be all)
+        valid_batch = [(a, b) for a, b in batch if a in names_set and b in names_set]
+        if valid_batch:
+            # Pop first pair for immediate display
+            c_a, c_b = valid_batch.pop(0)
+            st.session_state.candidate_a = c_a
+            st.session_state.candidate_b = c_b
+            # Store remaining pairs in queue
+            st.session_state.candidate_queue = valid_batch
+        else:
+            # Fallback to single pair selection
+            c_a, c_b = select_candidates(names, features_matrix)
+            st.session_state.candidate_a = c_a
+            st.session_state.candidate_b = c_b
         st.rerun()
 
     st.divider()
     st.subheader("Current Top 10")
 
-    filtered_ratings = {
-        name: rating
-        for name, rating in st.session_state.ratings.items()
-        if name in names_set
-    }
+    filtered_ratings = {name: rating for name, rating in st.session_state.ratings.items() if name in names_set}
     sorted_ratings = sorted(
-        filtered_ratings.items(), key=lambda x: x[1], reverse=True
+        filtered_ratings.items(),
+        key=lambda x: x[1],
+        reverse=True,
     )
     df = pd.DataFrame(sorted_ratings[:10], columns=["Name", "Rating"])
     st.dataframe(
@@ -244,17 +327,18 @@ def render_tournament(names: List[str]) -> None:
                 format="%d",
                 pinned=True,
                 width="small",
-            )
+            ),
         },
     )
 
 
-def render_similarity(names: List[str]) -> None:
+def render_similarity(names: list[str]) -> None:
     logger.debug("Rendering similarity search with %d names", len(names))
     st.header("Similarity Search")
 
     search_type: Literal["String", "Vector"] = st.radio(
-        "Search Method", ["String (Levenshtein)", "Vector (LLM Embedding)"]
+        "Search Method",
+        ["String (Levenshtein)", "Vector (LLM Embedding)"],
     )
 
     query = st.text_input("Reference Name", value="Alma")
@@ -273,7 +357,10 @@ def render_similarity(names: List[str]) -> None:
 
             with st.spinner("Computing Similarities..."):
                 results = get_vector_similarity_scores(
-                    model, query, names, limit=10
+                    model,
+                    query,
+                    names,
+                    limit=10,
                 )
 
             st.dataframe(

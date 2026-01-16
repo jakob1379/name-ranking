@@ -1,25 +1,27 @@
 # Name Ranking Application
 
-A Streamlit-based web application for ranking Danish names using Elo rating
-system, with similarity search and origin classification.
+A Streamlit-based web application for ranking Danish names using Bayesian
+preference learning with active learning, with similarity search and origin
+classification.
 
-## ✨ Features
+## Features
 
-### 🏆 Elo Rating Tournament
+### Name Ranking Tournament
 
-- Compare two random names side-by-side
+- Compare two names selected by active learning (Thompson sampling)
 - Vote for preferred name or mark as draw
-- Real-time Elo rating updates
-- Top 10 rankings display
-- Keyboard shortcuts (← → ↑ arrows)
+- Real-time Bayesian preference updates
+- Top 10 rankings display based on learned preferences
+- Keyboard shortcuts (arrow keys)
 
-### 🔍 Similarity Search
+### Similarity Search
 
 - **String similarity** (Levenshtein distance) for name matching
 - **Vector similarity** (LLM embeddings) for semantic matching
-- Find names similar to a reference name
+- **Phonetic similarity** (Double Metaphone) for phonetic name matching
+- Find names similar to a reference name using multiple criteria
 
-### 🌍 Origin Classification
+### Origin Classification
 
 - **Optional classification** - runs only when explicitly requested
 - **Incremental processing** - classify 100 names at a time or all at once
@@ -29,7 +31,7 @@ system, with similarity search and origin classification.
 - Batch processing for unclassified names
 - **Progress tracking** - shows classification percentage in UI
 
-### ⚙️ Filtering & Management
+### Filtering & Management
 
 - Gender filtering (Male, Female, Unisex, All)
 - Origin region filtering (Nordic, European, International, etc.)
@@ -37,7 +39,35 @@ system, with similarity search and origin classification.
 - Git submodule integration for name data updates
 - Ratings persistence with SQLite
 
-### 📊 Performance Optimizations
+### Intelligent Pair Selection
+
+- **Comparison tracking** - records every pairwise vote to understand name
+  popularity
+- **Phonetic similarity** - uses Double Metaphone algorithm to find phonetically
+  similar names
+- **Smart candidate selection** - prioritizes names with fewer comparisons and
+  phonetically interesting pairs
+- **Automatic metadata collection** - builds a feature dataset for Bayesian
+  preference learning
+
+### Active Learning with Bayesian Preference Modeling
+
+- **Feature-based Bradley-Terry model** - replaces ELO with Bayesian preference
+  learning using phonetic, linguistic, and metadata features
+- **Thompson sampling** - selects maximally informative name pairs for human
+  comparison
+- **Multi-dimensional feature extraction** - uses Double Metaphone phonetic
+  encoding, syllable counting, vowel ratios, gender, and origin features
+- **Bayesian updates** - uses Laplace approximation for efficient posterior
+  updates with each comparison
+- **Uncertainty quantification** - maintains covariance matrix to model
+  uncertainty in preferences
+- **Database persistence** - stores model state in SQLite for consistent
+  sessions
+- **Preference scores** - uses Bayesian preference scores (1500 ± 500 scale) for
+  UI display
+
+### Performance Optimizations
 
 - **Fast startup** - no automatic sync on app launch
 - **Separated operations** - manual control over sync and classification
@@ -47,7 +77,7 @@ system, with similarity search and origin classification.
 - **Selective logging** - suppresses debug noise from watchdog and sqlite3
 - **Fallback mechanisms** for error recovery
 
-## 🚀 Quickstart
+## Quickstart
 
 ### Prerequisites
 
@@ -65,10 +95,27 @@ system, with similarity search and origin classification.
 
 ### Database Setup
 
-Initialize the database with names and optional origin classification:
+The application automatically initializes the database schema on first run
+(creates tables if they don't exist). However, you need to populate the database
+with names and optionally run origin classification.
+
+#### Option 1: Automatic Setup (Recommended for first-time users)
+
+The application can handle setup automatically when you first run it:
+
+1. **Schema Initialization**: Database tables are created automatically when the
+   app starts
+2. **Name Loading**: Click "Sync Names" in the sidebar to load names from the
+   submodule
+3. **Origin Classification** (Optional): Click "Classify Origins" in the sidebar
+   to process name nationalities
+
+#### Option 2: Command Line Setup (Advanced control)
+
+For more control, use the CLI before running the application:
 
 ```bash
-# Initialize database (schema + sync names + migrate ratings)
+# Initialize database (schema + sync names + optional classification)
 uv run name-db init
 
 # Initialize with origin classification
@@ -79,6 +126,13 @@ uv run name-db init      # Initialize database and sync names
 uv run name-db process   # Process data enrichment (origin classification)
 uv run name-db stats     # Show database statistics
 ```
+
+#### What Happens Automatically:
+
+- ✅ Database schema creation (tables, indexes)
+- ✅ Default region mapping insertion
+- ❌ Name sync from submodule (manual via UI or CLI)
+- ❌ Origin classification (manual via UI or CLI)
 
 ### Running the Application
 
@@ -99,23 +153,41 @@ The application will be available at `http://localhost:8501`.
    - **Classify Origins**: Process name nationalities in batches
    - **Filters**: Filter by gender and origin region
 
-## 🛠️ Development
+## Development
 
 ### Project Structure
 
 ```
-st_name_ranking/
-├── main.py              # Streamlit application entry point
-├── database.py          # SQLite database operations
-├── data_loader.py       # Name loading and validation
-├── elo.py              # Elo rating calculations
-├── similarity.py       # Name similarity functions
-├── ui.py              # Streamlit UI components
-├── utils.py           # Utility functions
-├── classify_origins.py # Origin classification (ethnidata integration)
-├── init_database.py   # Database initialization
-├── cli.py            # Typer CLI for database management
-└── __init__.py
+sort-names/
+├── src/
+│   └── st_name_ranking/
+│       ├── main.py              # Streamlit application entry point
+│       ├── database.py          # SQLite database operations (includes pairwise_comparisons and preference score constants)
+│       ├── data_loader.py       # Name loading and validation
+│       ├── similarity.py       # Name similarity functions (string & vector)
+│       ├── phonetic_similarity.py # Double Metaphone phonetic matching
+│       ├── features.py         # Feature extraction for active learning
+│       ├── model.py            # Bayesian preference learning model
+│       ├── ui.py              # Streamlit UI components
+│       ├── utils.py           # Utility functions (smart candidate selection)
+│       ├── classify_origins.py # Origin classification (ethnidata integration)
+│       ├── init_database.py   # Database initialization
+│       ├── cli.py            # Typer CLI for database management
+│       ├── origin_classifier.py # Hierarchical origin classifier
+│       └── __init__.py
+├── scripts/                    # Utility scripts for batch classification, benchmarking, etc.
+│   ├── benchmark_classification.py
+│   ├── check_phonetic.py
+│   ├── classify_1000.py
+│   ├── classify_5000.py
+│   ├── classify_all.py
+│   ├── classify_remaining.py
+│   ├── final_stats.py
+│   └── test_classify.py
+├── tests/                     # Test suite
+├── docs/                      # Documentation
+├── data/                      # Data directory
+└── godkendtefornavne/         # Git submodule with Danish name data
 ```
 
 ### Testing
@@ -182,6 +254,42 @@ CREATE TABLE source_versions (
     commit_hash TEXT NOT NULL,
     synced_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Pairwise comparisons table (for tracking voting patterns)
+CREATE TABLE pairwise_comparisons (
+    id INTEGER PRIMARY KEY,
+    name_a_id INTEGER NOT NULL REFERENCES names(id) ON DELETE CASCADE,
+    name_b_id INTEGER NOT NULL REFERENCES names(id) ON DELETE CASCADE,
+    winner_id INTEGER REFERENCES names(id) ON DELETE CASCADE,
+    is_draw BOOLEAN DEFAULT FALSE,
+    weight REAL DEFAULT 1.0,
+    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    CHECK (name_a_id != name_b_id),
+    CHECK (winner_id IS NULL OR winner_id IN (name_a_id, name_b_id)),
+    CHECK (NOT (is_draw = TRUE AND winner_id IS NOT NULL))
+);
+
+-- Model state table (for active learning)
+CREATE TABLE model_state (
+    id INTEGER PRIMARY KEY,
+    mean_weights BLOB NOT NULL,
+    covariance BLOB NOT NULL,
+    feature_names BLOB NOT NULL,
+    feature_dim INTEGER NOT NULL,
+    training_samples INTEGER DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Comparisons table for preference learning
+CREATE TABLE comparisons (
+    id INTEGER PRIMARY KEY,
+    name_a_id INTEGER NOT NULL REFERENCES names(id),
+    name_b_id INTEGER NOT NULL REFERENCES names(id),
+    preference INTEGER NOT NULL CHECK(preference IN (-1, 0, 1)),
+    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(name_a_id, name_b_id, preference)
+);
 ```
 
 ### Origin Classification
@@ -198,12 +306,12 @@ can be controlled via:
 **Command Line:**
 
 ```bash
-uv run name-db classify --limit 100    # Test with 100 names
-uv run name-db classify --batch-size 50 # Custom batch size
-uv run name-db classify                 # Classify all names
+uv run name-db process --limit 100    # Test with 100 names
+uv run name-db process --batch-size 50 # Custom batch size
+uv run name-db process                 # Classify all names
 ```
 
-## 📖 Detailed Usage
+## Detailed Usage
 
 ### CLI Reference
 
@@ -213,25 +321,30 @@ The `name-db` CLI provides comprehensive database management:
 # Show all commands
 uv run name-db --help
 
-# Initialize database with options
-uv run name-db init [--classify] [--ratings-path PATH]
+# Initialize database (schema + sync names + optional classification)
+uv run name-db init [--classify]
 
-# Sync names from submodule
-uv run name-db sync
-
-# Migrate ratings from JSON file
-uv run name-db migrate [--ratings-path PATH]
-
-# Classify name origins
-uv run name-db classify [--limit N] [--batch-size N]
+# Process data enrichment (origin classification)
+uv run name-db process [--limit N] [--batch-size N]
 
 # Show database statistics
 uv run name-db stats
+
+# Show active learning model status
+uv run name-db model-status
+
+# Reset active learning model
+uv run name-db model-reset
 ```
+
+**Note**: The `init` command automatically syncs names from the submodule. There
+are no separate `sync` or `migrate` commands. If you need to re-sync names, run
+`init` again (it's idempotent for schema creation).
 
 ### Web Application Workflow
 
-1. **Fast Startup**: Application loads instantly without automatic sync
+1. **Fast Startup**: Application loads instantly with automatic schema
+   initialization (no automatic name sync)
 2. **Manual Control**: Separate buttons for reload, sync, and git updates
 3. **Incremental Processing**: Classify names in batches of 100
 4. **Real-time Progress**: See classification percentage as it processes
@@ -242,12 +355,22 @@ uv run name-db stats
 - **Efficient sync**: Commit hash tracking avoids redundant processing
 - **Bulk inserts**: `executemany` for fast database operations
 - **Selective logging**: Suppresses debug noise for cleaner output
+- **UI responsiveness**: Batch database queries, feature caching, and
+  pre-fetching for instant pair selection
+- **Vectorized computations**: NumPy-optimized pair scoring for active learning
+- **Candidate queue**: Pre-fetches 3 name pairs to eliminate selection latency
 
-## 📝 License
+## Documentation
+
+For detailed technical documentation, including active learning system design,
+architecture, and implementation details, see the [documentation](./docs/)
+directory.
+
+## License
 
 [Add your license here]
 
-## 🙏 Acknowledgments
+## Acknowledgments
 
 - [ethnidata](https://github.com/teyfikoz/ethnidata) for name nationality
   prediction

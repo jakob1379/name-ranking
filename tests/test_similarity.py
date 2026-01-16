@@ -1,6 +1,4 @@
-"""
-Tests for st_name_ranking.similarity module.
-"""
+"""Tests for st_name_ranking.similarity module."""
 
 from unittest.mock import MagicMock, patch
 
@@ -27,13 +25,18 @@ class TestGetStringSimilarityScores:
         ]
 
         results = similarity.get_string_similarity_scores(
-            target, candidates, limit=3
+            target,
+            candidates,
+            limit=3,
         )
 
         # Verify results
         assert results == [("Anna", 100.0), ("Anne", 85.0), ("Annie", 75.0)]
         mock_process.extract.assert_called_once_with(
-            target, candidates, scorer=similarity.fuzz.ratio, limit=3
+            target,
+            candidates,
+            scorer=similarity.fuzz.ratio,
+            limit=3,
         )
 
     def test_empty_candidates(self):
@@ -53,11 +56,16 @@ class TestGetStringSimilarityScores:
         ]
 
         results = similarity.get_string_similarity_scores(
-            target, candidates, limit=2
+            target,
+            candidates,
+            limit=2,
         )
         assert len(results) == 2
         mock_process.extract.assert_called_once_with(
-            target, candidates, scorer=similarity.fuzz.ratio, limit=2
+            target,
+            candidates,
+            scorer=similarity.fuzz.ratio,
+            limit=2,
         )
 
     @patch("st_name_ranking.similarity.process")
@@ -92,7 +100,7 @@ class TestLoadEmbeddingModel:
 
         assert model == mock_model
         mock_sentence_transformer.assert_called_once_with(
-            "paraphrase-multilingual-MiniLM-L12-v2"
+            "paraphrase-multilingual-MiniLM-L12-v2",
         )
 
 
@@ -103,7 +111,9 @@ class TestGetVectorSimilarityScores:
         """Test with empty candidates list."""
         mock_model = MagicMock()
         results = similarity.get_vector_similarity_scores(
-            mock_model, "Anna", []
+            mock_model,
+            "Anna",
+            [],
         )
         assert results == []
         # Model should not be called
@@ -121,7 +131,7 @@ class TestGetVectorSimilarityScores:
                 [0.1, 0.2, 0.3],  # Same as target -> high similarity
                 [0.4, 0.5, 0.6],  # Different -> lower similarity
                 [-0.1, -0.2, -0.3],  # Opposite direction -> negative similarity
-            ]
+            ],
         )
 
         mock_model.encode.side_effect = [target_embedding, candidate_embeddings]
@@ -139,7 +149,10 @@ class TestGetVectorSimilarityScores:
         candidates = ["Anna", "Anne", "Annie"]
 
         results = similarity.get_vector_similarity_scores(
-            mock_model, target, candidates, limit=2
+            mock_model,
+            target,
+            candidates,
+            limit=2,
         )
 
         # Verify model.encode calls
@@ -177,7 +190,10 @@ class TestGetVectorSimilarityScores:
 
         # Limit larger than candidates
         results = similarity.get_vector_similarity_scores(
-            mock_model, target, candidates, limit=10
+            mock_model,
+            target,
+            candidates,
+            limit=10,
         )
 
         assert len(results) == 2

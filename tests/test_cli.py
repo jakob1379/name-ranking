@@ -1,6 +1,4 @@
-"""
-CLI integration tests for the Name Ranking application.
-"""
+"""CLI integration tests for the Name Ranking application."""
 
 import json
 import tempfile
@@ -28,9 +26,6 @@ def temp_db_path():
     # Clean up
     if db_path.exists():
         db_path.unlink()
-
-
-
 
 
 @pytest.fixture
@@ -146,24 +141,14 @@ def test_cli_init_with_classify(mock_db_path, cli_runner):
         mock_stats.assert_called_once()
 
 
-
-
-
-
-
-
-
-
-
 def test_cli_classify(mock_db_path, cli_runner):
     """Test classify command."""
     # First initialize the database and insert some names
     with (
         patch("st_name_ranking.cli.init_database") as mock_init,
         patch(
-            "st_name_ranking.cli.sync_names_with_submodule"
+            "st_name_ranking.cli.sync_names_with_submodule",
         ) as mock_sync_init,
-
         patch("st_name_ranking.cli.get_stats") as mock_stats_init,
     ):
         mock_init.return_value = None
@@ -200,9 +185,8 @@ def test_cli_classify_with_batch_size(mock_db_path, cli_runner):
     with (
         patch("st_name_ranking.cli.init_database") as mock_init,
         patch(
-            "st_name_ranking.cli.sync_names_with_submodule"
+            "st_name_ranking.cli.sync_names_with_submodule",
         ) as mock_sync_init,
-
         patch("st_name_ranking.cli.get_stats") as mock_stats_init,
     ):
         mock_init.return_value = None
@@ -237,9 +221,8 @@ def test_cli_stats(mock_db_path, cli_runner):
     with (
         patch("st_name_ranking.cli.init_database") as mock_init,
         patch(
-            "st_name_ranking.cli.sync_names_with_submodule"
+            "st_name_ranking.cli.sync_names_with_submodule",
         ) as mock_sync_init,
-
         patch("st_name_ranking.cli.get_stats") as mock_stats_init,
     ):
         mock_init.return_value = None
@@ -279,9 +262,6 @@ def test_cli_stats(mock_db_path, cli_runner):
 
         # Check that stats was called
         mock_stats.assert_called_once()
-
-
-
 
 
 if __name__ == "__main__":

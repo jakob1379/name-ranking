@@ -1,6 +1,4 @@
-"""
-Tests for st_name_ranking.utils module.
-"""
+"""Tests for st_name_ranking.utils module."""
 
 from unittest.mock import MagicMock, patch
 
@@ -17,7 +15,10 @@ class TestPullSubmoduleUpdates:
     @patch("st_name_ranking.utils.st")
     @patch("st_name_ranking.utils.database")
     def test_successful_pull_without_classification(
-        self, mock_db, mock_st, mock_run
+        self,
+        mock_db,
+        mock_st,
+        mock_run,
     ):
         """Test successful submodule pull without origin classification."""
         # Mock subprocess result
@@ -56,7 +57,11 @@ class TestPullSubmoduleUpdates:
     @patch("st_name_ranking.utils.database")
     @patch("time.sleep")
     def test_successful_pull_with_classification(
-        self, mock_sleep, mock_db, mock_st, mock_run
+        self,
+        mock_sleep,
+        mock_db,
+        mock_st,
+        mock_run,
     ):
         """Test successful submodule pull with origin classification."""
         mock_result = MagicMock()
@@ -85,7 +90,7 @@ class TestPullSubmoduleUpdates:
             # Verify classification was attempted
             mock_db.init_database.assert_called()
             classify_origins_mock.classify_all_names.assert_called_once_with(
-                limit=None
+                limit=None,
             )
 
             # Verify sleep was called for reload delay
@@ -228,7 +233,11 @@ class TestSelectCandidates:
         assert utils.select_candidates([]) == ("", "")
         assert utils.select_candidates(["Anna"]) == ("", "")
 
-    def test_select_two_names(self):
+    @patch(
+        "st_name_ranking.utils.database.get_comparison_count",
+        return_value=0,
+    )
+    def test_select_two_names(self, mock_get_comparison_count):
         """Test selecting two different names."""
         names = ["Anna", "Peter", "Maria"]
         np.random.seed(42)  # For reproducibility
@@ -241,7 +250,11 @@ class TestSelectCandidates:
         assert isinstance(a, str)
         assert isinstance(b, str)
 
-    def test_only_two_names(self):
+    @patch(
+        "st_name_ranking.utils.database.get_comparison_count",
+        return_value=0,
+    )
+    def test_only_two_names(self, mock_get_comparison_count):
         """Test when exactly two names are available."""
         names = ["Anna", "Peter"]
         a, b = utils.select_candidates(names)
@@ -264,7 +277,7 @@ class TestSyncNamesFromSubmodule:
         mock_db.init_database.assert_called_once()
         mock_db.sync_names_with_submodule.assert_called_once()
         mock_st.spinner.assert_called_once_with(
-            "Syncing names from submodule..."
+            "Syncing names from submodule...",
         )
         mock_st.toast.assert_called_with(
             "✅ Added 5 new names to database",
@@ -302,94 +315,127 @@ class TestSyncNamesFromSubmodule:
         assert result == 0
 
 
-class TestUpdateEloAndSave:
-    """Tests for update_elo_and_save function."""
+class TestUpdatePreferenceAndSave:
+    """Tests for update_preference_and_save function (uses Bradley-Terry model)."""
 
-    @patch("st_name_ranking.utils.save_ratings")
-    @patch("st_name_ranking.utils.update_elo")
+    @patch("st_name_ranking.utils.database.update_rating_value")
+    @patch("st_name_ranking.utils._compute_rating_for_name")
+    @patch("st_name_ranking.utils.update_model_and_save")
     @patch("st_name_ranking.utils.st")
     def test_successful_update(
-        self, mock_st, mock_update_elo, mock_save_ratings
+        self,
+        mock_st,
+        mock_update_model_and_save,
+        mock_compute_rating,
+        mock_update_rating_value,
     ):
-        """Test successful Elo update and save."""
+        """Test successful model update and save."""
         ratings = {"Anna": 1500.0, "Peter": 1500.0}
-        updated_ratings = {"Anna": 1516.0, "Peter": 1484.0}
-        mock_update_elo.return_value = updated_ratings
+        # Mock computed ratings
+        mock_compute_rating.side_effect = [1516.0, 1484.0]  # winner, loser
 
-        result = utils.update_elo_and_save(ratings, "Anna", "Peter")
+        result = utils.update_preference_and_save(ratings, "Anna", "Peter")
 
-        mock_update_elo.assert_called_once_with(ratings, "Anna", "Peter", 32.0)
-        mock_save_ratings.assert_called_once_with(
-            updated_ratings, names_to_update=["Anna", "Peter"]
-        )
-        assert result == updated_ratings
+        mock_update_model_and_save.assert_called_once_with("Anna", "Peter")
+        # Check compute rating called for both names
+        assert mock_compute_rating.call_count == 2
+        mock_compute_rating.assert_any_call("Anna")
+        mock_compute_rating.assert_any_call("Peter")
+        # Check database updates
+        assert mock_update_rating_value.call_count == 2
+        mock_update_rating_value.assert_any_call("Anna", 1516.0)
+        mock_update_rating_value.assert_any_call("Peter", 1484.0)
+        # Check returned ratings
+        assert result == {"Anna": 1516.0, "Peter": 1484.0}
         # No error toast
         assert not mock_st.toast.called
 
-    @patch("st_name_ranking.utils.save_ratings")
-    @patch("st_name_ranking.utils.update_elo")
+    @patch("st_name_ranking.utils.database.update_rating_value")
+    @patch("st_name_ranking.utils._compute_rating_for_name")
+    @patch("st_name_ranking.utils.update_model_and_save")
     @patch("st_name_ranking.utils.st")
-    def test_save_failure(self, mock_st, mock_update_elo, mock_save_ratings):
-        """Test when save fails (should not break)."""
+    def test_save_failure(
+        self,
+        mock_st,
+        mock_update_model_and_save,
+        mock_compute_rating,
+        mock_update_rating_value,
+    ):
+        """Test when ratings computation fails."""
         ratings = {"Anna": 1500.0, "Peter": 1500.0}
-        updated_ratings = {"Anna": 1516.0, "Peter": 1484.0}
-        mock_update_elo.return_value = updated_ratings
-        mock_save_ratings.side_effect = Exception("Save error")
+        mock_compute_rating.side_effect = Exception("Computation error")
 
-        result = utils.update_elo_and_save(ratings, "Anna", "Peter")
+        result = utils.update_preference_and_save(ratings, "Anna", "Peter")
 
-        # Should still return updated ratings
-        assert result == updated_ratings
-        # Should show warning toast
-        mock_st.toast.assert_called_with(
-            "Failed to save ratings: Save error",
-            icon="⚠️",
-        )
+        # Should return original ratings as fallback
+        assert result == ratings
+        # Should still call update_model_and_save
+        mock_update_model_and_save.assert_called_once_with("Anna", "Peter")
+        # compute_rating was called (and failed)
+        assert mock_compute_rating.call_count == 1
+        # database.update_rating_value should NOT be called
+        assert mock_update_rating_value.call_count == 0
 
 
-class TestUpdateEloDrawAndSave:
-    """Tests for update_elo_draw_and_save function."""
+class TestUpdatePreferenceDrawAndSave:
+    """Tests for update_preference_draw_and_save function (uses Bradley-Terry model)."""
 
-    @patch("st_name_ranking.utils.save_ratings")
-    @patch("st_name_ranking.utils.update_elo_draw")
+    @patch("st_name_ranking.utils.database.update_rating_value")
+    @patch("st_name_ranking.utils._compute_rating_for_name")
+    @patch("st_name_ranking.utils.update_model_draw_and_save")
     @patch("st_name_ranking.utils.st")
     def test_successful_update(
-        self, mock_st, mock_update_elo_draw, mock_save_ratings
+        self,
+        mock_st,
+        mock_update_model_draw_and_save,
+        mock_compute_rating,
+        mock_update_rating_value,
     ):
         """Test successful draw update and save."""
         ratings = {"Anna": 1500.0, "Peter": 1500.0}
-        updated_ratings = {"Anna": 1500.0, "Peter": 1500.0}
-        mock_update_elo_draw.return_value = updated_ratings
+        # Mock computed ratings (draw may change both ratings slightly)
+        mock_compute_rating.side_effect = [1492.0, 1508.0]  # player_a, player_b
 
-        result = utils.update_elo_draw_and_save(ratings, "Anna", "Peter")
+        result = utils.update_preference_draw_and_save(ratings, "Anna", "Peter")
 
-        mock_update_elo_draw.assert_called_once_with(
-            ratings, "Anna", "Peter", 32.0
-        )
-        mock_save_ratings.assert_called_once_with(
-            updated_ratings, names_to_update=["Anna", "Peter"]
-        )
-        assert result == updated_ratings
+        mock_update_model_draw_and_save.assert_called_once_with("Anna", "Peter")
+        # Check compute rating called for both names
+        assert mock_compute_rating.call_count == 2
+        mock_compute_rating.assert_any_call("Anna")
+        mock_compute_rating.assert_any_call("Peter")
+        # Check database updates
+        assert mock_update_rating_value.call_count == 2
+        mock_update_rating_value.assert_any_call("Anna", 1492.0)
+        mock_update_rating_value.assert_any_call("Peter", 1508.0)
+        # Check returned ratings
+        assert result == {"Anna": 1492.0, "Peter": 1508.0}
+        # No error toast
+        assert not mock_st.toast.called
 
-    @patch("st_name_ranking.utils.save_ratings")
-    @patch("st_name_ranking.utils.update_elo_draw")
+    @patch("st_name_ranking.utils.database.update_rating_value")
+    @patch("st_name_ranking.utils._compute_rating_for_name")
+    @patch("st_name_ranking.utils.update_model_draw_and_save")
     @patch("st_name_ranking.utils.st")
     def test_save_failure(
-        self, mock_st, mock_update_elo_draw, mock_save_ratings
+        self,
+        mock_st,
+        mock_update_model_draw_and_save,
+        mock_compute_rating,
+        mock_update_rating_value,
     ):
-        """Test when save fails."""
+        """Test when ratings computation fails."""
         ratings = {"Anna": 1500.0, "Peter": 1500.0}
-        updated_ratings = {"Anna": 1500.0, "Peter": 1500.0}
-        mock_update_elo_draw.return_value = updated_ratings
-        mock_save_ratings.side_effect = Exception("Save error")
+        mock_compute_rating.side_effect = Exception("Computation error")
 
-        result = utils.update_elo_draw_and_save(ratings, "Anna", "Peter")
+        result = utils.update_preference_draw_and_save(ratings, "Anna", "Peter")
 
-        assert result == updated_ratings
-        mock_st.toast.assert_called_with(
-            "Failed to save ratings: Save error",
-            icon="⚠️",
-        )
+        assert result == ratings
+        # Should still call update_model_draw_and_save
+        mock_update_model_draw_and_save.assert_called_once_with("Anna", "Peter")
+        # compute_rating was called (and failed)
+        assert mock_compute_rating.call_count == 1
+        # database.update_rating_value should NOT be called
+        assert mock_update_rating_value.call_count == 0
 
 
 if __name__ == "__main__":

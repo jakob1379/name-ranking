@@ -1,5 +1,4 @@
-"""
-Name Ranker - Main entry point.
+"""Name Ranker - Main entry point.
 Refactored version with modular imports.
 """
 
@@ -11,9 +10,9 @@ import streamlit as st
 
 from st_name_ranking import database
 from st_name_ranking.data_loader import load_names_by_gender, save_ratings
-from st_name_ranking.elo import initialize_ratings
+from st_name_ranking.database import initialize_ratings
 from st_name_ranking.ui import render_similarity, render_tournament
-from st_name_ranking.utils import setup_session_state
+from st_name_ranking.utils import setup_session_state, sync_names_from_submodule
 
 # Configure logging - suppress debug noise
 logging.getLogger("watchdog").setLevel(logging.WARNING)
@@ -30,6 +29,36 @@ def main() -> None:
 
     # Data Loading - Only from submodule
     with st.sidebar:
+        # Database Management - Always show even if names not loaded
+        st.subheader("Database Management")
+
+        col_sync, col_stats = st.columns(2)
+        with col_sync:
+            if st.button(
+                "Sync Names",
+                icon="🔄",
+                help="Sync names from submodule to database",
+            ):
+                inserted = sync_names_from_submodule()
+                if inserted > 0:
+                    st.rerun()
+
+        with col_stats:
+            database.init_database()
+            try:
+                stats = database.get_stats()
+                total_names = stats["total_names"]
+                classified_names = stats["classified_names"]
+                st.caption(f"Total: {total_names} names")
+                if total_names > 0:
+                    st.caption(
+                        f"Classified: {classified_names} ({classified_names / total_names:.0%})",
+                    )
+            except Exception:
+                st.caption("Database stats unavailable")
+
+        st.divider()
+
         # Auto-load from submodule on first run
         if "all_names_data" not in st.session_state:
             with st.spinner("Loading names from submodule..."):
@@ -60,7 +89,7 @@ def main() -> None:
                     icon="❌",
                     duration="long",
                 )
-                return
+                # Don't return - allow user to sync names from database management section
 
         # Gender Filtering
         st.subheader("Gender Filter")
@@ -72,10 +101,7 @@ def main() -> None:
             "Filter names by gender:",
             ["All", "Male", "Female", "Unisex"],
             default=st.session_state.gender_filter,
-            help=(
-                "Select which gender of names to compare. "
-                "Click or use left/right arrow keys to navigate."
-            ),
+            help=("Select which gender of names to compare. Click or use left/right arrow keys to navigate."),
         )
 
         if gender_option != st.session_state.gender_filter:
@@ -97,14 +123,13 @@ def main() -> None:
         if "origin_filter" not in st.session_state:
             # Load saved origin filter from database
             saved_origins_json = database.load_user_setting(
-                "selected_origins", "[]"
+                "selected_origins",
+                "[]",
             )
             try:
                 saved_origins = json.loads(saved_origins_json)
                 # Validate that saved origins are still available
-                saved_origins = [
-                    o for o in saved_origins if o in available_regions
-                ]
+                saved_origins = [o for o in saved_origins if o in available_regions]
                 st.session_state.origin_filter = saved_origins
             except Exception:
                 # Default: empty list (show all regions)
@@ -123,15 +148,14 @@ def main() -> None:
             st.session_state.origin_filter = selected_origins
             # Save to database
             database.save_user_setting(
-                "selected_origins", json.dumps(selected_origins)
+                "selected_origins",
+                json.dumps(selected_origins),
             )
             st.toast(
                 f"Filter: {selected_origins if selected_origins else 'All'}",
                 icon="ℹ️",
             )
             st.rerun()
-
-        st.divider()
 
         # Ratings management
         st.subheader("Ratings Management")
@@ -150,18 +174,14 @@ def main() -> None:
             with col2:
                 if st.button(
                     "Reset Ratings",
-                    help=(
-                        "Reset all ratings to initial values. "
-                        "This action cannot be undone."
-                    ),
+                    help=("Reset all ratings to initial values. This action cannot be undone."),
                     type="secondary",
                 ):
                     # Open confirmation dialog
                     with st.dialog("Confirm Reset Ratings"):
                         st.markdown("### ⚠️ Reset All Ratings?")
                         st.write(
-                            "This will reset **all** ratings to their "
-                            "initial values."
+                            "This will reset **all** ratings to their initial values.",
                         )
                         st.write("**This action cannot be undone.**")
 
@@ -169,7 +189,7 @@ def main() -> None:
                         with col_confirm:
                             if st.button("Yes, Reset Ratings", type="primary"):
                                 st.session_state.ratings = initialize_ratings(
-                                    st.session_state.names
+                                    st.session_state.names,
                                 )
                                 st.toast(
                                     "✅ Ratings reset to initial values",
@@ -203,10 +223,25 @@ def main() -> None:
 
     # Main Content
     if "all_names_data" not in st.session_state:
-        st.toast(
-            "Please load names from the sidebar.",
-            icon="⚠️",
+        st.error("No names loaded in the database.")
+        st.info(
+            "Click **Sync Names** in the sidebar to load names from the submodule.",
         )
+
+        # Show database status
+        database.init_database()
+        try:
+            stats = database.get_stats()
+            total_names = stats["total_names"]
+            if total_names == 0:
+                st.warning("Database is empty. You need to sync names first.")
+            else:
+                st.success(
+                    f"Database has {total_names} names. Try reloading the page.",
+                )
+        except Exception:
+            st.warning("Unable to read database statistics.")
+
         return
 
     # Get current gender filter
@@ -217,10 +252,7 @@ def main() -> None:
     origins_to_filter = current_origins if current_origins else None
 
     # Get filtered names using database with caching
-    cache_key = (
-        f"filtered_names_{current_gender}_"
-        f"{tuple(sorted(current_origins)) if current_origins else 'all'}"
-    )
+    cache_key = f"filtered_names_{current_gender}_{tuple(sorted(current_origins)) if current_origins else 'all'}"
 
     if (
         "filtered_names_cache" in st.session_state
@@ -242,8 +274,7 @@ def main() -> None:
     if not filtered_names:
         if current_origins:
             st.toast(
-                f"No names found for gender: {current_gender}, "
-                f"origins: {current_origins}",
+                f"No names found for gender: {current_gender}, origins: {current_origins}",
                 icon="⚠️",
             )
         else:
@@ -267,8 +298,7 @@ def main() -> None:
         )
     else:
         st.toast(
-            f"Showing {len(filtered_names)} {current_gender.lower()} names "
-            f"out of {total_names_count} total",
+            f"Showing {len(filtered_names)} {current_gender.lower()} names out of {total_names_count} total",
             icon="ℹ️",
         )
 
@@ -282,4 +312,18 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as e:
+        import traceback
+
+        print(f"Fatal error in main: {e}")
+        traceback.print_exc()
+        # Try to show error in Streamlit if possible
+        import sys
+
+        if "streamlit" in sys.modules:
+            import streamlit as st
+
+            st.error(f"Fatal error: {e}")
+            st.code(traceback.format_exc())

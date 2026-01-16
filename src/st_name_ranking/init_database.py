@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
-"""
-Initialize the SQLite database for name ranking application.
+"""Initialize the SQLite database for name ranking application.
 
 This script:
 1. Creates the database schema (if not exists)
@@ -24,7 +23,7 @@ from st_name_ranking.database import (
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Initialize name ranking database"
+        description="Initialize name ranking database",
     )
     parser.add_argument(
         "--classify",
@@ -46,8 +45,6 @@ def main():
         print(f"✗ Failed to sync names: {e}")
         sys.exit(1)
 
-
-
     if args.classify:
         print("Running initial origin classification...")
         try:
@@ -57,7 +54,7 @@ def main():
             print(f"✓ Classified {classified} names")
         except ImportError:
             print(
-                "✗ ethnidata not installed. Install with: pip install ethnidata"
+                "✗ ethnidata not installed. Install with: pip install ethnidata",
             )
             print("  Or run later: python classify_origins.py")
         except Exception as e:
@@ -69,7 +66,7 @@ def main():
     print(f"  Total names: {stats['total_names']}")
     print(
         f"  Classified names: {stats['classified_names']} "
-        f"({stats['classified_names'] / stats['total_names'] * 100:.1f}%)"
+        f"({stats['classified_names'] / stats['total_names'] * 100:.1f}%)",
     )
     print(f"  Rated names: {stats['rated_names']}")
 
@@ -79,7 +76,7 @@ def main():
         print(f"  {region}: {count} ({percentage:.1f}%)")
 
     print("\n✅ Database initialization complete!")
-    print(f"Database file: {Path('names.db').absolute()}")
+    print(f"Database file: {Path('data/names.db').absolute()}")
 
 
 if __name__ == "__main__":

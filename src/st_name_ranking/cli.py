@@ -1,13 +1,9 @@
 #!/usr/bin/env python3
-"""
-Typer CLI for Name Ranking Database Management.
+"""Typer CLI for Name Ranking Database Management.
 
 Provides commands for database initialization, data processing,
 and statistics.
 """
-
-
-from typing import Optional
 
 import typer
 from rich.console import Console
@@ -20,6 +16,11 @@ from st_name_ranking.database import (
     get_stats,
     init_database,
     sync_names_with_submodule,
+)
+
+# Import model functions
+from st_name_ranking.utils import (
+    get_active_learning_model,
 )
 
 app = typer.Typer(
@@ -48,11 +49,6 @@ def print_info(message: str) -> None:
     console.print(f"[blue]→[/blue] {message}")
 
 
-def print_warning(message: str) -> None:
-    """Print a warning message."""
-    console.print(f"[yellow]⚠[/yellow] {message}")
-
-
 # ----------------------------------------------------------------------
 # CLI Commands
 # ----------------------------------------------------------------------
@@ -67,8 +63,7 @@ def init(
         help="Run initial origin classification after initialization",
     ),
 ) -> None:
-    """
-    Initialize the name ranking database.
+    """Initialize the name ranking database.
 
     This command:
     1. Creates the database schema (if not exists)
@@ -104,8 +99,6 @@ def init(
             print_error(f"Failed to sync names: {e}")
             raise typer.Exit(code=1)
 
-
-
     # 3. Optional origin classification
     if classify:
         process_command(limit=None, batch_size=100)
@@ -114,14 +107,9 @@ def init(
     stats_command()
 
 
-
-
-
-
-
 @app.command()
 def process(
-    limit: Optional[int] = typer.Option(
+    limit: int | None = typer.Option(
         None,
         "--limit",
         "-l",
@@ -134,8 +122,7 @@ def process(
         help="Batch size for processing",
     ),
 ) -> None:
-    """
-    Process data enrichment tasks (origin classification).
+    """Process data enrichment tasks (origin classification).
 
     This command processes unclassified names in batches,
     predicting their nationality and mapping to geographic regions.
@@ -143,9 +130,7 @@ def process(
     process_command(limit, batch_size)
 
 
-def process_command(
-    limit: Optional[int] = None, batch_size: int = 100
-) -> None:
+def process_command(limit: int | None = None, batch_size: int = 100) -> None:
     """Internal classification function with rich output."""
     console.print("[bold blue]Processing Data Enrichment[/bold blue]")
     console.print()
@@ -156,7 +141,10 @@ def process_command(
             TextColumn("[progress.description]{task.description}"),
             console=console,
         ) as progress:
-            task = progress.add_task("Processing data enrichment...", total=None)
+            task = progress.add_task(
+                "Processing data enrichment...",
+                total=None,
+            )
             classified = classify_all_names(limit, batch_size)
             progress.update(task, completed=True)
 
@@ -185,8 +173,7 @@ def process_command(
 
 @app.command()
 def stats() -> None:
-    """
-    Show database statistics.
+    """Show database statistics.
 
     Displays counts of names, classified names, rated names,
     and origin distribution.
@@ -209,18 +196,15 @@ def stats_command() -> None:
     summary_table.add_row("Total names", str(stats["total_names"]))
     summary_table.add_row(
         "Classified names",
-        f"{stats['classified_names']} "
-        f"({stats['classified_names'] / stats['total_names'] * 100:.1f}%)",
+        f"{stats['classified_names']} ({stats['classified_names'] / stats['total_names'] * 100:.1f}%)",
     )
     summary_table.add_row(
         "Unclassified names",
-        f"{stats['unclassified_names']} "
-        f"({stats['unclassified_names'] / stats['total_names'] * 100:.1f}%)",
+        f"{stats['unclassified_names']} ({stats['unclassified_names'] / stats['total_names'] * 100:.1f}%)",
     )
     summary_table.add_row(
         "Rated names",
-        f"{stats['rated_names']} "
-        f"({stats['rated_names'] / stats['total_names'] * 100:.1f}%)",
+        f"{stats['rated_names']} ({stats['rated_names'] / stats['total_names'] * 100:.1f}%)",
     )
 
     console.print(summary_table)
@@ -252,6 +236,73 @@ def stats_command() -> None:
         console.print(dist_table)
     else:
         print_info("No origin classification data available.")
+
+
+@app.command()
+def model_status() -> None:
+    """Show active learning model status."""
+    console.print("[bold blue]Active Learning Model Status[/bold blue]")
+    console.print()
+
+    try:
+        model = get_active_learning_model()
+
+        # Get model state
+        state = model.state
+        training_samples = state.training_samples
+        feature_dim = state.feature_dim
+
+        # Create status table
+        status_table = Table(
+            show_header=True,
+            header_style="bold",
+        )
+        status_table.add_column("Metric", style="cyan")
+        status_table.add_column("Value", justify="right")
+
+        status_table.add_row("Feature dimension", str(feature_dim))
+        status_table.add_row("Training samples", str(training_samples))
+        status_table.add_row("Last updated", "From database")
+
+        console.print(status_table)
+        console.print()
+
+        # Show feature names (truncated)
+        print_info(f"Features: {', '.join(state.feature_names[:5])}...")
+        print_info(f"Total features: {len(state.feature_names)}")
+
+    except Exception as e:
+        print_error(f"Failed to get model status: {e}")
+
+
+@app.command()
+def model_reset() -> None:
+    """Reset active learning model (reinitialize)."""
+    console.print("[bold blue]Resetting Active Learning Model[/bold blue]")
+    console.print()
+
+    confirm = typer.confirm(
+        "Are you sure you want to reset the model? All learned preferences will be lost.",
+    )
+    if not confirm:
+        console.print("Model reset cancelled.")
+        raise typer.Abort()
+
+    try:
+        # Delete model state from database
+        from st_name_ranking.database import get_connection
+
+        with get_connection() as conn:
+            conn.execute("DELETE FROM model_state WHERE id = 1")
+
+        # Reinitialize model
+        model = get_active_learning_model()
+        model.save_to_db()
+
+        print_success("Model reset successfully. New model initialized.")
+
+    except Exception as e:
+        print_error(f"Failed to reset model: {e}")
 
 
 if __name__ == "__main__":

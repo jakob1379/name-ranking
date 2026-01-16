@@ -26,9 +26,9 @@
           export ANTHROPIC_MODEL=deepseek-reasoner
           export ANTHROPIC_SMALL_FAST_MODEL=deepseek-chat
           export API_TIMEOUT_MS=600000
-          export BASH_MAX_OUTPUT_LENGTH=10000
+          export BASH_MAX_OUTPUT_LENGTH=8000
           export CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1
-          export CLAUDE_CODE_FILE_READ_MAX_OUTPUT_TOKENS=12000
+          export CLAUDE_CODE_FILE_READ_MAX_OUTPUT_TOKENS=8000
           export CLAUDE_CODE_MAX_OUTPUT_TOKENS=4096
           export MAX_THINKING_TOKENS=8192
           ${pkgs.claude-code}/bin/claude --allow-dangerously-skip-permissions "$@"
@@ -97,7 +97,7 @@
             echo "To install Python dependencies: uv sync"
             echo "Note: Playwright browsers already installed via Nix"
 
-            export ANTHROPIC_AUTH_TOKEN=$(keyring get deepseek-jgalabs api_key)
+            export DEEPSEEK_API_KEY=$(keyring get deepseek-jgalabs api_key)
           '';
           };
         }

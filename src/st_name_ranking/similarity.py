@@ -1,9 +1,6 @@
-"""
-Similarity functions for name matching.
-"""
+"""Similarity functions for name matching."""
 
 import logging
-from typing import List, Tuple
 
 import numpy as np
 from rapidfuzz import fuzz, process
@@ -13,10 +10,11 @@ logger = logging.getLogger(__name__)
 
 
 def get_string_similarity_scores(
-    target: str, candidates: List[str], limit: int = 10
-) -> List[Tuple[str, float]]:
-    """
-    Uses RapidFuzz (Levenshtein) to find similar names.
+    target: str,
+    candidates: list[str],
+    limit: int = 10,
+) -> list[tuple[str, float]]:
+    """Uses RapidFuzz (Levenshtein) to find similar names.
     Returns list of (name, score).
     """
     logger.debug(
@@ -30,7 +28,10 @@ def get_string_similarity_scores(
 
     # process.extract returns (match, score, index)
     results = process.extract(
-        target, candidates, scorer=fuzz.ratio, limit=limit
+        target,
+        candidates,
+        scorer=fuzz.ratio,
+        limit=limit,
     )
     return [(item[0], item[1]) for item in results]
 
@@ -43,11 +44,10 @@ def load_embedding_model() -> SentenceTransformer:
 def get_vector_similarity_scores(
     model: SentenceTransformer,
     target: str,
-    candidates: List[str],
+    candidates: list[str],
     limit: int = 10,
-) -> List[Tuple[str, float]]:
-    """
-    Uses LLM embeddings to find semantic similarity.
+) -> list[tuple[str, float]]:
+    """Uses LLM embeddings to find semantic similarity.
     Returns list of (name, score).
     """
     logger.debug(
