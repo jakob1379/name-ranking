@@ -17,10 +17,15 @@ from st_name_ranking.utils import setup_session_state, sync_names_from_submodule
 # Configure logging - suppress debug noise
 logging.getLogger("watchdog").setLevel(logging.WARNING)
 logging.getLogger("sqlite3").setLevel(logging.WARNING)
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-)
+
+# Only configure logging if no handlers are configured yet
+# This prevents duplicate logs when Streamlit reloads the script
+root_logger = logging.getLogger()
+if not root_logger.handlers:
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    )
 
 
 def main() -> None:

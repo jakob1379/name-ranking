@@ -145,3 +145,62 @@ def cleanup_db_state():
     # Reset after test
     database._initialized = False
     origin_classifier._default_classifier = None
+
+
+# -----------------------------------------------------------------------------
+# Integration test configuration
+# -----------------------------------------------------------------------------
+
+
+def pytest_addoption(parser):
+    """Add command-line options for integration tests."""
+    parser.addoption(
+        "--run-integration",
+        action="store_true",
+        default=False,
+        help="Run integration tests (requires running application)",
+    )
+    parser.addoption(
+        "--run-playwright",
+        action="store_true",
+        default=False,
+        help="Run Playwright tests (requires browser installation)",
+    )
+    parser.addoption(
+        "--app-url",
+        default="http://localhost:8501",
+        help="URL of running Streamlit application for integration tests",
+    )
+
+
+def pytest_configure(config):
+    """Register custom markers."""
+    config.addinivalue_line(
+        "markers",
+        "integration: mark test as integration test (requires running application)",
+    )
+    config.addinivalue_line(
+        "markers",
+        "playwright: mark test as Playwright test (requires browser)",
+    )
+
+
+def pytest_collection_modifyitems(config, items):
+    """Skip integration and Playwright tests unless explicitly requested."""
+    skip_integration = pytest.mark.skip(reason="Need --run-integration option to run")
+    skip_playwright = pytest.mark.skip(reason="Need --run-playwright option to run")
+
+    for item in items:
+        # Skip integration tests unless --run-integration is set
+        if "integration" in item.keywords and not config.getoption("--run-integration"):
+            item.add_marker(skip_integration)
+
+        # Skip playwright tests unless --run-playwright is set
+        if "playwright" in item.keywords and not config.getoption("--run-playwright"):
+            item.add_marker(skip_playwright)
+
+
+@pytest.fixture
+def app_url(request):
+    """Get the application URL from command line option."""
+    return request.config.getoption("--app-url")

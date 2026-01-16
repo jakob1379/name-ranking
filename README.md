@@ -118,22 +118,26 @@ classification.
 ### Installation
 
 1. **Clone the repository with submodules:**
+
    ```bash
    git clone --recurse-submodules https://github.com/yourusername/sort-names.git
    cd sort-names
    ```
 
 2. **Install dependencies:**
+
    ```bash
    uv sync
    ```
 
 3. **Initialize the database:**
+
    ```bash
    uv run name-db init
    ```
 
 4. **(Optional) Classify name origins:**
+
    ```bash
    uv run name-db process
    ```
@@ -156,6 +160,7 @@ run origin classification.
 You have two approaches:
 
 1. **UI‑Based Setup** (Recommended for first‑time users):
+
    - Run the application with `uv run streamlit run st_name_ranking/main.py`
    - Click **Sync Names** in the sidebar to load names from the submodule
    - Click **Classify Origins** to process name nationalities (optional)
@@ -170,8 +175,6 @@ You have two approaches:
 - ✅ Default region mapping insertion
 - ❌ Name sync from submodule (manual via UI or CLI)
 - ❌ Origin classification (manual via UI or CLI)
-
-
 
 ### Basic Usage
 
@@ -232,6 +235,24 @@ uv run pytest tests/test_classify_origins.py
 uv run pytest tests/test_cli.py
 ```
 
+#### Integration Tests (Playwright)
+
+For end-to-end testing with a real browser, use Playwright integration tests:
+
+```bash
+# Install Playwright browsers (if not using Nix)
+uv run playwright install chromium
+
+# Start the Streamlit application in another terminal:
+uv run streamlit run src/st_name_ranking/main.py --server.port 8501
+
+# Run integration tests (requires running application)
+uv run pytest tests/test_integration_playwright.py --run-integration --run-playwright -v
+```
+
+Note: When using Nix, browsers are provided via the `playwright-driver.browsers`
+package. The integration tests automatically use the Nix-provided browsers.
+
 ### Code Quality
 
 - Uses `ruff` for linting and formatting
@@ -240,13 +261,16 @@ uv run pytest tests/test_cli.py
 
 ### Generating Screenshots
 
-For documentation purposes, you can generate screenshots of the application using Playwright. First, ensure the application is running on `http://localhost:8501`, then run:
+For documentation purposes, you can generate screenshots of the application
+using Playwright. First, ensure the application is running on
+`http://localhost:8501`, then run:
 
 ```bash
 uv run python scripts/take_screenshots.py
 ```
 
-This requires Playwright and browser binaries. See the script for installation instructions.
+This requires Playwright and browser binaries. See the script for installation
+instructions.
 
 ```bash
 # Format code

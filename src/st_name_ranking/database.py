@@ -84,7 +84,10 @@ def update_phonetic_codes(limit: int | None = None) -> int:
             )
             updated += 1
 
-        logger.info(f"Updated phonetic codes for {updated} names")
+        if updated > 0:
+            logger.info(f"Updated phonetic codes for {updated} names")
+        else:
+            logger.debug("No names need phonetic code updates")
         return updated
 
 
@@ -95,8 +98,32 @@ def init_database():
         logger.debug("Database already initialized, skipping initialization")
         return
 
-    logger.debug("Initializing database schema")
+    # Check if database file exists
+    db_exists = DB_PATH.exists()
+
     with get_connection() as conn:
+        # Check if names table exists to determine if database is already set up
+        table_exists = False
+        if db_exists:
+            try:
+                # Try to query the names table
+                conn.execute("SELECT 1 FROM names LIMIT 1").fetchone()
+                table_exists = True
+            except sqlite3.OperationalError:
+                # Table doesn't exist
+                table_exists = False
+
+        # Log appropriate message based on database state
+        if not db_exists:
+            logger.info("Creating new database at %s", DB_PATH)
+        elif not table_exists:
+            logger.info("Initializing database schema for existing file")
+        else:
+            logger.info("Using existing database, ensuring schema is up to date")
+
+        # Mark as initialized to prevent duplicate logs in this process
+        _initialized = True
+
         # Names table
         conn.execute("""
             CREATE TABLE IF NOT EXISTS names (
@@ -219,8 +246,7 @@ def init_database():
         if conn.execute("SELECT COUNT(*) FROM region_mapping").fetchone()[0] == 0:
             _insert_default_region_mapping(conn)
 
-        logger.info("Database initialized successfully")
-        _initialized = True
+        logger.info("Database schema verified successfully")
 
 
 def _insert_default_region_mapping(conn):

@@ -50,8 +50,9 @@
               git
               pre-commit
 
-              # Browsers for Playwright - use the browsers package
-              playwright-driver.browsers
+               # Browsers for Playwright - use the browsers package
+               playwright-driver.browsers
+               chromium
 
               # system dependencies for playwright browsers
               stdenv.cc.cc.lib
