@@ -33,6 +33,9 @@ venv.bak/
 # Streamlit
 .streamlit/
 
+# Zensical
+site/
+
 # Project specific
 ratings.json
 *.log
