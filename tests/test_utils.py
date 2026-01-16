@@ -36,6 +36,7 @@ class TestPullSubmoduleUpdates:
         # Verify subprocess call
         mock_run.assert_called_once_with(
             ["git", "-C", "godkendtefornavne", "pull"],
+            check=False,
             capture_output=True,
             text=True,
             timeout=30,
