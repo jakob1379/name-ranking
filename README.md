@@ -4,6 +4,35 @@ A Streamlit-based web application for ranking Danish names using Bayesian
 preference learning with active learning, with similarity search and origin
 classification.
 
+## Table of Contents
+
+- [Features](#features)
+  - [Name Ranking Tournament](#name-ranking-tournament)
+  - [Similarity Search](#similarity-search)
+  - [Origin Classification](#origin-classification)
+  - [Filtering & Management](#filtering--management)
+  - [Intelligent Pair Selection](#intelligent-pair-selection)
+  - [Active Learning with Bayesian Preference Modeling](#active-learning-with-bayesian-preference-modeling)
+  - [Performance Optimizations](#performance-optimizations)
+- [Quickstart](#quickstart)
+  - [Prerequisites](#prerequisites)
+  - [Installation](#installation)
+  - [Setup Details](#setup-details)
+- [Basic Usage](#basic-usage)
+- [Development](#development)
+  - [Project Structure](#project-structure)
+  - [Testing](#testing)
+  - [Code Quality](#code-quality)
+- [Database Schema](#database-schema)
+- [Origin Classification](#origin-classification-1)
+- [Detailed Usage](#detailed-usage)
+  - [CLI Reference](#cli-reference)
+  - [Web Application Workflow](#web-application-workflow)
+- [Performance Optimizations](#performance-optimizations-1)
+- [Documentation](#documentation)
+- [License](#license)
+- [Acknowledgments](#acknowledgments)
+
 ## Features
 
 ### Name Ranking Tournament
@@ -85,7 +114,7 @@ classification.
 - Git (for submodule management)
 - [uv](https://github.com/astral-sh/uv) - fast Python package manager
 
-### Quickstart
+### Installation
 
 1. **Clone the repository with submodules:**
    ```bash
@@ -93,39 +122,46 @@ classification.
    cd sort-names
    ```
 
-### Database Setup
+2. **Install dependencies:**
+   ```bash
+   uv sync
+   ```
 
-The application automatically initializes the database schema on first run
-(creates tables if they don't exist). However, you need to populate the database
-with names and optionally run origin classification.
+3. **Initialize the database:**
+   ```bash
+   uv run name-db init
+   ```
 
-#### Option 1: Automatic Setup (Recommended for first-time users)
+4. **(Optional) Classify name origins:**
+   ```bash
+   uv run name-db process
+   ```
 
-The application can handle setup automatically when you first run it:
+5. **Start the application:**
+   ```bash
+   uv run streamlit run st_name_ranking/main.py
+   ```
 
-1. **Schema Initialization**: Database tables are created automatically when the
-   app starts
-2. **Name Loading**: Click "Sync Names" in the sidebar to load names from the
-   submodule
-3. **Origin Classification** (Optional): Click "Classify Origins" in the sidebar
-   to process name nationalities
+The application will be available at `http://localhost:8501`.
 
-#### Option 2: Command Line Setup (Advanced control)
+### Setup Details
 
-For more control, use the CLI before running the application:
+The application uses SQLite for data storage. On first run, the database schema
+is automatically created, but you need to populate it with names and optionally
+run origin classification.
 
-```bash
-# Initialize database (schema + sync names + optional classification)
-uv run name-db init
+#### Setup Options
 
-# Initialize with origin classification
-uv run name-db init --classify
+You have two approaches:
 
-# Or use individual commands for more control:
-uv run name-db init      # Initialize database and sync names
-uv run name-db process   # Process data enrichment (origin classification)
-uv run name-db stats     # Show database statistics
-```
+1. **UI‑Based Setup** (Recommended for first‑time users):
+   - Run the application with `uv run streamlit run st_name_ranking/main.py`
+   - Click **Sync Names** in the sidebar to load names from the submodule
+   - Click **Classify Origins** to process name nationalities (optional)
+
+2. **CLI‑Based Setup** (Advanced control):
+   - Use the `name‑db` CLI (as shown in the Installation steps)
+   - More control over batch sizes and incremental processing
 
 #### What Happens Automatically:
 
@@ -134,15 +170,7 @@ uv run name-db stats     # Show database statistics
 - ❌ Name sync from submodule (manual via UI or CLI)
 - ❌ Origin classification (manual via UI or CLI)
 
-### Running the Application
 
-Start the Streamlit web application:
-
-```bash
-uv run streamlit run st_name_ranking/main.py
-```
-
-The application will be available at `http://localhost:8501`.
 
 ### Basic Usage
 

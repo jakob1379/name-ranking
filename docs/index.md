@@ -5,52 +5,30 @@ icon: lucide/rocket
 # Name Ranking Application
 
 A Streamlit-based web application for ranking Danish names using Bayesian
-preference learning with active learning, with similarity search, origin
-classification, and intelligent pair selection.
+preference learning with active learning, similarity search, and origin
+classification.
 
-## Features
+## Overview
 
-### Name Ranking Tournament
+The Name Ranking application helps users discover and rank Danish names through
+an interactive tournament-style interface. The system uses machine learning to
+intelligently select name pairs for comparison, learns user preferences over
+time, and provides multiple ways to explore names through similarity search and
+origin classification.
 
-- Compare two names selected by active learning (Thompson sampling)
-- Vote for preferred name or mark as draw
-- Real-time Bayesian preference updates with comparison tracking
-- Top 10 rankings display based on learned preferences
-- Keyboard shortcuts (arrow keys)
+### Key Features
 
-### Multi-method Similarity Search
-
-- **String similarity** (Levenshtein distance) for name matching
-- **Vector similarity** (LLM embeddings) for semantic matching
-- **Phonetic similarity** (Double Metaphone) for phonetic name matching
-- Find names similar to a reference name using multiple criteria
-
-### Origin Classification
-
-- **Optional classification** - runs only when explicitly requested
-- **Incremental processing** - classify 100 names at a time or all at once
-- Automatic nationality prediction using `ethnidata`
-- Mapping to geographic regions (Nordic, European, Asian, etc.)
-- Confidence scoring for predictions
-
-### Intelligent Pair Selection
-
-- **Comparison tracking** - records every pairwise vote to understand name
-  popularity
-- **Phonetic similarity** - uses Double Metaphone algorithm to find phonetically
-  similar names
-- **Smart candidate selection** - prioritizes names with fewer comparisons and
-  phonetically interesting pairs
-- **Automatic metadata collection** - builds a feature dataset for Bayesian
-  preference learning
-
-### Filtering & Management
-
-- Gender filtering (Male, Female, Unisex, All)
-- Origin region filtering (Nordic, European, International, etc.)
-- Database-backed name storage with SQLite
-- Git submodule integration for name data updates
-- Ratings persistence with automatic comparison logging
+- **🎯 Active Learning Tournament**: Compare names selected by Thompson sampling
+  for optimal preference learning
+- **🔍 Multi‑Method Similarity Search**: Find similar names using string,
+  semantic, and phonetic matching
+- **🌍 Origin Classification**: Automatic nationality prediction with geographic
+  region mapping
+- **📊 Bayesian Preference Modeling**: Feature‑based Bradley‑Terry model replaces
+  traditional ELO ratings
+- **🗃️ Database‑Backed**: SQLite storage with git submodule integration for
+  name data
+- **⌨️ Keyboard‑First Interface**: Arrow key navigation for rapid voting
 
 ## Quick Start
 
@@ -60,7 +38,7 @@ classification, and intelligent pair selection.
 - Git (for submodule management)
 - [uv](https://github.com/astral-sh/uv) - fast Python package manager
 
-### Installation & Setup
+### Installation
 
 ```bash
 # Clone repository with submodules
@@ -70,8 +48,11 @@ cd sort-names
 # Install dependencies
 uv sync
 
-# Initialize database
+# Initialize database (schema + sync names)
 uv run name-db init
+
+# Optional: Classify name origins
+uv run name-db process
 
 # Start the application
 uv run streamlit run st_name_ranking/main.py
@@ -79,32 +60,70 @@ uv run streamlit run st_name_ranking/main.py
 
 The application will be available at `http://localhost:8501`.
 
+### First Run
+
+1. **Sync Names**: Click "Sync Names" in the sidebar to load names from the
+   submodule
+2. **Classify Origins** (Optional): Click "Classify Origins" to process name
+   nationalities
+3. **Start Ranking**: Use arrow keys or click buttons to vote on name pairs
+4. **Explore Similar Names**: Use the similarity search tab to find related names
+
 ## Documentation
 
-### Overview Documentation
-
-- [README.md](../README.md) - Complete project overview, features, and
-  quickstart guide
-
-### Technical Documentation
+### Core Concepts
 
 - [Active Learning System](active_learning.md) - Bayesian preference modeling,
   feature engineering, and Thompson sampling
 - [System Architecture](architecture.md) - Component architecture, data flow,
   and design principles
 
-### Reference Documentation
+### User Guides
 
-- **Database Schema**: Complete SQL schema documentation
-- **CLI Reference**: Command-line interface usage and options
-- **API Reference**: Python module interfaces and functions
-- **Testing Guide**: Test suite organization and execution
+- **Getting Started** - Installation and basic usage
+- **Tournament Mode** - How to rank names effectively
+- **Similarity Search** - Finding names by multiple criteria
+- **Origin Classification** - Understanding name nationalities
 
-### Development Resources
+### Technical Reference
 
-- **Project Structure**: Module organization and responsibilities
-- **Code Quality**: Linting, formatting, and type checking
-- **Deployment**: Local development and production considerations
+- **Database Schema** - Complete SQL schema documentation
+- **CLI Reference** - Command‑line interface usage and options
+- **API Reference** - Python module interfaces and functions
+- **Configuration** - Environment variables and settings
+
+### Development
+
+- **Project Structure** - Module organization and responsibilities
+- **Testing Guide** - Test suite organization and execution
+- **Code Quality** - Linting, formatting, and type checking
+- **Deployment** - Local development and production considerations
+
+## Features in Detail
+
+### Name Ranking Tournament
+
+Compare two names selected by active learning (Thompson sampling). Vote for your
+preferred name or mark as a draw. The system learns your preferences over time
+and displays top rankings based on Bayesian preference scores.
+
+### Similarity Search
+
+- **String Similarity**: Levenshtein distance for name matching
+- **Vector Similarity**: LLM embeddings for semantic matching
+- **Phonetic Similarity**: Double Metaphone algorithm for phonetic matching
+
+### Origin Classification
+
+- **Batch Processing**: Classify 100 names at a time or all at once
+- **Geographic Regions**: Names mapped to Nordic, European, Asian, etc.
+- **Confidence Scoring**: Probability estimates for predictions
+
+### Intelligent Pair Selection
+
+- **Comparison Tracking**: Records every pairwise vote
+- **Phonetic Analysis**: Finds phonetically similar names for comparison
+- **Feature‑Based Learning**: Uses phonetic, linguistic, and metadata features
 
 ## Development
 
@@ -116,16 +135,52 @@ descriptions.
 ### Testing
 
 ```bash
-# Run all non-UI tests
+# Run all non‑UI tests
 uv run pytest -m "not playwright"
 
+# Run with coverage reporting
+uv run pytest --cov=st_name_ranking --cov-report=html
+
 # Run specific test modules
-uv run pytest tests/test_database.py
-uv run pytest tests/test_utils.py
+uv run pytest tests/test_database.py tests/test_utils.py
 ```
 
 ### Code Quality
 
-- Uses `ruff` for linting and formatting
-- Follows Python type hints
-- Consistent code formatting with `ruff format`
+```bash
+# Format code
+uv run ruff format .
+
+# Lint code
+uv run ruff check .
+
+# Type checking
+uv run pyrefly check
+```
+
+### Database Management
+
+```bash
+# Initialize database
+uv run name-db init
+
+# Classify origins
+uv run name-db process --limit 100
+
+# Show statistics
+uv run name-db stats
+
+# Check model status
+uv run name-db model-status
+```
+
+## License
+
+[Add your license here]
+
+## Acknowledgments
+
+- [ethnidata](https://github.com/teyfikoz/ethnidata) for name nationality
+  prediction
+- Streamlit for the web application framework
+- The Danish government for the name data
