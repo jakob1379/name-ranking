@@ -24,10 +24,10 @@ origin classification.
   semantic, and phonetic matching
 - **🌍 Origin Classification**: Automatic nationality prediction with geographic
   region mapping
-- **📊 Bayesian Preference Modeling**: Feature‑based Bradley‑Terry model replaces
-  traditional ELO ratings
-- **🗃️ Database‑Backed**: SQLite storage with git submodule integration for
-  name data
+- **📊 Bayesian Preference Modeling**: Feature‑based Bradley‑Terry model
+  replaces traditional ELO ratings
+- **🗃️ Database‑Backed**: SQLite storage with git submodule integration for name
+  data
 - **⌨️ Keyboard‑First Interface**: Arrow key navigation for rapid voting
 
 ## Quick Start
@@ -67,7 +67,8 @@ The application will be available at `http://localhost:8501`.
 2. **Classify Origins** (Optional): Click "Classify Origins" to process name
    nationalities
 3. **Start Ranking**: Use arrow keys or click buttons to vote on name pairs
-4. **Explore Similar Names**: Use the similarity search tab to find related names
+4. **Explore Similar Names**: Use the similarity search tab to find related
+   names
 
 ## Documentation
 

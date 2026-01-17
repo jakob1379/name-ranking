@@ -98,6 +98,10 @@ def init_database():
         logger.debug("Database already initialized, skipping initialization")
         return
 
+    # Mark as initialized immediately to prevent race conditions
+    # If initialization fails, the app won't work anyway, so we don't need to retry
+    _initialized = True
+
     # Check if database file exists
     db_exists = DB_PATH.exists()
 
@@ -121,8 +125,7 @@ def init_database():
         else:
             logger.info("Using existing database, ensuring schema is up to date")
 
-        # Mark as initialized to prevent duplicate logs in this process
-        _initialized = True
+        # Database is already marked as initialized to prevent race conditions
 
         # Names table
         conn.execute("""

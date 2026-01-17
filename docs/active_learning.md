@@ -26,9 +26,12 @@ pronunciation similarities across languages:
 - **Similarity computation**: Used for both pair selection and similarity search
 
 Phonetic similarity scores:
+
 - **Exact match**: Both primary codes match (score = 1.0)
-- **Primary‑secondary match**: Primary of one matches secondary of the other (score = 0.8)
-- **Partial match**: Codes share prefix or edit distance within threshold (score = 0.5–0.7)
+- **Primary‑secondary match**: Primary of one matches secondary of the other
+  (score = 0.8)
+- **Partial match**: Codes share prefix or edit distance within threshold (score
+  = 0.5–0.7)
 - **No match**: Score = 0.0
 
 ### Linguistic Features
@@ -41,7 +44,8 @@ Phonetic similarity scores:
 ### Metadata Features
 
 - **Gender encoding**: One‑hot encoding of Male/Female/Unisex
-- **Origin region**: One‑hot encoding of geographic regions (Nordic, European, Asian, etc.)
+- **Origin region**: One‑hot encoding of geographic regions (Nordic, European,
+  Asian, etc.)
 - **Classification confidence**: Confidence score from `ethnidata` predictions
 
 ### Feature Pipeline
@@ -65,6 +69,7 @@ P(A ≻ B) = σ(w·φ(A) - w·φ(B))
 ```
 
 Where:
+
 - `σ(x) = 1 / (1 + exp(-x))` is the logistic function
 - `φ(name)` is the feature vector for a name
 - `w` is the weight vector to be learned
@@ -94,6 +99,7 @@ class ModelState:
 ### Exploration‑Exploitation Tradeoff
 
 Thompson sampling balances:
+
 - **Exploitation**: Compare names with high predicted preference difference
 - **Exploration**: Compare names where the model is uncertain
 
@@ -107,6 +113,7 @@ Thompson sampling balances:
 ### Information Gain Metrics
 
 The system maximizes:
+
 - **Preference uncertainty**: `Var[P(A ≻ B)]`
 - **Feature space coverage**: Distance in feature space
 - **Comparison history**: Avoid recently compared pairs
