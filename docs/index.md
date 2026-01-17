@@ -72,19 +72,22 @@ The application will be available at `http://localhost:8501`.
 
 ## Documentation
 
-### Core Concepts
+### Tutorial
 
-- [Active Learning System](active_learning.md) - Bayesian preference modeling,
-  feature engineering, and Thompson sampling
-- [System Architecture](architecture.md) - Component architecture, data flow,
-  and design principles
+- [Step-by-Step Tutorial](tutorial.md) - Complete walkthrough from installation to advanced usage, modeled after the [Typer tutorial](https://typer.tiangolo.com/tutorial/) structure
+
+### Theory & Architecture
+
+- [Active Learning System](active_learning.md) - Bayesian preference modeling, feature engineering, and Thompson sampling
+- [System Architecture](architecture.md) - Component architecture, data flow, and design principles
 
 ### User Guides
 
-- **Getting Started** - Installation and basic usage
+- **Getting Started** - Quick installation and first run
 - **Tournament Mode** - How to rank names effectively
 - **Similarity Search** - Finding names by multiple criteria
 - **Origin Classification** - Understanding name nationalities
+- **Filtering & Preferences** - Using filters and managing preferences
 
 ### Technical Reference
 
@@ -99,6 +102,7 @@ The application will be available at `http://localhost:8501`.
 - **Testing Guide** - Test suite organization and execution
 - **Code Quality** - Linting, formatting, and type checking
 - **Deployment** - Local development and production considerations
+- **Contributing** - How to contribute to the project
 
 ## Features in Detail
 

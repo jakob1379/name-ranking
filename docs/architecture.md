@@ -8,6 +8,8 @@ The Name Ranking application follows a modular architecture with clear
 separation between data management, machine learning, and user interface
 components.
 
+> **Note**: For usage instructions, see the [Tutorial](tutorial.md). This document focuses on design decisions and system architecture for developers.
+
 ## Architecture Overview
 
 ```mermaid
@@ -351,3 +353,9 @@ database.update_ratings(ratings)
 - **Unit tests**: Isolated component testing
 - **Integration tests**: Cross-component workflows
 - **Mocking**: External dependencies mocked for tests
+
+## See Also
+
+- [Tutorial](tutorial.md) - Step-by-step usage guide
+- [Active Learning System](active_learning.md) - Theoretical foundations
+- [Home](index.md) - Overview and quick start

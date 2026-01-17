@@ -5,6 +5,8 @@ active learning to intelligently select name pairs for comparison. This system
 replaces traditional ELO ratings with a feature‑based Bradley‑Terry model that
 learns user preferences across multiple dimensions.
 
+> **Note**: For a step-by-step usage guide, see the [Tutorial](tutorial.md). This document focuses on the theoretical foundations of the system.
+
 ## Overview
 
 The active learning system has four main components:
@@ -210,3 +212,9 @@ def predict_preference_probability(
 1. Override `select_candidates()` in utils.py
 2. Implement different information gain metrics
 3. Adjust exploration‑exploitation balance
+
+## See Also
+
+- [Tutorial](tutorial.md) - Step-by-step usage guide
+- [System Architecture](architecture.md) - Design decisions and component architecture
+- [Home](index.md) - Overview and quick start
