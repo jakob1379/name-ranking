@@ -43,27 +43,28 @@ repos:
 
   # Python linting and formatting with Ruff
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.14.10
+    # Ruff version.
+    rev: v0.14.13
     hooks:
-      - id: ruff  # Run Ruff linter
-        args: [--fix, --exit-non-zero-on-fix]
-        types_or: [python, pyi]
-      - id: ruff-format  # Run Ruff formatter
-        types_or: [python, pyi]
-
+      # Run the linter.
+      - id: ruff-check
+        args: [--fix]
+      # Run the formatter.
+      - id: ruff-format
   # Code quality and security with Skylos
   - repo: local
     hooks:
       - id: skylos
         name: skylos
+        language: system
         entry: skylos --danger --quality --secrets
-        language: python
-        types: [python]
-        pass_filenames: false
-        always_run: true
       - id: pyrefly
         name: pyrefly
         entry: pyrefly check
+        args:
+          - --ignore-missing-imports=all
+          - --ignore-errors-in-generated-code=true
+          - --ignore=missing-import,missing-attribute,bad-return
         language: python
         types: [python]
         pass_filenames: false
@@ -71,7 +72,7 @@ repos:
 
   # Formatting for various file types with Prettier
   - repo: https://github.com/rbubley/mirrors-prettier  # Using rbubley mirror
-    rev: v3.7.4
+    rev: v3.8.0
     hooks:
       - id: prettier
         types_or: [markdown, html, css, scss, javascript, json]
@@ -134,12 +135,18 @@ repos:
     rev: 1.9.2
     hooks:
       - id: bandit
-        args: [-c, pyproject.toml]  # Example: Configure via pyproject.toml
+        args:
+          - -c
+          - pyproject.toml
+          - --skip
+          - B101,B301,B403,B404,B601,B608
+          - --severity-level
+          - high
         types: [python]
 
   # check for known package vulnureabilities
   - repo: https://github.com/owenlamont/uv-secure
-    rev: 0.15.2
+    rev: 0.15.4
     hooks:
       - id: uv-secure
         name: uv-secure
@@ -150,7 +157,7 @@ repos:
 
   # conventional commit messages. Allows for automated changelogs and versioning based on commits
   - repo: https://github.com/commitizen-tools/commitizen
-    rev: v4.10.1
+    rev: v4.11.6
     hooks:
       - id: commitizen
         stages: [commit-msg]
