@@ -2,18 +2,91 @@
 
 Implements a feature-based Bradley-Terry model with Laplace approximation
 for Bayesian updates and Thompson sampling for active learning.
+Includes phonetic cluster-aware pair selection to maximize diversity.
 """
 
 import json
 import logging
 import pickle
 from dataclasses import dataclass
+from functools import lru_cache
 
 import numpy as np
 
-from st_name_ranking.database import get_connection
+from st_name_ranking.database import get_connection, get_phonetic_codes_batch
 
 logger = logging.getLogger(__name__)
+
+
+@lru_cache(maxsize=128)
+def _get_phonetic_codes_cached(names_tuple: tuple[str, ...]) -> dict[str, tuple[str, str]]:
+    """Cached version of get_phonetic_codes_batch.
+
+    Uses tuple for hashability with LRU cache.
+    Cache size 128 ~ 50KB for typical name datasets.
+    """
+    return get_phonetic_codes_batch(list(names_tuple))
+
+
+def _group_names_by_phonetic(names: list[str]) -> dict[str, list[int]]:
+    """Group name indices by phonetic primary code.
+
+    Returns dict mapping phonetic_primary -> list of name indices.
+    Uses database lookup with LRU caching for efficiency.
+    """
+    # Get phonetic codes from database (cached)
+    names_tuple = tuple(names)
+    phonetic_map = _get_phonetic_codes_cached(names_tuple)
+
+    # Group by primary code
+    clusters: dict[str, list[int]] = {}
+    for idx, name in enumerate(names):
+        primary, _ = phonetic_map.get(name, ("", ""))
+        primary = primary or ""  # Handle None/empty
+        clusters.setdefault(primary, []).append(idx)
+
+    return clusters
+
+
+def _select_cross_cluster_pairs(
+    clusters: dict[str, list[int]],
+    n_pairs: int,
+    rng: np.random.Generator,
+) -> list[tuple[int, int]]:
+    """Select pairs where each name comes from a different phonetic cluster.
+
+    Returns list of (idx_a, idx_b) tuples with different phonetic_primary codes.
+    If insufficient cross-cluster pairs exist, returns as many as possible.
+    """
+    cluster_ids = list(clusters.keys())
+
+    if len(cluster_ids) < 2:
+        # Only one cluster - can't do cross-cluster selection
+        return []
+
+    pairs = []
+    attempts = 0
+    max_attempts = n_pairs * 10  # Prevent infinite loops
+
+    while len(pairs) < n_pairs and attempts < max_attempts:
+        attempts += 1
+        # Pick two different clusters
+        c1, c2 = rng.choice(len(cluster_ids), size=2, replace=False)
+        cluster1, cluster2 = cluster_ids[c1], cluster_ids[c2]
+
+        # Pick one name from each cluster
+        idx_a = rng.choice(clusters[cluster1])
+        idx_b = rng.choice(clusters[cluster2])
+
+        # Normalize order to avoid duplicates
+        if idx_a > idx_b:
+            idx_a, idx_b = idx_b, idx_a
+
+        pair = (idx_a, idx_b)
+        if pair not in pairs:
+            pairs.append(pair)
+
+    return pairs
 
 
 @dataclass
@@ -126,6 +199,30 @@ class BradleyTerryModel:
         # Convert to batch update
         self.update_batch([(features_a, features_b, preference)])
 
+    def update_both_disliked(
+        self,
+        features_a: np.ndarray,
+        features_b: np.ndarray,
+    ):
+        """Update model with both names disliked.
+
+        Treats both names as less preferred than a neutral baseline.
+        Adds two comparisons: neutral preferred over A, neutral preferred over B.
+
+        Args:
+            features_a: Feature vector for name A
+            features_b: Feature vector for name B
+        """
+        d = self.d
+        neutral = np.zeros(d, dtype=features_a.dtype)
+        # preference=1 means second argument (neutral) preferred
+        self.update_batch(
+            [
+                (features_a, neutral, 1),
+                (features_b, neutral, 1),
+            ],
+        )
+
     def update_batch(
         self,
         comparisons: list[tuple[np.ndarray, np.ndarray, int]],
@@ -169,7 +266,8 @@ class BradleyTerryModel:
         for iteration in range(max_iter):
             # Current predictions
             eta = X @ w
-            p = self._sigmoid(eta)
+            # Vectorized stable sigmoid
+            p = np.where(eta >= 0, 1.0 / (1.0 + np.exp(-eta)), np.exp(eta) / (1.0 + np.exp(eta)))
 
             # Weights for IRLS
             W = p * (1 - p)
@@ -191,7 +289,8 @@ class BradleyTerryModel:
 
         # Update covariance (inverse of Hessian)
         eta = X @ w
-        p = self._sigmoid(eta)
+        # Vectorized stable sigmoid
+        p = np.where(eta >= 0, 1.0 / (1.0 + np.exp(-eta)), np.exp(eta) / (1.0 + np.exp(eta)))
         W = p * (1 - p)
         XW = X.T * W
         posterior_cov_inv = XW @ X + cov_inv
@@ -209,8 +308,9 @@ class BradleyTerryModel:
     ) -> tuple[int, int, str, str]:
         """Select pair for active learning using Thompson sampling.
 
-        Strategy: Sample utilities, then select pair where probability
-        of preference is closest to 0.5 (maximally uncertain).
+        Strategy: Sample utilities, then select pair from different phonetic
+        clusters where probability of preference is closest to 0.5 (maximally
+        uncertain). Falls back to any pair if no cross-cluster options exist.
 
         Args:
             features: Feature matrix shape (n, d)
@@ -224,19 +324,29 @@ class BradleyTerryModel:
         if n < 2:
             raise ValueError("Need at least 2 names for pair selection")
 
+        # Group names by phonetic primary code
+        clusters = _group_names_by_phonetic(names)
+
         # Sample utilities
         utilities = self.sample_utilities(features)
 
-        # For efficiency, sample a subset of pairs if n is large
-        # Simple implementation: random sample of 1000 pairs
+        # Try to select cross-cluster pairs first
         n_candidates = min(1000, n * (n - 1) // 2)
-        idx_a = self.rng.choice(n, size=n_candidates, replace=True)
-        idx_b = self.rng.choice(n, size=n_candidates, replace=True)
+        cross_cluster_pairs = _select_cross_cluster_pairs(clusters, n_candidates, self.rng)
 
-        # Filter out same indices
-        mask = idx_a != idx_b
-        idx_a = idx_a[mask]
-        idx_b = idx_b[mask]
+        if len(cross_cluster_pairs) >= 10:
+            # Use cross-cluster pairs for selection
+            idx_a = np.array([p[0] for p in cross_cluster_pairs])
+            idx_b = np.array([p[1] for p in cross_cluster_pairs])
+        else:
+            # Fallback: random pairs (all names in same phonetic cluster or too few)
+            idx_a = self.rng.choice(n, size=n_candidates, replace=True)
+            idx_b = self.rng.choice(n, size=n_candidates, replace=True)
+
+            # Filter out same indices
+            mask = idx_a != idx_b
+            idx_a = idx_a[mask]
+            idx_b = idx_b[mask]
 
         if len(idx_a) == 0:
             # Fallback: first two names
@@ -245,7 +355,6 @@ class BradleyTerryModel:
         # Compute acquisition score: uncertainty + diversity bonus
         # Vectorized computation for all candidate pairs
         diff = features[idx_a] - features[idx_b]  # (m, d)
-        # mean_score = diff @ self.state.weight_mean  # Not used for score
         var_score = np.einsum(
             "ij,jk,ik->i",
             diff,
@@ -259,8 +368,8 @@ class BradleyTerryModel:
         score[utility_diff < 0.1] *= 0.5
 
         best_idx = np.argmax(score)
-        i = idx_a[best_idx]
-        j = idx_b[best_idx]
+        i = int(idx_a[best_idx])
+        j = int(idx_b[best_idx])
 
         return i, j, names[i], names[j]
 
@@ -271,6 +380,7 @@ class BradleyTerryModel:
         k: int = 3,
     ) -> list[tuple[int, int, str, str]]:
         """Select top K pairs for active learning using Thompson sampling.
+        Prioritizes pairs from different phonetic clusters for diversity.
         Returns list of (idx_a, idx_b, name_a, name_b) for the top K pairs.
         """
         n = len(names)
@@ -279,6 +389,9 @@ class BradleyTerryModel:
         if k < 1:
             raise ValueError("k must be at least 1")
 
+        # Group names by phonetic primary code
+        clusters = _group_names_by_phonetic(names)
+
         # Sample utilities
         utilities = self.sample_utilities(features)
 
@@ -286,8 +399,15 @@ class BradleyTerryModel:
         n_candidates = min(1000, n * (n - 1) // 2)
         total_pairs = n * (n - 1) // 2
 
-        if total_pairs <= n_candidates:
-            # Use all possible pairs
+        # Try to select cross-cluster pairs first
+        cross_cluster_pairs = _select_cross_cluster_pairs(clusters, n_candidates, self.rng)
+
+        if len(cross_cluster_pairs) >= 10:
+            # Use cross-cluster pairs for selection
+            idx_a = np.array([p[0] for p in cross_cluster_pairs])
+            idx_b = np.array([p[1] for p in cross_cluster_pairs])
+        elif total_pairs <= n_candidates:
+            # Use all possible pairs (fallback)
             idx_a = np.zeros(total_pairs, dtype=int)
             idx_b = np.zeros(total_pairs, dtype=int)
             pair_idx = 0
@@ -297,7 +417,7 @@ class BradleyTerryModel:
                     idx_b[pair_idx] = j
                     pair_idx += 1
         else:
-            # Sample unique random pairs
+            # Sample unique random pairs (fallback)
             pairs_set = set()
             while len(pairs_set) < n_candidates:
                 i = self.rng.integers(0, n)
@@ -339,8 +459,8 @@ class BradleyTerryModel:
         pairs_seen = set()
         result = []
         for idx in top_indices:
-            i = idx_a[idx]
-            j = idx_b[idx]
+            i = int(idx_a[idx])
+            j = int(idx_b[idx])
             # Normalize pair order
             pair = (min(i, j), max(i, j))
             if pair in pairs_seen:
@@ -462,8 +582,20 @@ class BradleyTerryModel:
             self.d = len(feature_names)
             return True
 
-    def _sigmoid(self, x: float) -> float:
-        """Numerically stable sigmoid function."""
+    def _sigmoid(self, x: float | np.ndarray) -> float | np.ndarray:
+        """Numerically stable sigmoid function (works for scalars and arrays)."""
+        if isinstance(x, np.ndarray):
+            # Vectorized stable sigmoid
+            pos_mask = x >= 0
+            neg_mask = ~pos_mask
+            result = np.empty_like(x)
+            # For positive values: 1 / (1 + exp(-x))
+            result[pos_mask] = 1.0 / (1.0 + np.exp(-x[pos_mask]))
+            # For negative values: exp(x) / (1 + exp(x))
+            exp_neg = np.exp(x[neg_mask])
+            result[neg_mask] = exp_neg / (1.0 + exp_neg)
+            return result
+        # Scalar case
         if x >= 0:
             return 1.0 / (1.0 + np.exp(-x))
         exp_x = np.exp(x)
