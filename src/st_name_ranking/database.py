@@ -8,8 +8,11 @@ Handles:
 - Submodule version tracking
 """
 
+import datetime as dt
 import logging
+import shutil
 import sqlite3
+import tempfile
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
@@ -89,6 +92,70 @@ def update_phonetic_codes(limit: int | None = None) -> int:
         else:
             logger.debug("No names need phonetic code updates")
         return updated
+
+
+def _migrate_comparisons_table_if_needed(conn) -> None:
+    """Migrate comparisons table to support preference=2 (both disliked) if needed."""
+    # Check if CHECK constraint already includes 2
+    # SQLite doesn't expose CHECK constraints easily, so we try a test insert
+    # Get a valid name_id pair for testing (create dummy names if none exist)
+    cursor = conn.execute("SELECT id FROM names LIMIT 2")
+    rows = cursor.fetchall()
+    if len(rows) < 2:
+        # Need at least two names for test - insert temporary names
+        conn.execute("INSERT OR IGNORE INTO names (name) VALUES ('__temp_a')")
+        conn.execute("INSERT OR IGNORE INTO names (name) VALUES ('__temp_b')")
+        cursor = conn.execute("SELECT id FROM names WHERE name IN ('__temp_a', '__temp_b')")
+        rows = cursor.fetchall()
+
+    id_a, id_b = rows[0][0], rows[1][0]
+
+    try:
+        # Try to insert a comparison with preference=2
+        conn.execute(
+            "INSERT INTO comparisons (name_a_id, name_b_id, preference) VALUES (?, ?, 2)",
+            (id_a, id_b),
+        )
+        # If successful, constraint already allows 2
+        conn.execute("DELETE FROM comparisons WHERE name_a_id = ? AND name_b_id = ?", (id_a, id_b))
+        logger.debug("Comparisons table already supports preference=2")
+    except sqlite3.IntegrityError as e:
+        if "CHECK" in str(e):
+            # Constraint violation - need to migrate
+            logger.info("Migrating comparisons table to support preference=2")
+            # Clean up any leftover comparisons_new from previous failed migration
+            conn.execute("DROP TABLE IF EXISTS comparisons_new")
+            # Create new table with updated constraint
+            conn.execute("""
+                CREATE TABLE comparisons_new (
+                    id INTEGER PRIMARY KEY,
+                    name_a_id INTEGER NOT NULL REFERENCES names(id),
+                    name_b_id INTEGER NOT NULL REFERENCES names(id),
+                    preference INTEGER NOT NULL CHECK(preference IN (-1, 0, 1, 2)),
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE(name_a_id, name_b_id, preference)
+                )
+            """)
+            # Copy existing data, deduplicating on (name_a_id, name_b_id, preference)
+            # Keep the row with the latest created_at for each duplicate (most recent preference)
+            conn.execute("""
+                INSERT OR IGNORE INTO comparisons_new (name_a_id, name_b_id, preference, created_at)
+                SELECT name_a_id, name_b_id, preference, MAX(created_at) as created_at
+                FROM comparisons
+                GROUP BY name_a_id, name_b_id, preference
+            """)
+            # Drop old table
+            conn.execute("DROP TABLE comparisons")
+            # Rename new table
+            conn.execute("ALTER TABLE comparisons_new RENAME TO comparisons")
+            # Recreate indexes (they will be recreated later in init_database)
+            logger.info("Comparisons table migrated successfully")
+        else:
+            # Some other integrity error (e.g., UNIQUE) - ignore
+            pass
+    finally:
+        # Clean up temporary names if we inserted them
+        conn.execute("DELETE FROM names WHERE name IN ('__temp_a', '__temp_b')")
 
 
 def init_database():
@@ -202,6 +269,9 @@ def init_database():
                 UNIQUE(name_a_id, name_b_id, preference)  -- Prevent duplicate comparisons
             )
         """)
+
+        # Migrate comparisons table to support preference=2 if needed
+        _migrate_comparisons_table_if_needed(conn)
 
         # Ensure phonetic columns exist (migration for existing databases)
         cursor = conn.execute("PRAGMA table_info(names)")
@@ -897,6 +967,51 @@ def update_ratings_batch_values(ratings_dict: dict[str, float]) -> None:
             )
 
 
+def record_comparison(name_a: str, name_b: str, preference: int) -> None:
+    """Record a pairwise comparison in the database.
+
+    Args:
+        name_a: First name in comparison
+        name_b: Second name in comparison
+        preference: -1 (name_a preferred), 0 (draw), 1 (name_b preferred), 2 (both disliked)
+
+    Raises:
+        ValueError: If preference not in (-1, 0, 1, 2)
+    """
+    if preference not in (-1, 0, 1, 2):
+        raise ValueError("preference must be -1, 0, 1, or 2")
+
+    with get_connection() as conn:
+        # Get name IDs
+        cursor = conn.execute(
+            "SELECT id FROM names WHERE name = ?",
+            (name_a,),
+        )
+        row = cursor.fetchone()
+        if not row:
+            raise ValueError(f"Name not found: {name_a}")
+        name_a_id = row[0]
+
+        cursor = conn.execute(
+            "SELECT id FROM names WHERE name = ?",
+            (name_b,),
+        )
+        row = cursor.fetchone()
+        if not row:
+            raise ValueError(f"Name not found: {name_b}")
+        name_b_id = row[0]
+
+        # Insert comparison (ignore duplicates due to UNIQUE constraint)
+        conn.execute(
+            """
+            INSERT OR IGNORE INTO comparisons
+            (name_a_id, name_b_id, preference, created_at)
+            VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+            """,
+            (name_a_id, name_b_id, preference),
+        )
+
+
 def save_user_setting(key: str, value: str):
     """Save a user setting."""
     with get_connection() as conn:
@@ -973,6 +1088,167 @@ def get_comparison_count(name: str) -> int:
         return cursor.fetchone()[0]
 
 
+def get_preference_stats_by_gender() -> dict[str, dict[str, int]]:
+    """Get preference statistics grouped by gender.
+
+    Returns:
+        Dictionary mapping gender -> {'wins': int, 'losses': int, 'draws': int, 'total': int}
+    """
+    with get_connection() as conn:
+        # CTE to compute outcomes for each name in each comparison
+        cursor = conn.execute("""
+            WITH name_outcomes AS (
+                SELECT
+                    name_a_id as name_id,
+                    CASE
+                        WHEN preference = -1 THEN 'win'
+                        WHEN preference = 1 THEN 'loss'
+                        ELSE 'draw'
+                    END as outcome
+                FROM comparisons
+                WHERE preference IN (-1, 0, 1)
+                UNION ALL
+                SELECT
+                    name_b_id as name_id,
+                    CASE
+                        WHEN preference = 1 THEN 'win'
+                        WHEN preference = -1 THEN 'loss'
+                        ELSE 'draw'
+                    END as outcome
+                FROM comparisons
+                WHERE preference IN (-1, 0, 1)
+            )
+            SELECT
+                COALESCE(n.gender, 'Unknown') as gender,
+                no.outcome,
+                COUNT(*) as count
+            FROM name_outcomes no
+            JOIN names n ON no.name_id = n.id
+            GROUP BY n.gender, no.outcome
+            ORDER BY gender, outcome
+        """)
+        rows = cursor.fetchall()
+
+        # Initialize result dict
+        result = {}
+        key_map = {"win": "wins", "loss": "losses", "draw": "draws"}
+        for gender, outcome, count in rows:
+            if gender not in result:
+                result[gender] = {"wins": 0, "losses": 0, "draws": 0, "total": 0}
+            result[gender][key_map[outcome]] = count
+            result[gender]["total"] += count
+
+        return result
+
+
+def get_preference_stats_by_origin() -> dict[str, dict[str, int]]:
+    """Get preference statistics grouped by origin region.
+
+    Returns:
+        Dictionary mapping origin region -> {'wins': int, 'losses': int, 'draws': int, 'total': int}
+    """
+    with get_connection() as conn:
+        cursor = conn.execute("""
+            WITH name_outcomes AS (
+                SELECT
+                    name_a_id as name_id,
+                    CASE
+                        WHEN preference = -1 THEN 'win'
+                        WHEN preference = 1 THEN 'loss'
+                        ELSE 'draw'
+                    END as outcome
+                FROM comparisons
+                WHERE preference IN (-1, 0, 1)
+                UNION ALL
+                SELECT
+                    name_b_id as name_id,
+                    CASE
+                        WHEN preference = 1 THEN 'win'
+                        WHEN preference = -1 THEN 'loss'
+                        ELSE 'draw'
+                    END as outcome
+                FROM comparisons
+                WHERE preference IN (-1, 0, 1)
+            )
+            SELECT
+                CASE
+                    WHEN n.origin_region IS NULL THEN 'International'
+                    ELSE n.origin_region
+                END as region,
+                no.outcome,
+                COUNT(*) as count
+            FROM name_outcomes no
+            JOIN names n ON no.name_id = n.id
+            GROUP BY region, no.outcome
+            ORDER BY region, outcome
+        """)
+        rows = cursor.fetchall()
+
+        result = {}
+        key_map = {"win": "wins", "loss": "losses", "draw": "draws"}
+        for region, outcome, count in rows:
+            if region not in result:
+                result[region] = {"wins": 0, "losses": 0, "draws": 0, "total": 0}
+            result[region][key_map[outcome]] = count
+            result[region]["total"] += count
+
+        return result
+
+
+def get_preference_stats_by_phonetic() -> dict[str, dict[str, int]]:
+    """Get preference statistics grouped by phonetic primary code.
+
+    Returns:
+        Dictionary mapping phonetic code -> {'wins': int, 'losses': int, 'draws': int, 'total': int}
+    """
+    with get_connection() as conn:
+        cursor = conn.execute("""
+            WITH name_outcomes AS (
+                SELECT
+                    name_a_id as name_id,
+                    CASE
+                        WHEN preference = -1 THEN 'win'
+                        WHEN preference = 1 THEN 'loss'
+                        ELSE 'draw'
+                    END as outcome
+                FROM comparisons
+                WHERE preference IN (-1, 0, 1)
+                UNION ALL
+                SELECT
+                    name_b_id as name_id,
+                    CASE
+                        WHEN preference = 1 THEN 'win'
+                        WHEN preference = -1 THEN 'loss'
+                        ELSE 'draw'
+                    END as outcome
+                FROM comparisons
+                WHERE preference IN (-1, 0, 1)
+            )
+            SELECT
+                CASE
+                    WHEN n.phonetic_primary IS NULL OR n.phonetic_primary = '' THEN 'Unknown'
+                    ELSE n.phonetic_primary
+                END as phonetic_code,
+                no.outcome,
+                COUNT(*) as count
+            FROM name_outcomes no
+            JOIN names n ON no.name_id = n.id
+            GROUP BY phonetic_code, no.outcome
+            ORDER BY phonetic_code, outcome
+        """)
+        rows = cursor.fetchall()
+
+        result = {}
+        key_map = {"win": "wins", "loss": "losses", "draw": "draws"}
+        for phonetic_code, outcome, count in rows:
+            if phonetic_code not in result:
+                result[phonetic_code] = {"wins": 0, "losses": 0, "draws": 0, "total": 0}
+            result[phonetic_code][key_map[outcome]] = count
+            result[phonetic_code]["total"] += count
+
+        return result
+
+
 def get_name_details_batch(
     names: list[str],
 ) -> list[tuple[str | None, str | None]]:
@@ -1012,6 +1288,39 @@ def get_name_details_batch(
     return result
 
 
+def get_phonetic_codes_batch(names: list[str]) -> dict[str, tuple[str, str]]:
+    """Get phonetic codes for multiple names in batch.
+    Returns dict mapping name -> (phonetic_primary, phonetic_secondary).
+    Missing names are omitted from the result.
+    """
+    if not names:
+        return {}
+
+    # Process in chunks to avoid SQL parameter limit
+    chunk_size = MAX_SQL_PARAMS
+    result: dict[str, tuple[str, str]] = {}
+
+    for i in range(0, len(names), chunk_size):
+        chunk = names[i : i + chunk_size]
+
+        with get_connection() as conn:
+            placeholders = ", ".join(["?"] * len(chunk))
+            query = f"""
+                SELECT name, phonetic_primary, phonetic_secondary FROM names
+                WHERE name IN ({placeholders})
+            """
+            cursor = conn.execute(query, chunk)
+            rows = cursor.fetchall()
+
+            for row in rows:
+                name = row[0]
+                primary = row[1] or ""
+                secondary = row[2] or ""
+                result[name] = (primary, secondary)
+
+    return result
+
+
 def initialize_ratings(names: list[str]) -> dict[str, float]:
     """Initialize ratings for a list of names with default score.
 
@@ -1023,6 +1332,74 @@ def initialize_ratings(names: list[str]) -> dict[str, float]:
 
     """
     return dict.fromkeys(names, INITIAL_SCORE)
+
+
+def export_database() -> bytes:
+    """Export the entire SQLite database as bytes.
+
+    Returns:
+        Bytes of the database file.
+
+    Raises:
+        FileNotFoundError: If database file doesn't exist.
+        IOError: If unable to read database file.
+    """
+    if not DB_PATH.exists():
+        raise FileNotFoundError(f"Database file not found at {DB_PATH}")
+
+    # Ensure any pending writes are flushed by closing all connections
+    # SQLite handles concurrent reads fine, but we need to ensure no open write transactions
+    # We'll just read the file bytes
+    try:
+        with open(DB_PATH, "rb") as f:
+            return f.read()
+    except Exception as e:
+        raise OSError(f"Failed to read database file: {e}")
+
+
+def import_database(file_bytes: bytes, backup: bool = True) -> None:
+    """Replace current database with uploaded SQLite database.
+
+    Args:
+        file_bytes: Bytes of the SQLite database file.
+        backup: Whether to create a backup of the current database.
+
+    Raises:
+        ValueError: If uploaded file is not a valid SQLite database.
+        IOError: If unable to write database file.
+    """
+    # Validate uploaded file is a valid SQLite database
+    try:
+        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as tmp:
+            tmp.write(file_bytes)
+            tmp.flush()
+            # Try to connect and query PRAGMA user_version (simple validation)
+            conn = sqlite3.connect(tmp.name)
+            try:
+                conn.execute("SELECT 1 FROM sqlite_master LIMIT 1")
+            finally:
+                conn.close()
+    except sqlite3.Error as e:
+        raise ValueError(f"Uploaded file is not a valid SQLite database: {e}")
+
+    # Create backup of current database if it exists
+    if backup and DB_PATH.exists():
+        backup_path = DB_PATH.with_suffix(f".db.backup.{dt.datetime.now().strftime('%Y%m%d_%H%M%S')}")
+        shutil.copy2(DB_PATH, backup_path)
+        logger.info("Created backup of current database at %s", backup_path)
+
+    # Write new database file
+    try:
+        with open(DB_PATH, "wb") as f:
+            f.write(file_bytes)
+    except Exception as e:
+        raise OSError(f"Failed to write database file: {e}")
+
+    # Reset initialization flag to force re-initialization
+    global _initialized
+    _initialized = False
+
+    logger.info("Database imported successfully")
 
 
 if __name__ == "__main__":
