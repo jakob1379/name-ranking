@@ -74,20 +74,32 @@ The application will be available at `http://localhost:8501`.
 
 ### Tutorial
 
-- [Step-by-Step Tutorial](tutorial.md) - Complete walkthrough from installation to advanced usage, modeled after the [Typer tutorial](https://typer.tiangolo.com/tutorial/) structure
+- [Step-by-Step Tutorial](tutorial.md) - Complete walkthrough from installation
+  to advanced usage, following the
+  [Typer tutorial](https://typer.tiangolo.com/tutorial/) style with progressive
+  examples and clear explanations
 
 ### Theory & Architecture
 
-- [Active Learning System](active_learning.md) - Bayesian preference modeling, feature engineering, and Thompson sampling
-- [System Architecture](architecture.md) - Component architecture, data flow, and design principles
+- [Active Learning System](active_learning.md) - Bayesian preference modeling,
+  feature engineering, and Thompson sampling
+- [System Architecture](architecture.md) - Component architecture, data flow,
+  and design principles
 
 ### User Guides
 
-- **Getting Started** - Quick installation and first run
-- **Tournament Mode** - How to rank names effectively
-- **Similarity Search** - Finding names by multiple criteria
-- **Origin Classification** - Understanding name nationalities
-- **Filtering & Preferences** - Using filters and managing preferences
+_All covered in the [Tutorial](tutorial.md):_
+
+- **Getting Started** - Quick installation and first run (see
+  [Quick Start](tutorial.md#quick-start))
+- **Tournament Mode** - How to rank names effectively (see
+  [Tournament Mode](tutorial.md#tournament-mode))
+- **Similarity Search** - Finding names by multiple criteria (see
+  [Similarity Search](tutorial.md#similarity-search))
+- **Origin Classification** - Understanding name nationalities (see
+  [Origin Classification](tutorial.md#origin-classification))
+- **Filtering & Preferences** - Using filters and managing preferences (see
+  [Advanced Features](tutorial.md#advanced-features))
 
 ### Technical Reference
 
@@ -153,14 +165,8 @@ uv run pytest tests/test_database.py tests/test_utils.py
 ### Code Quality
 
 ```bash
-# Format code
-uv run ruff format .
-
-# Lint code
-uv run ruff check .
-
-# Type checking
-uv run pyrefly check
+# Run all pre-commit hooks
+uv run prek run -a
 ```
 
 ### Database Management

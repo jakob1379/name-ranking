@@ -8,7 +8,8 @@ The Name Ranking application follows a modular architecture with clear
 separation between data management, machine learning, and user interface
 components.
 
-> **Note**: For usage instructions, see the [Tutorial](tutorial.md). This document focuses on design decisions and system architecture for developers.
+> **Note**: For usage instructions, see the [Tutorial](tutorial.md). This
+> document focuses on design decisions and system architecture for developers.
 
 ## Architecture Overview
 
@@ -53,9 +54,16 @@ graph TB
 
 - **Names table**: Core name metadata (name, gender, origin region)
 - **Ratings table**: Preference scores derived from Bayesian model
-- **Pairwise comparisons**: Historical comparison data
+- **Comparisons table**: Historical comparison data with four preference types:
+  - `-1`: Prefer name_a over name_b
+  - `1`: Prefer name_b over name_a  
+  - `0`: Draw (both equally preferred)
+  - `2`: Down (dislike both names)
+  
+  > **Note**: Down votes (`2`) are recorded but excluded from preference statistics (win/loss/draw counts) displayed in the UI.
+  
 - **Model state**: Active learning model parameters
-- **Comparisons**: Preference data for Bayesian updates
+- **Automatic schema migration**: Existing databases automatically upgrade to support the "down" preference (`2`)
 - **Region mapping**: Geographic region classifications
 
 #### Git Submodule Integration
@@ -133,11 +141,13 @@ graph TB
 
 #### Model Integration
 
-- **Preference update functions**: `update_preference_and_save()` and
-  `update_preference_draw_and_save()` handle comparison results
+- **Preference update functions**: Three functions handle the four preference types:
+  - `update_preference_and_save()`: For `-1` (prefer left) and `1` (prefer right)
+  - `update_preference_draw_and_save()`: For `0` (draw)
+  - `update_preference_down_and_save()`: For `2` (down/dislike both)
 - **Rating synchronization**: Model utilities converted to preference scores for
   display
-- **Comparison logging**: All comparisons stored in database for model training
+- **Comparison logging**: All comparisons stored in database with preference values
 - **UI integration**: Streamlit interface calls model update functions directly
 
 #### Error Handling
@@ -186,23 +196,28 @@ graph TB
 # 1. User initiates comparison
 name_a, name_b = select_candidates()
 
-# 2. User votes
+# 2. User votes with four possible preferences
 if user_prefers_a:
-    update_elo_and_save(ratings, name_a, name_b)
+    update_preference_and_save(name_a, name_b)  # preference = -1
 elif user_prefers_b:
-    update_elo_and_save(ratings, name_b, name_a)
-else:  # draw
-    update_elo_draw_and_save(ratings, name_a, name_b)
+    update_preference_and_save(name_b, name_a)  # preference = 1
+elif user_draw:
+    update_preference_draw_and_save(name_a, name_b)  # preference = 0
+elif user_down:
+    update_preference_down_and_save(name_a, name_b)  # preference = 2
 
 # 3. Under the hood
-def update_elo_and_save(ratings, winner, loser):
-    # Update Bayesian model
-    update_model_and_save(winner, loser)
-
-    # Sync ratings from model
+def update_preference_and_save(winner, loser):
+    # Record comparison in database
+    database.record_comparison(winner, loser, preference=-1)
+    
+    # Update Bayesian model (Bradley-Terry with Laplace approximation)
+    model.update_based_on_preference(winner, loser, preference=-1)
+    
+    # Sync ratings from updated model weights
     _update_ratings_from_model()
-
-    # Return updated ratings (for UI)
+    
+    # Return updated ratings for UI display
     return database.get_ratings()
 ```
 
@@ -227,10 +242,12 @@ def get_name_features(name):
 ### Model Update Flow
 
 ```python
+# preference values: -1 (prefer name_a), 1 (prefer name_b), 0 (draw), 2 (down)
+
 # 1. Record comparison
 record_preference_comparison(name_a, name_b, preference)
 
-# 2. Update model
+# 2. Update model (handles all four preference types)
 model.update(name_a_features, name_b_features, preference)
 
 # 3. Save state

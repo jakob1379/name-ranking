@@ -5,7 +5,8 @@ active learning to intelligently select name pairs for comparison. This system
 replaces traditional ELO ratings with a feature‑based Bradley‑Terry model that
 learns user preferences across multiple dimensions.
 
-> **Note**: For a step-by-step usage guide, see the [Tutorial](tutorial.md). This document focuses on the theoretical foundations of the system.
+> **Note**: For a step-by-step usage guide, see the [Tutorial](tutorial.md).
+> This document focuses on the theoretical foundations of the system.
 
 ## Overview
 
@@ -136,7 +137,12 @@ def initialize_model(feature_dim: int) -> ModelState:
 
 ### Bayesian Update
 
-After observing preference `y ∈ {-1, 0, 1}` for names A and B:
+After observing preference `y ∈ {-1, 0, 1, 2}` for names A and B:
+
+- `y = -1`: Prefer name A over B
+- `y = 1`: Prefer name B over A  
+- `y = 0`: Draw (both equally preferred)
+- `y = 2`: Down (dislike both names, treated as two comparisons against neutral baseline)
 
 1. **Compute feature difference**: `Δφ = φ(A) - φ(B)`
 2. **Compute MAP estimate**: Newton‑Raphson optimization
@@ -216,5 +222,6 @@ def predict_preference_probability(
 ## See Also
 
 - [Tutorial](tutorial.md) - Step-by-step usage guide
-- [System Architecture](architecture.md) - Design decisions and component architecture
+- [System Architecture](architecture.md) - Design decisions and component
+  architecture
 - [Home](index.md) - Overview and quick start
