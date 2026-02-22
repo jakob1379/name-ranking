@@ -144,7 +144,7 @@ def pull_submodule_updates(classify_origins: bool = False) -> bool:
                 try:
                     # Ensure database is initialized before classification
                     database.init_database()
-                    from classify_origins import classify_all_names
+                    from st_name_ranking.classify_origins import classify_all_names
 
                     with st.spinner("Classifying name origins..."):
                         # Classify only unclassified names
@@ -390,6 +390,26 @@ def update_model_draw_and_save(player_a: str, player_b: str) -> None:
         logger.error(f"Failed to update model for draw: {e}")
 
 
+def update_model_down_and_save(player_a: str, player_b: str) -> None:
+    """Update Bradley-Terry model with both names disliked result and save."""
+    try:
+        model = get_active_learning_model()
+
+        # Extract features for both names
+        features_a = get_name_features(player_a)
+        features_b = get_name_features(player_b)
+
+        # Update model with both disliked
+        model.update_both_disliked(features_a, features_b)
+
+        # Save model state to database
+        model.save_to_db()
+        # Ratings are updated separately via update_preference_down_and_save
+
+    except Exception as e:
+        logger.error(f"Failed to update model for both disliked: {e}")
+
+
 def _update_ratings_from_model() -> None:
     """Update ratings table with current model utilities for all names.
     This maintains backward compatibility with UI that displays ratings.
@@ -463,6 +483,12 @@ def update_preference_and_save(
     # Update the model
     update_model_and_save(winner, loser)
 
+    # Record comparison in database
+    try:
+        database.record_comparison(winner, loser, -1)
+    except Exception as e:
+        logger.warning(f"Failed to record comparison: {e}")
+
     # Compute new ratings only for the two names involved
     try:
         winner_rating = _compute_rating_for_name(winner)
@@ -497,6 +523,12 @@ def update_preference_draw_and_save(
     # Update the model
     update_model_draw_and_save(player_a, player_b)
 
+    # Record comparison in database
+    try:
+        database.record_comparison(player_a, player_b, 0)
+    except Exception as e:
+        logger.warning(f"Failed to record draw comparison: {e}")
+
     # Compute new ratings only for the two names involved
     try:
         rating_a = _compute_rating_for_name(player_a)
@@ -512,6 +544,46 @@ def update_preference_draw_and_save(
 
         logger.debug(
             f"Updated draw ratings: {player_a}={rating_a:.1f}, {player_b}={rating_b:.1f}",
+        )
+        return ratings.copy()
+    except Exception as e:
+        logger.warning(f"Failed to compute updated ratings: {e}")
+        # Return original ratings as fallback
+        return ratings.copy()
+
+
+def update_preference_down_and_save(
+    ratings: dict[str, float],
+    player_a: str,
+    player_b: str,
+) -> dict[str, float]:
+    """Update Bayesian preference model with both disliked result.
+    Returns updated ratings dict derived from model weights.
+    """
+    # Update the model
+    update_model_down_and_save(player_a, player_b)
+
+    # Record down comparison in database (preference=2)
+    try:
+        database.record_comparison(player_a, player_b, 2)
+    except Exception as e:
+        logger.warning(f"Failed to record down comparison: {e}")
+
+    # Compute new ratings only for the two names involved
+    try:
+        rating_a = _compute_rating_for_name(player_a)
+        rating_b = _compute_rating_for_name(player_b)
+
+        # Update in-memory ratings dict
+        ratings[player_a] = rating_a
+        ratings[player_b] = rating_b
+
+        # Update database for these two names
+        database.update_rating_value(player_a, rating_a)
+        database.update_rating_value(player_b, rating_b)
+
+        logger.debug(
+            f"Updated down ratings: {player_a}={rating_a:.1f}, {player_b}={rating_b:.1f}",
         )
         return ratings.copy()
     except Exception as e:

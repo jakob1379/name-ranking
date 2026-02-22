@@ -4,6 +4,8 @@ Refactored version with modular imports.
 
 import json
 import logging
+import random
+import time
 from datetime import datetime
 
 import streamlit as st
@@ -11,8 +13,11 @@ import streamlit as st
 from st_name_ranking import database
 from st_name_ranking.data_loader import load_names_by_gender, save_ratings
 from st_name_ranking.database import initialize_ratings
-from st_name_ranking.ui import render_similarity, render_tournament
+from st_name_ranking.ui import render_binary_filter, render_similarity, render_tournament
 from st_name_ranking.utils import setup_session_state, sync_names_from_submodule
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
 # Configure logging - suppress debug noise
 logging.getLogger("watchdog").setLevel(logging.WARNING)
@@ -29,6 +34,7 @@ if not root_logger.handlers:
 
 
 def main() -> None:
+    start_time = time.perf_counter()
     st.set_page_config(page_title="Name Ranker", layout="wide")
     st.title("Name Preference Ranker")
 
@@ -99,12 +105,12 @@ def main() -> None:
         # Gender Filtering
         st.subheader("Gender Filter")
         if "gender_filter" not in st.session_state:
-            st.session_state.gender_filter = "All"
+            st.session_state.gender_filter = random.choice(["Male", "Female"])  # noqa: S311
 
         # Use pills for gender selection - modern, tab-like appearance
         gender_option = st.pills(
             "Filter names by gender:",
-            ["All", "Male", "Female", "Unisex"],
+            ["All", "Male", "Female"],
             default=st.session_state.gender_filter,
             help=("Select which gender of names to compare. Click or use left/right arrow keys to navigate."),
         )
@@ -183,7 +189,7 @@ def main() -> None:
                     type="secondary",
                 ):
                     # Open confirmation dialog
-                    with st.dialog("Confirm Reset Ratings"):
+                    with st.dialog("Confirm Reset Ratings"):  # type: ignore[attr-defined]
                         st.markdown("### ⚠️ Reset All Ratings?")
                         st.write(
                             "This will reset **all** ratings to their initial values.",
@@ -207,24 +213,39 @@ def main() -> None:
 
             # Export ratings
             st.subheader("Export")
-            if st.button("Export Ratings as JSON"):
-                import json as json_module
-
-                ratings_json = json_module.dumps(
-                    {
-                        "ratings": st.session_state.ratings,
-                        "export_date": datetime.now().isoformat(),
-                        "total_names": len(st.session_state.ratings),
-                    },
-                    indent=2,
-                    ensure_ascii=False,
+            col_export, col_import = st.columns(2)
+            with col_export:
+                if st.button("Export Database as SQLite"):
+                    try:
+                        db_bytes = database.export_database()
+                        st.download_button(
+                            label="Download Database",
+                            data=db_bytes,
+                            file_name=f"name_ranker_{datetime.now().strftime('%Y%m%d_%H%M%S')}.db",
+                            mime="application/x-sqlite3",
+                        )
+                    except Exception as e:
+                        st.error(f"Failed to export database: {e}")
+            with col_import:
+                uploaded_file = st.file_uploader(
+                    "Import SQLite database",
+                    type=["db"],
+                    key="db_upload",
+                    label_visibility="collapsed",
                 )
-                st.download_button(
-                    label="Download Ratings JSON",
-                    data=ratings_json,
-                    file_name=f"name_ratings_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
-                    mime="application/json",
-                )
+                if uploaded_file is not None:
+                    st.warning("Importing a database will replace the current database. Make sure you have a backup.")
+                    confirm = st.checkbox("I understand this will replace the current database", key="import_confirm")
+                    if confirm:
+                        if st.button("Import Database", type="primary"):
+                            try:
+                                database.import_database(uploaded_file.getvalue())
+                                st.success("Database imported successfully! Page will reload.")
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"Failed to import database: {e}")
+                    else:
+                        st.button("Import Database", type="primary", disabled=True)
 
     # Main Content
     if "all_names_data" not in st.session_state:
@@ -266,15 +287,26 @@ def main() -> None:
     ):
         # Use cached filtered names
         filtered_names = st.session_state.filtered_names_cache
+        logger.debug("Using cached filtered names (cache hit)")
     else:
         # Compute and cache
+        start_time = time.perf_counter()
         database.init_database()
+        db_time = time.perf_counter()
         filtered_names = database.get_names_by_filters(
             gender=current_gender if current_gender != "All" else None,
             origins=origins_to_filter,
         )
+        filter_time = time.perf_counter()
         st.session_state.filtered_names_cache = filtered_names
         st.session_state.filtered_cache_key = cache_key
+        total_time = (filter_time - start_time) * 1000
+        db_init_time = (db_time - start_time) * 1000
+        query_time = (filter_time - db_time) * 1000
+        logger.debug(
+            f"Computed filtered names (cache miss): {len(filtered_names)} names, "
+            f"total={total_time:.1f}ms, db_init={db_init_time:.1f}ms, query={query_time:.1f}ms",
+        )
 
     if not filtered_names:
         if current_origins:
@@ -307,13 +339,68 @@ def main() -> None:
             icon="ℹ️",
         )
 
-    tab1, tab2 = st.tabs(["Tournament", "Similarity Search"])
+    # Load inclusion decisions and apply filter
+    inclusions_json = database.load_user_setting("name_inclusions", "{}")
+    inclusions = {}
+    try:
+        loaded = json.loads(inclusions_json)
+        if isinstance(loaded, dict):
+            inclusions = loaded
+    except Exception as e:
+        logger.warning(f"Failed to parse inclusions JSON: {e}")
 
-    with tab1:
-        render_tournament(filtered_names)
+    # Filter names: include names that are not explicitly excluded (default True)
+    filtered_names_included = [
+        name
+        for name in filtered_names
+        if inclusions.get(name, True)  # True if not in dict or value is True
+    ]
 
-    with tab2:
-        render_similarity(filtered_names)
+    # Tab selection - only render active tab to improve performance
+    if "active_tab" not in st.session_state:
+        st.session_state.active_tab = "Name Filter"
+
+    # Display tab selector as radio buttons in columns for better UX
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        if st.button(
+            "📋 Name Filter",
+            use_container_width=True,
+            type="primary" if st.session_state.active_tab == "Name Filter" else "secondary",
+        ):
+            st.session_state.active_tab = "Name Filter"
+            st.rerun()
+    with col2:
+        if st.button(
+            "🏆 Tournament",
+            use_container_width=True,
+            type="primary" if st.session_state.active_tab == "Tournament" else "secondary",
+        ):
+            st.session_state.active_tab = "Tournament"
+            st.rerun()
+    with col3:
+        if st.button(
+            "🔍 Similarity Search",
+            use_container_width=True,
+            type="primary" if st.session_state.active_tab == "Similarity Search" else "secondary",
+        ):
+            st.session_state.active_tab = "Similarity Search"
+            st.rerun()
+
+    st.divider()
+
+    # Render only the active tab
+    if st.session_state.active_tab == "Name Filter":
+        render_binary_filter(filtered_names)
+    elif st.session_state.active_tab == "Tournament":
+        render_tournament(filtered_names_included)
+    else:  # Similarity Search
+        render_similarity(filtered_names_included)
+
+    # Log total execution time
+    end_time = time.perf_counter()
+    elapsed_ms = (end_time - start_time) * 1000
+    logger.debug(f"main() execution time: {elapsed_ms:.1f}ms (active tab: {st.session_state.active_tab})")
 
 
 if __name__ == "__main__":

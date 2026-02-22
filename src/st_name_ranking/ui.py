@@ -29,6 +29,7 @@ from st_name_ranking.utils import (
 )
 
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
 
 def display_name_with_rating(
@@ -186,74 +187,37 @@ def render_preferences_panel() -> None:
 
 
 def render_tournament(names: list[str]) -> None:
+    """Render tournament interface for comparing names.
+
+    Shows two names side by side with rating scores.
+    User clicks on which name they prefer.
+    """
+    import time
+
     logger.debug("Rendering tournament with %d names", len(names))
     st.header("Name Ranking Tournament")
     st.write(f"Comparing {len(names)} names")
-    st.caption(
-        "💡 **Keyboard shortcuts**: Left arrow (←) for left name, "
-        "Right arrow (→) for right name, Up arrow (↑) for draw, "
-        "Down arrow (↓) for dislike both",
-    )
+    st.caption("Tournament mode: click which name you prefer")
 
-    st.caption("📊 **Rating delta**: Green indicates higher rating than opponent, red indicates lower rating")
-
-    # Handle empty names list
-    if not names:
-        st.warning("No names to compare. Please include some names in the Name Filter tab.")
-        return
-
-    # Create set for efficient membership tests
+    # Precompute features and names set
+    features_matrix = get_names_features(names)
     names_set = set(names)
 
-    # Precompute features for filtered names if needed
+    # Initialize candidates if not set or empty
     if (
-        "filtered_names" not in st.session_state
-        or "filtered_features" not in st.session_state
-        or tuple(st.session_state.filtered_names) != tuple(names)
-    ):
-        logger.debug("Computing features for %d filtered names", len(names))
-        features_matrix = get_names_features(names)
-        st.session_state.filtered_names = names.copy()
-        st.session_state.filtered_features = features_matrix
-        st.session_state.candidate_queue = []  # Clear queue because filtered names changed
-    else:
-        features_matrix = st.session_state.filtered_features
-
-    # Initialize candidate queue if not exists
-    if "candidate_queue" not in st.session_state:
-        st.session_state.candidate_queue = []
-
-    # Ensure candidates are in current filtered names, reset if not
-    if (
-        st.session_state.candidate_a not in names_set
-        or st.session_state.candidate_b not in names_set
+        "candidate_a" not in st.session_state
+        or "candidate_b" not in st.session_state
         or not st.session_state.candidate_a
         or not st.session_state.candidate_b
     ):
-        # If queue has pairs, use them first
-        if st.session_state.candidate_queue:
-            c_a, c_b = st.session_state.candidate_queue.pop(0)
-            st.session_state.candidate_a = c_a
-            st.session_state.candidate_b = c_b
-        else:
-            # Generate a batch of pairs
-            batch = select_candidate_batch(names, features_matrix, batch_size=3)
-            # Filter pairs where both names are in current filtered set
-            valid_batch = [(a, b) for a, b in batch if a in names_set and b in names_set]
-            if valid_batch:
-                # Pop first pair for immediate display
-                c_a, c_b = valid_batch.pop(0)
-                st.session_state.candidate_a = c_a
-                st.session_state.candidate_b = c_b
-                # Store remaining pairs in queue
-                st.session_state.candidate_queue = valid_batch
-            else:
-                # Fallback to single pair selection
-                c_a, c_b = select_candidates(names, features_matrix)
-                st.session_state.candidate_a = c_a
-                st.session_state.candidate_b = c_b
+        c_a, c_b = select_candidates(names, features_matrix)
+        st.session_state.candidate_a = c_a
+        st.session_state.candidate_b = c_b
+        # Pre-fill queue with batch for faster navigation
+        batch = select_candidate_batch(names, features_matrix, batch_size=3)
+        valid_batch = [(a, b) for a, b in batch if a in names_set and b in names_set]
+        st.session_state.candidate_queue = valid_batch
 
-    # Inject CSS for metric styling and equal column heights
     st.markdown(
         """
     <style>
@@ -326,7 +290,7 @@ def render_tournament(names: list[str]) -> None:
                 unsafe_allow_html=True,
             )
             button_clicked = st.button(
-                f"👈 Prefer {st.session_state.candidate_a}",
+                f"Prefer {st.session_state.candidate_a}",
                 key="vote_a",
                 width="stretch",
                 type="primary",
@@ -376,7 +340,7 @@ def render_tournament(names: list[str]) -> None:
                 unsafe_allow_html=True,
             )
             button_clicked = st.button(
-                f"Prefer {st.session_state.candidate_b} 👉",
+                f"Prefer {st.session_state.candidate_b}",
                 key="vote_b",
                 width="stretch",
                 type="primary",
@@ -590,51 +554,19 @@ def render_tournament(names: list[str]) -> None:
         #     render_preferences_panel()
 
 
-def render_similarity(names: list[str]) -> None:
-    logger.debug("Rendering similarity search with %d names", len(names))
-    st.header("Similarity Search")
-
-    search_type: Literal["String (Levenshtein)", "Vector (LLM Embedding)"] = st.radio(
-        "Search Method",
-        ["String (Levenshtein)", "Vector (LLM Embedding)"],
-    )
-
-    query = st.text_input("Reference Name", value="Alma")
-
-    if st.button("Find Similar") and query:
-        if search_type == "String (Levenshtein)":
-            results = get_string_similarity_scores(query, names, limit=10)
-            st.dataframe(
-                pd.DataFrame(results, columns=["Name", "Similarity Score"]),  # type: ignore[call-overload]
-                width="stretch",
-                hide_index=True,
-            )
-        else:
-            with st.spinner("Loading Embedding Model (first run is slow)..."):
-                model = load_embedding_model()
-
-            with st.spinner("Computing Similarities..."):
-                results = get_vector_similarity_scores(
-                    model,
-                    query,
-                    names,
-                    limit=10,
-                )
-
-            st.dataframe(
-                pd.DataFrame(results, columns=["Name", "Cosine Similarity"]),  # type: ignore[call-overload]
-                width="stretch",
-                hide_index=True,
-            )
-
-
 def render_binary_filter(names: list[str]) -> None:
     """Render binary filter interface for including/excluding names.
 
-    Shows one name at a time with left/right arrow keyboard shortcuts.
-    Left arrow excludes the name, right arrow includes it.
+    Users review names one by one, marking them as included/neutral or excluded/dislike.
     """
     logger.debug("Rendering binary filter with %d names", len(names))
+    import time
+
+    start_time = time.perf_counter()
+
+    # Clear last button press time (used for performance monitoring)
+    if "last_button_press_time" in st.session_state:
+        del st.session_state.last_button_press_time
 
     # Helper function to update counts incrementally
     def update_counts(name: str, old_status: bool | None, new_status: bool) -> None:
@@ -679,12 +611,11 @@ def render_binary_filter(names: list[str]) -> None:
             st.session_state.name_inclusions = {}
 
     inclusions = st.session_state.name_inclusions
+    time_after_inclusions = time.perf_counter()
 
     # Detect if names list has changed (e.g., gender/origin filter changed)
     # Store a hash of the current names list (names are already sorted from database)
-    import hashlib
-
-    names_hash = hashlib.sha256(str(names).encode()).hexdigest()
+    names_hash = str(hash(tuple(names)))
     if "filter_names_hash" not in st.session_state:
         st.session_state.filter_names_hash = names_hash
         st.session_state.filter_index = 0
@@ -709,14 +640,22 @@ def render_binary_filter(names: list[str]) -> None:
         or st.session_state.get("filter_counts_names_hash") != names_hash
     ):
         # Recompute counts from scratch
-        not_decided = sum(1 for name in names if name not in inclusions)
-        explicitly_included = sum(1 for name in names if inclusions.get(name) is True)
-        explicitly_excluded = sum(1 for name in names if inclusions.get(name) is False)
+        not_decided = explicitly_included = explicitly_excluded = 0
+        for name in names:
+            status = inclusions.get(name)
+            if status is None:
+                not_decided += 1
+            elif status is True:
+                explicitly_included += 1
+            else:  # status is False
+                explicitly_excluded += 1
 
         st.session_state.filter_counts_not_decided = not_decided
         st.session_state.filter_counts_included = explicitly_included
         st.session_state.filter_counts_excluded = explicitly_excluded
         st.session_state.filter_counts_names_hash = names_hash
+
+    time_after_counts = time.perf_counter()
 
     # Get current name
     current_idx = st.session_state.filter_index
@@ -764,72 +703,41 @@ def render_binary_filter(names: list[str]) -> None:
         f"</div>",
         unsafe_allow_html=True,
     )
-
-    # Arrow indicators showing keyboard mapping
-    col_arrow_left, col_arrow_right = st.columns(2)
-    with col_arrow_left:
-        st.markdown(
-            "<div style='text-align: center; font-size: 32px; margin: 10px 0 5px 0;'>←</div>"
-            "<div style='text-align: center; font-size: 14px; color: #666; margin: 0 0 10px 0;'>Exclude/Dislike</div>",
-            unsafe_allow_html=True,
-        )
-    with col_arrow_right:
-        st.markdown(
-            "<div style='text-align: center; font-size: 32px; margin: 10px 0 5px 0;'>→</div>"
-            "<div style='text-align: center; font-size: 14px; color: #666; margin: 0 0 10px 0;'>Include/Neutral</div>",
-            unsafe_allow_html=True,
-        )
+    time_after_name_display = time.perf_counter()
 
     # Decision buttons - simplified to two clear options
     col_exclude, col_include = st.columns(2)
     with col_exclude:
-        if st.button("← 👎 Exclude/Dislike", key="exclude_btn", use_container_width=True, type="secondary"):
+        if st.button(
+            "Exclude/Dislike",
+            key="exclude_btn",
+            use_container_width=True,
+            type="secondary",
+            shortcut="Left",
+        ):
             old_status = inclusions.get(current_name)
             inclusions[current_name] = False
             update_counts(current_name, old_status, False)
             st.session_state.filter_index += 1
             st.toast(f"Excluded: {current_name}", icon="👎")
+            st.session_state.last_button_press_time = time.perf_counter()
             st.rerun()
     with col_include:
-        if st.button("👍 Include/Neutral →", key="include_btn", use_container_width=True, type="primary"):
+        if st.button(
+            "Include/Neutral",
+            key="include_btn",
+            use_container_width=True,
+            type="primary",
+            shortcut="Right",
+        ):
             # Include (explicitly mark as included/neutral)
             old_status = inclusions.get(current_name)
             inclusions[current_name] = True
             update_counts(current_name, old_status, True)
             st.session_state.filter_index += 1
             st.toast(f"Included: {current_name}", icon="👍")
+            st.session_state.last_button_press_time = time.perf_counter()
             st.rerun()
-
-    # Keyboard shortcuts (if available in this Streamlit version)
-    key = None
-    with contextlib.suppress(AttributeError):
-        key = st.keyboard(  # type: ignore[attr-defined, unused-ignore]
-            ["arrowleft", "arrowright", " "],
-            help="Press left arrow to exclude/dislike, right arrow to include/neutral, space to include/neutral",
-        )
-
-    if key == "arrowleft":
-        old_status = inclusions.get(current_name)
-        inclusions[current_name] = False
-        update_counts(current_name, old_status, False)
-        st.session_state.filter_index += 1
-        st.toast(f"Excluded: {current_name}", icon="👎")
-        st.rerun()
-    elif key == "arrowright":
-        old_status = inclusions.get(current_name)
-        inclusions[current_name] = True
-        update_counts(current_name, old_status, True)
-        st.session_state.filter_index += 1
-        st.toast(f"Included: {current_name}", icon="👍")
-        st.rerun()
-    elif key == " ":
-        # Space bar includes/neutral (same as right arrow)
-        old_status = inclusions.get(current_name)
-        inclusions[current_name] = True
-        update_counts(current_name, old_status, True)
-        st.session_state.filter_index += 1
-        st.toast(f"Included: {current_name}", icon="👍")
-        st.rerun()
 
     # Save decisions periodically (every 50 actions to reduce DB writes)
     if current_idx % 50 == 0:
@@ -837,7 +745,16 @@ def render_binary_filter(names: list[str]) -> None:
 
         from st_name_ranking.database import save_user_setting
 
-        save_user_setting("name_inclusions", json.dumps(inclusions))
+        # Time JSON serialization and database save
+        json_start = time.perf_counter()
+        inclusions_json = json.dumps(inclusions)
+        json_time = (time.perf_counter() - json_start) * 1000
+
+        save_start = time.perf_counter()
+        save_user_setting("name_inclusions", inclusions_json)
+        save_time = (time.perf_counter() - save_start) * 1000
+
+        logger.debug(f"Periodic save: JSON={json_time:.1f}ms, DB={save_time:.1f}ms, entries={len(inclusions)}")
 
     # Batch operations
     col_batch1, col_batch2 = st.columns(2)
@@ -851,6 +768,7 @@ def render_binary_filter(names: list[str]) -> None:
             if "filter_counts_names_hash" in st.session_state:
                 del st.session_state.filter_counts_names_hash
             st.toast(f"Included {count} remaining names", icon="✅")
+            st.session_state.last_button_press_time = time.perf_counter()
             st.rerun()
     with col_batch2:
         if st.button("Exclude All Remaining", type="secondary", help="Exclude/dislike all remaining names"):
@@ -862,6 +780,7 @@ def render_binary_filter(names: list[str]) -> None:
             if "filter_counts_names_hash" in st.session_state:
                 del st.session_state.filter_counts_names_hash
             st.toast(f"Excluded {count} remaining names", icon="✅")
+            st.session_state.last_button_press_time = time.perf_counter()
             st.rerun()
 
     # Navigation buttons
@@ -870,6 +789,7 @@ def render_binary_filter(names: list[str]) -> None:
     with col_nav1:
         if st.button("Previous", disabled=current_idx == 0):
             st.session_state.filter_index -= 1
+            st.session_state.last_button_press_time = time.perf_counter()
             st.rerun()
     with col_nav2:
         if st.button("Reset All Decisions", type="secondary"):
@@ -883,6 +803,7 @@ def render_binary_filter(names: list[str]) -> None:
             from st_name_ranking.database import save_user_setting
 
             save_user_setting("name_inclusions", "{}")
+            st.session_state.last_button_press_time = time.perf_counter()
             st.rerun()
     with col_nav3:
         if st.button("Save & Continue", type="primary"):
@@ -892,13 +813,96 @@ def render_binary_filter(names: list[str]) -> None:
 
             save_user_setting("name_inclusions", json.dumps(inclusions))
             st.toast("Decisions saved!", icon="✅")
+            # Switch to tournament tab with included names
+            st.session_state.active_tab = "Tournament"
+            st.rerun()
 
     # Show list of excluded names (collapsible)
     with st.expander("Show excluded names"):
         excluded_names = [name for name in names if inclusions.get(name) is False]
         if excluded_names:
-            st.write(f"Excluded ({len(excluded_names)}): {', '.join(sorted(excluded_names)[:50])}")
-            if len(excluded_names) > 50:
-                st.caption(f"... and {len(excluded_names) - 50} more")
+            # Compute sorted list once
+            sorted_excluded = sorted(excluded_names)
+            # Multiselect widget: selected names remain excluded
+            selected = st.multiselect(
+                f"Excluded names ({len(excluded_names)})",
+                sorted_excluded,
+                default=sorted_excluded,
+                help="Uncheck names to include them in the tournament.",
+            )
+            # Find names that were deselected (removed from excluded)
+            selected_set = set(selected)
+            for name in excluded_names:
+                if name not in selected_set:
+                    # Move from excluded to included
+                    old_status = inclusions.get(name)
+                    inclusions[name] = True
+                    update_counts(name, old_status, True)
+            # Note: No need to rerun explicitly - widget triggers rerun
         else:
             st.write("No names excluded yet.")
+
+    # Performance logging
+    end_time = time.perf_counter()
+    elapsed_ms = (end_time - start_time) * 1000
+
+    # Calculate section timings if variables exist
+    sections = []
+    if "time_after_inclusions" in locals():
+        inclusions_ms = (time_after_inclusions - start_time) * 1000
+        sections.append(f"inclusions: {inclusions_ms:.1f}ms")
+    if "time_after_counts" in locals():
+        counts_ms = (
+            time_after_counts - (time_after_inclusions if "time_after_inclusions" in locals() else start_time)
+        ) * 1000
+        sections.append(f"counts: {counts_ms:.1f}ms")
+    if "time_after_name_display" in locals():
+        name_display_ms = (
+            time_after_name_display - (time_after_counts if "time_after_counts" in locals() else start_time)
+        ) * 1000
+        sections.append(f"name_display: {name_display_ms:.1f}ms")
+
+    section_str = ", ".join(sections) if sections else "no section timing"
+    logger.debug(f"render_binary_filter completed in {elapsed_ms:.1f}ms ({section_str})")
+
+
+def render_similarity(names: list[str]) -> None:
+    """Render similarity search interface.
+
+    Allows searching for names similar to a given name.
+    """
+    logger.debug("Rendering similarity search with %d names", len(names))
+    st.header("Similarity Search")
+
+    search_type: Literal["String (Levenshtein)", "Vector (LLM Embedding)"] = st.radio(
+        "Search Method",
+        ["String (Levenshtein)", "Vector (LLM Embedding)"],
+    )
+
+    query = st.text_input("Reference Name", value="Alma")
+
+    if st.button("Find Similar") and query:
+        if search_type == "String (Levenshtein)":
+            results = get_string_similarity_scores(query, names, limit=10)
+            st.dataframe(
+                pd.DataFrame(results, columns=["Name", "Similarity Score"]),
+                width="stretch",
+                hide_index=True,
+            )
+        else:
+            with st.spinner("Loading Embedding Model (first run is slow)..."):
+                model = load_embedding_model()
+
+            with st.spinner("Computing Similarities..."):
+                results = get_vector_similarity_scores(
+                    model,
+                    query,
+                    names,
+                    limit=10,
+                )
+
+            st.dataframe(
+                pd.DataFrame(results, columns=["Name", "Cosine Similarity"]),
+                width="stretch",
+                hide_index=True,
+            )

@@ -48,7 +48,7 @@ def main():
     if args.classify:
         print("Running initial origin classification...")
         try:
-            from classify_origins import classify_all_names
+            from st_name_ranking.classify_origins import classify_all_names
 
             classified = classify_all_names()
             print(f"✓ Classified {classified} names")

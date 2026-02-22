@@ -5,6 +5,7 @@ All features are normalized to [0, 1] range for model compatibility.
 """
 
 import logging
+from collections.abc import Sequence
 
 import numpy as np
 import pyphen
@@ -222,16 +223,20 @@ class FeatureExtractor:
     def batch_extract(
         self,
         names: list[str],
-        genders: list[str | None] | None = None,
-        origin_regions: list[str | None] | None = None,
+        genders: Sequence[str | None] | None = None,
+        origin_regions: Sequence[str | None] | None = None,
     ) -> np.ndarray:
         """Extract feature vectors for multiple names.
         Returns 2D array of shape (n_names, n_features).
         """
         if genders is None:
-            genders = [None] * len(names)
+            genders = [None] * len(names)  # type: ignore[assignment]
         if origin_regions is None:
-            origin_regions = [None] * len(names)
+            origin_regions = [None] * len(names)  # type: ignore[assignment]
+
+        # Type narrowing: after above assignments, neither is None
+        assert genders is not None
+        assert origin_regions is not None
 
         vectors = []
         for name, gender, origin in zip(names, genders, origin_regions):
