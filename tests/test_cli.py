@@ -264,5 +264,51 @@ def test_cli_stats(mock_db_path, cli_runner):
         mock_stats.assert_called_once()
 
 
+def test_cli_init_integration(initialized_db, mock_submodule_path, cli_runner):
+    """Test CLI init command with real database and mocked submodule."""
+    from st_name_ranking import database
+
+    # Mock stats to avoid division by zero
+    mock_stats = {
+        "total_names": 100,
+        "classified_names": 20,
+        "unclassified_names": 80,
+        "rated_names": 75,
+        "origin_distribution": {"International": 80, "European": 20},
+    }
+
+    # Ensure DB_PATH is set to our temporary path (already done by initialized_db)
+    # Patch sync_names_with_submodule to use our mock submodule path
+    with (
+        patch("st_name_ranking.cli.sync_names_with_submodule") as mock_sync,
+        patch("st_name_ranking.cli.classify_all_names") as mock_classify,
+        patch("st_name_ranking.cli.get_stats", return_value=mock_stats) as mock_get_stats,
+    ):
+        mock_sync.return_value = 3  # Simulate 3 names synced
+        mock_classify.return_value = 0  # No classification
+
+        result = cli_runner.invoke(app, ["init"])
+        assert result.exit_code == 0
+        assert "Initializing Name Ranking Database" in result.output
+        assert "Database schema created" in result.output
+        assert "Synced 3 new names from submodule" in result.output
+
+        # Verify sync was called with default path
+        mock_sync.assert_called_once()
+        mock_get_stats.assert_called_once()
+
+    # Additional test: init with --classify flag
+    with (
+        patch("st_name_ranking.cli.sync_names_with_submodule") as mock_sync,
+        patch("st_name_ranking.cli.classify_all_names") as mock_classify,
+        patch("st_name_ranking.cli.get_stats", return_value=mock_stats) as mock_get_stats,
+    ):
+        mock_sync.return_value = 3
+        mock_classify.return_value = 2
+        result = cli_runner.invoke(app, ["init", "--classify"])
+        assert result.exit_code == 0
+        assert "Classified 2 names" in result.output
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

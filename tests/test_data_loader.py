@@ -19,7 +19,7 @@ class TestIsValidName:
     def test_invalid_empty_or_none(self):
         """Test empty or None names return False."""
         assert data_loader.is_valid_name("") is False
-        assert data_loader.is_valid_name(None) is False
+        assert data_loader.is_valid_name(None) is False  # type: ignore[arg-type]
         assert data_loader.is_valid_name(" ") is False
         assert data_loader.is_valid_name("  ") is False
 
@@ -167,6 +167,7 @@ class TestSaveRatings:
 
         # Verify ratings
         ratings = data_loader.load_ratings()
+        assert ratings is not None
         assert ratings["Anna"] == 1700.0
         assert ratings["Peter"] == 1550.0
 

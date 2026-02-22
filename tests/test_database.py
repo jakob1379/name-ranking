@@ -412,11 +412,13 @@ class TestSubmoduleOperations:
         # First update
         update_submodule_version("abc123", 100)
         version1 = get_latest_submodule_version()
+        assert version1 is not None
         assert version1["commit_hash"] == "abc123"
 
         # Second update (should add new row)
         update_submodule_version("def456", 150)
         version2 = get_latest_submodule_version()
+        assert version2 is not None
         assert version2["commit_hash"] == "def456"
         # Should be the latest (def456)
         assert version2["commit_hash"] != version1["commit_hash"]
@@ -588,3 +590,134 @@ class TestSyncOperations:
             result = sync_names_with_submodule(submodule_path=empty_path)
             assert result == 0  # inserted count
             # sync_names_with_submodule returns inserted count (int)
+
+
+class TestPhoneticOperations:
+    """Tests for phonetic code computation and updates."""
+
+    def test_compute_phonetic_codes(self):
+        """Test _compute_phonetic_codes function."""
+        from unittest.mock import patch
+        from st_name_ranking.database import _compute_phonetic_codes
+
+        # Test with standard name
+        with patch("st_name_ranking.database.doublemetaphone") as mock_dm:
+            mock_dm.return_value = ("AN", "AN")
+            primary, secondary = _compute_phonetic_codes("Anna")
+            assert primary == "AN"
+            assert secondary == "AN"
+            mock_dm.assert_called_once_with("Anna")
+
+        # Test with empty primary (should return empty string)
+        with patch("st_name_ranking.database.doublemetaphone") as mock_dm:
+            mock_dm.return_value = (None, "AN")
+            primary, secondary = _compute_phonetic_codes("Test")
+            assert primary == ""
+            assert secondary == "AN"
+
+        # Test with empty secondary (should return empty string)
+        with patch("st_name_ranking.database.doublemetaphone") as mock_dm:
+            mock_dm.return_value = ("AN", None)
+            primary, secondary = _compute_phonetic_codes("Test")
+            assert primary == "AN"
+            assert secondary == ""
+
+    def test_update_phonetic_codes_no_names(self, initialized_db):
+        """Test update_phonetic_codes when no names need updating."""
+        from st_name_ranking.database import update_phonetic_codes
+
+        # No names in database, so no updates
+        result = update_phonetic_codes()
+        assert result == 0
+
+    def test_update_phonetic_codes_with_names(self, initialized_db):
+        """Test update_phonetic_codes with names needing updates."""
+        from unittest.mock import patch
+        from st_name_ranking.database import update_phonetic_codes, get_connection
+
+        # Insert a name without phonetic codes
+        with get_connection() as conn:
+            cursor = conn.execute("INSERT INTO names (name, gender) VALUES (?, ?)", ("Anna", "Female"))
+            name_id = cursor.lastrowid
+
+        # Mock doublemetaphone
+        with patch("st_name_ranking.database.doublemetaphone") as mock_dm:
+            mock_dm.return_value = ("AN", "AN")
+            result = update_phonetic_codes()
+
+        # Should update 1 name
+        assert result == 1
+        mock_dm.assert_called_once_with("Anna")
+
+        # Verify phonetic codes were set
+        with get_connection() as conn:
+            cursor = conn.execute("SELECT phonetic_primary, phonetic_secondary FROM names WHERE id = ?", (name_id,))
+            primary, secondary = cursor.fetchone()
+            assert primary == "AN"
+            assert secondary == "AN"
+
+    def test_update_phonetic_codes_with_limit(self, initialized_db):
+        """Test update_phonetic_codes with limit parameter."""
+        from unittest.mock import patch
+        from st_name_ranking.database import update_phonetic_codes, get_connection
+
+        # Insert multiple names
+        names = [("Anna", "Female"), ("Peter", "Male"), ("Maria", "Female")]
+        with get_connection() as conn:
+            for name, gender in names:
+                conn.execute("INSERT INTO names (name, gender) VALUES (?, ?)", (name, gender))
+
+        # Mock doublemetaphone to track calls
+        with patch("st_name_ranking.database.doublemetaphone") as mock_dm:
+            mock_dm.return_value = ("XX", "XX")
+            result = update_phonetic_codes(limit=2)
+
+        # Should update only 2 names due to limit
+        assert result == 2
+        assert mock_dm.call_count == 2
+
+    def test_update_phonetic_codes_already_updated(self, initialized_db):
+        """Test update_phonetic_codes when names already have phonetic codes."""
+        from unittest.mock import patch
+        from st_name_ranking.database import update_phonetic_codes, get_connection
+
+        # Insert a name WITH phonetic codes
+        with get_connection() as conn:
+            conn.execute(
+                """INSERT INTO names (name, gender, phonetic_primary, phonetic_secondary) 
+                   VALUES (?, ?, ?, ?)""",
+                ("Anna", "Female", "AN", "AN"),
+            )
+
+        # Mock doublemetaphone (should not be called)
+        with patch("st_name_ranking.database.doublemetaphone") as mock_dm:
+            result = update_phonetic_codes()
+
+        # Should update 0 names
+        assert result == 0
+        mock_dm.assert_not_called()
+
+
+class TestDatabaseExportImport:
+    """Tests for database export and import functionality."""
+
+    def test_export_database(self, mock_db_path):
+        """Test exporting database as bytes."""
+        from st_name_ranking.database import export_database, init_database
+
+        init_database()
+        db_bytes = export_database()
+        assert isinstance(db_bytes, bytes)
+        assert len(db_bytes) > 0
+
+    def test_import_database(self, mock_db_path):
+        """Test importing database from bytes."""
+        from st_name_ranking.database import export_database, import_database, init_database
+
+        init_database()
+        original_bytes = export_database()
+        # Import the same bytes (should work)
+        import_database(original_bytes, backup=False)
+        # Export again and compare
+        new_bytes = export_database()
+        assert original_bytes == new_bytes
