@@ -8,7 +8,7 @@ Tests critical architectural requirements:
 5. Feature dimension mismatch detection
 """
 
-import pickle
+import io
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import numpy as np
@@ -66,8 +66,8 @@ class TestModelPersistenceRoundTrip:
             )
             row = cursor.fetchone()
             assert row is not None
-            saved_weights = pickle.loads(row[0])
-            saved_cov = pickle.loads(row[1])
+            saved_weights = np.load(io.BytesIO(row[0]))
+            saved_cov = np.load(io.BytesIO(row[1]))
             saved_samples = row[2]
             saved_features = row[3]
 
@@ -274,8 +274,8 @@ class TestTransactionSafety:
             assert row is not None
 
             # All fields should be present and valid
-            weights = pickle.loads(row[0])
-            cov = pickle.loads(row[1])
+            weights = np.load(io.BytesIO(row[0]))
+            cov = np.load(io.BytesIO(row[1]))
             samples = row[2]
             features_json = row[3]
 
@@ -344,10 +344,11 @@ class TestConcurrentAccess:
                 # Save back
                 model.save_to_db()
                 results.append(f"Worker {worker_id}: Success")
-                return model.state.training_samples
             except (RuntimeError, ValueError, sqlite3.Error, AttributeError) as e:
                 errors.append(f"Worker {worker_id}: {e}")
                 return None
+            else:
+                return model.state.training_samples
 
         # Run concurrent updates
         with ThreadPoolExecutor(max_workers=4) as executor:
@@ -398,10 +399,11 @@ class TestConcurrentAccess:
                         _ = model.state.weight_cov
                         _ = model.state.training_samples
                 results.append(f"Worker {worker_id}: Success")
-                return True
             except (RuntimeError, ValueError, sqlite3.Error, AttributeError) as e:
                 errors.append(f"Worker {worker_id}: {e}")
                 return False
+            else:
+                return True
 
         # Run concurrent reads
         with ThreadPoolExecutor(max_workers=5) as executor:
@@ -437,23 +439,23 @@ class TestCorruptionRecovery:
         valid_model = BradleyTerryModel(feature_names)
         valid_model.save_to_db()
 
-        # Corrupt the model state by storing invalid pickle data
+        # Corrupt the model state by storing invalid numpy data
         with get_connection() as conn:
             conn.execute(
                 "UPDATE model_state SET feature_weights = ? WHERE id = 1",
-                (b"invalid pickle data",),
+                (b"invalid numpy data",),
             )
 
         # Try to load - should handle gracefully
         model = BradleyTerryModel(feature_names)
 
-        # The current implementation doesn't explicitly detect pickle errors
+        # The current implementation doesn't explicitly detect numpy errors
         # but we should at least verify it doesn't crash
         try:
             loaded = model.load_from_db()
             # If it loaded, the data was somehow valid
             # If it didn't load, that's also acceptable
-        except (pickle.UnpicklingError, EOFError):
+        except (ValueError, OSError):
             # Expected behavior - corruption detected
             pass
 
@@ -521,8 +523,12 @@ class TestFeatureDimensionMismatch:
 
         # Save to database with mismatched feature_names_json (only 3 features)
         wrong_features = ["f1", "f2", "f3"]
-        weights_blob = pickle.dumps(weights)
-        cov_blob = pickle.dumps(cov)
+        weights_buffer = io.BytesIO()
+        np.save(weights_buffer, weights)
+        cov_buffer = io.BytesIO()
+        np.save(cov_buffer, cov)
+        weights_blob = weights_buffer.getvalue()
+        cov_blob = cov_buffer.getvalue()
 
         with get_connection() as conn:
             conn.execute(
@@ -555,8 +561,12 @@ class TestFeatureDimensionMismatch:
         state = ModelState(weights, cov, 10, feature_names)
 
         # Save to database
-        weights_blob = pickle.dumps(weights)
-        cov_blob = pickle.dumps(cov)
+        weights_buffer = io.BytesIO()
+        np.save(weights_buffer, weights)
+        cov_buffer = io.BytesIO()
+        np.save(cov_buffer, cov)
+        weights_blob = weights_buffer.getvalue()
+        cov_blob = cov_buffer.getvalue()
 
         with get_connection() as conn:
             conn.execute(
@@ -591,8 +601,12 @@ class TestFeatureDimensionMismatch:
         cov = np.eye(3)
 
         # Save to database
-        weights_blob = pickle.dumps(weights)
-        cov_blob = pickle.dumps(cov)
+        weights_buffer = io.BytesIO()
+        np.save(weights_buffer, weights)
+        cov_buffer = io.BytesIO()
+        np.save(cov_buffer, cov)
+        weights_blob = weights_buffer.getvalue()
+        cov_blob = cov_buffer.getvalue()
 
         with get_connection() as conn:
             conn.execute(
