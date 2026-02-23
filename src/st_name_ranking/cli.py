@@ -65,7 +65,8 @@ def print_info(message: str) -> None:
 
 @app.command()
 def init(
-    classify: bool = typer.Option(  # noqa: FBT001
+    *,
+    classify: bool = typer.Option(
         False,
         "--classify",
         "-c",

@@ -569,7 +569,7 @@ def render_binary_filter(names: list[str]) -> None:
         del st.session_state.last_button_press_time
 
     # Helper function to update counts incrementally
-    def update_counts(name: str, old_status: bool | None, new_status: bool) -> None:  # noqa: FBT001
+    def update_counts(name: str, *, old_status: bool | None, new_status: bool) -> None:
         """Update filter counts when a name's inclusion status changes."""
         # old_status: None (not decided), True (included), False (excluded)
         # new_status: True (included) or False (excluded)
@@ -713,7 +713,7 @@ def render_binary_filter(names: list[str]) -> None:
         ):
             old_status = inclusions.get(current_name)
             inclusions[current_name] = False
-            update_counts(current_name, old_status, False)
+            update_counts(current_name, old_status=old_status, new_status=False)
             st.session_state.filter_index += 1
             st.toast(f"Excluded: {current_name}", icon="👎")
             st.session_state.last_button_press_time = time.perf_counter()
@@ -729,7 +729,7 @@ def render_binary_filter(names: list[str]) -> None:
             # Include (explicitly mark as included/neutral)
             old_status = inclusions.get(current_name)
             inclusions[current_name] = True
-            update_counts(current_name, old_status, True)
+            update_counts(current_name, old_status=old_status, new_status=True)
             st.session_state.filter_index += 1
             st.toast(f"Included: {current_name}", icon="👍")
             st.session_state.last_button_press_time = time.perf_counter()
@@ -823,7 +823,7 @@ def render_binary_filter(names: list[str]) -> None:
                     # Move from excluded to included
                     old_status = inclusions.get(name)
                     inclusions[name] = True
-                    update_counts(name, old_status, True)
+                    update_counts(name, old_status=old_status, new_status=True)
             # Note: No need to rerun explicitly - widget triggers rerun
         else:
             st.write("No names excluded yet.")
