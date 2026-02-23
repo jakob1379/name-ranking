@@ -116,10 +116,11 @@ def _create_ethnidata_classifier() -> ClassifierFunc | bool:
             )
             # Adjust confidence
             confidence = confidence * confidence_adjust
-            return region, confidence
         except (ImportError, AttributeError, ValueError) as e:
             logger.debug("ethnidata classification failed for '%s': %s", name, e)
             return None
+        else:
+            return region, confidence
 
     return classify_with_ethnidata
 
@@ -334,11 +335,11 @@ def get_ethnicolr_classifier() -> Optional["EthnicolrClassifier"]:
                     for _, row in result_df.iterrows():
                         region, confidence = _map_ethnicolr_to_region(row)
                         classifications.append((region, confidence))
-
-                    return classifications
                 except (ImportError, AttributeError, ValueError, RuntimeError) as e:
                     logger.warning("ethnicolr classification failed: %s", e)
                     return [(None, 0.0)] * len(names)
+                else:
+                    return classifications
 
         def _map_ethnicolr_to_region(row: Any) -> tuple[str | None, float]:
             """Map ethnicolr's 13 categories to our 8 regions."""
@@ -461,10 +462,11 @@ class OriginClassifier:
         if self.ethnicolr:
             try:
                 results = self.ethnicolr.classify_batch([name])
-                region, confidence = results[0]
-                if region and confidence >= LOW_CONFIDENCE_THRESHOLD:
-                    return region, confidence
-            except (ImportError, AttributeError, ValueError) as e:
+                if results:  # Check if results is not empty
+                    region, confidence = results[0]
+                    if region and confidence >= LOW_CONFIDENCE_THRESHOLD:
+                        return region, confidence
+            except (ImportError, AttributeError, ValueError, IndexError) as e:
                 logger.debug(
                     "ethnicolr classification failed for '%s': %s",
                     name,
@@ -533,18 +535,13 @@ class OriginClassifier:
         return _create_ethnidata_classifier()
 
 
-# Singleton instance for convenience
-_default_classifier = None
-
-
 def get_classifier(
     reference_names: dict[str, tuple[str, float, str, str]] | None = None,
 ) -> OriginClassifier:
     """Get singleton classifier instance."""
-    global _default_classifier
-    if _default_classifier is None:
-        _default_classifier = OriginClassifier(reference_names)
-    return _default_classifier
+    if not hasattr(get_classifier, "_cache") or get_classifier._cache is None:
+        get_classifier._cache = OriginClassifier(reference_names)
+    return get_classifier._cache
 
 
 if __name__ == "__main__":

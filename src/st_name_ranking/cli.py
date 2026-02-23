@@ -107,7 +107,7 @@ def init(
             print_success(f"Synced {inserted} new names from submodule")
         except (RuntimeError, ValueError) as e:
             print_error(f"Failed to sync names: {e}")
-            raise typer.Exit(code=1)
+            raise typer.Exit(code=1) from None
 
     # 3. Optional origin classification
     if classify:
@@ -175,10 +175,10 @@ def process_command(limit: int | None = None, batch_size: int = 100) -> None:
         console.print('    "ethnidata>=4.1.1",')
         console.print("    ...")
         console.print("  ]")
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from None
     except (RuntimeError, ValueError) as e:
         print_error(f"Classification failed: {e}")
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from None
 
 
 @app.command()

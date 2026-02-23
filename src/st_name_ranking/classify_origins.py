@@ -13,7 +13,7 @@ import argparse
 import logging
 import sys
 import time
-from typing import Any, NamedTuple
+from typing import NamedTuple
 
 
 class ClassificationResult(NamedTuple):
@@ -39,13 +39,6 @@ logger = logging.getLogger(__name__)
 # Minimum confidence threshold for classification results
 MIN_CONFIDENCE_THRESHOLD = 0.1
 
-# Module-level cache for ethnidata classifier
-_classifier_cache: Any | None = None
-
-# Module-level cache for reference names
-_reference_names_cache: dict[str, tuple[str, float, str, str]] | None = None
-
-
 # Type alias for the classifier function
 Classifier = "Callable[[str], ClassificationResult | None]"
 
@@ -59,20 +52,18 @@ def get_classifier() -> Classifier:
     Raises:
         ImportError: If ethnidata package is not installed.
     """
-    global _classifier_cache
-
-    if _classifier_cache is not None:
-        return _classifier_cache
+    if getattr(get_classifier, "_cache", None) is not None:
+        return get_classifier._cache
 
     try:
         from ethnidata import EthniData  # noqa: PLC0415
-    except ImportError:
+    except ImportError as err:
         _msg = "ethnidata not installed. Install with: pip install ethnidata"
-        raise ImportError(_msg)
+        raise ImportError(_msg) from err
 
-    _classifier_cache = EthniData()
+    get_classifier._cache = EthniData()
     logger.debug("Initialized ethnidata classifier")
-    return _classifier_cache
+    return get_classifier._cache
 
 
 def get_region_for_nationality(nationality: str) -> tuple[str, float]:
@@ -114,6 +105,10 @@ def classify_name(name: str) -> tuple[str, float] | None:
 
         region, confidence = classifier.classify(name)
 
+    except (ImportError, AttributeError, ValueError, RuntimeError) as e:
+        logger.warning("Error classifying name '%s': %s", name, e)
+        return None
+    else:
         if confidence < MIN_CONFIDENCE_THRESHOLD:  # Fallback if classifier returns minimal confidence
             return None
 
@@ -125,37 +120,32 @@ def classify_name(name: str) -> tuple[str, float] | None:
         )
         return region, confidence
 
-    except (ImportError, AttributeError, ValueError, RuntimeError) as e:
-        logger.warning("Error classifying name '%s': %s", name, e)
-        return None
-
 
 def _get_reference_names() -> dict[str, tuple[str, float, str, str]]:
     """Get dictionary of known name -> (region, confidence, phonetic_primary, phonetic_secondary) from database.
 
-    Cached for performance using module-level cache variable.
+    Cached for performance using function attribute.
 
     Returns:
         Dictionary mapping name to (region, confidence, phonetic_primary, phonetic_secondary).
     """
-    global _reference_names_cache
-
-    if _reference_names_cache is not None:
-        return _reference_names_cache
+    cache = getattr(_get_reference_names, "_cache", None)
+    if cache is not None:
+        return cache
 
     try:
-        _reference_names_cache = get_names_with_origins(
+        _get_reference_names._cache = get_names_with_origins(
             confidence_threshold=0.5,
         )
         logger.debug(
             "Loaded %d reference names",
-            len(_reference_names_cache),
+            len(_get_reference_names._cache),
         )
     except sqlite3.Error as e:
         logger.warning("Failed to load reference names: %s", e)
-        _reference_names_cache = {}
+        _get_reference_names._cache = {}
 
-    return _reference_names_cache
+    return _get_reference_names._cache
 
 
 def classify_batch(names_batch: list, batch_size: int = 100) -> int:

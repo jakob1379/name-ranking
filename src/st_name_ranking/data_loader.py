@@ -109,17 +109,14 @@ def save_ratings(
         else:
             ratings_to_save = ratings
 
-        if not ratings_to_save:
-            return True
+        if ratings_to_save:
+            # Use batch update for efficiency
+            database.update_ratings_batch(ratings_to_save)
 
-        # Use batch update for efficiency
-        database.update_ratings_batch(ratings_to_save)
-
-        st.toast(
-            f"Updated {len(ratings_to_save)} ratings in database",
-            icon="ℹ️",
-        )
-        return True
+            st.toast(
+                f"Updated {len(ratings_to_save)} ratings in database",
+                icon="ℹ️",
+            )
     except sqlite3.Error as e:
         st.toast(
             f"Failed to save ratings to database: {e}",
@@ -127,6 +124,8 @@ def save_ratings(
             duration="long",
         )
         return False
+    else:
+        return True
 
 
 def initialize_or_load_ratings(names: list[str]) -> dict[str, float]:
@@ -201,7 +200,6 @@ def load_submodule_json() -> list[dict[str, str]]:
             f"Loaded {len(valid_items)} name-gender pairs from JSON",
             icon="✅",
         )
-        return valid_items
     except (FileNotFoundError, ValueError, RuntimeError) as e:
         st.toast(
             f"Failed to load submodule JSON: {e}",
@@ -209,6 +207,8 @@ def load_submodule_json() -> list[dict[str, str]]:
             duration="long",
         )
         return []
+    else:
+        return valid_items
 
 
 def load_names_by_gender(
@@ -263,7 +263,6 @@ def load_names_by_gender(
                 icon="✅",
             )
 
-        return gender_data
     except sqlite3.Error as e:
         st.toast(
             f"Failed to load names by gender from database: {e}",
@@ -271,6 +270,8 @@ def load_names_by_gender(
             duration="long",
         )
         return {}
+    else:
+        return gender_data
 
 
 def load_submodule_csv_fallback() -> list[str]:
@@ -294,11 +295,11 @@ def load_submodule_csv_fallback() -> list[str]:
                                 all_names.append(name)
                             else:
                                 invalid_count += 1
-                if invalid_count <= MAX_INVALID_NAME_LOG:  # Log first few invalid names
-                    st.toast(
-                        f"Skipping invalid CSV entry: '{name}'",
-                        icon="⚠️",
-                    )
+                                if invalid_count <= MAX_INVALID_NAME_LOG:
+                                    st.toast(
+                                        f"Skipping invalid CSV entry: '{name}'",
+                                        icon="⚠️",
+                                    )
             else:
                 st.toast(
                     f"Submodule CSV file not found: {file_path}",
@@ -324,7 +325,6 @@ def load_submodule_csv_fallback() -> list[str]:
             f"Loaded {len(names)} names from CSV fallback",
             icon="✅",
         )
-        return names
     except OSError as e:
         st.toast(
             f"Failed to load from CSV fallback: {e}",
@@ -332,3 +332,5 @@ def load_submodule_csv_fallback() -> list[str]:
             duration="long",
         )
         return []
+    else:
+        return names

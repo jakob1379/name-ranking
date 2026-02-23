@@ -21,28 +21,28 @@ logger = logging.getLogger(__name__)
 # Minimum names required for pair selection
 MIN_NAMES_FOR_PAIR_SELECTION = 2
 
-# Global instances for model and feature extractor
-_model = None
-_feature_extractor = None
-
 
 def get_active_learning_model() -> BradleyTerryModel:
     """Get or initialize the active learning model."""
-    global _model
-    if _model is None:
+    if get_active_learning_model._cache is None:
         # Initialize feature extractor first to get feature names
         extractor = get_feature_extractor()
         feature_names = extractor.get_feature_names()
-        _model = initialize_model_if_needed(feature_names)
-    return _model
+        get_active_learning_model._cache = initialize_model_if_needed(feature_names)
+    return get_active_learning_model._cache
+
+
+get_active_learning_model._cache = None
 
 
 def get_feature_extractor() -> FeatureExtractor:
     """Get or initialize the feature extractor."""
-    global _feature_extractor
-    if _feature_extractor is None:
-        _feature_extractor = FeatureExtractor()
-    return _feature_extractor
+    if get_feature_extractor._cache is None:
+        get_feature_extractor._cache = FeatureExtractor()
+    return get_feature_extractor._cache
+
+
+get_feature_extractor._cache = None
 
 
 def get_name_features(name: str) -> np.ndarray:
@@ -109,7 +109,14 @@ def pull_submodule_updates(*, classify_origins: bool = False) -> bool:
                 text=True,
                 timeout=30,
             )
-
+    except subprocess.SubprocessError as e:
+        st.toast(
+            f"Error pulling submodule: {e}",
+            icon="❌",
+            duration="long",
+        )
+        return False
+    else:
         if result.returncode == 0:
             st.toast(
                 "✅ Submodule updated successfully",
@@ -185,13 +192,6 @@ def pull_submodule_updates(*, classify_origins: bool = False) -> bool:
             duration="long",
         )
         return False
-    except subprocess.SubprocessError as e:
-        st.toast(
-            f"Error pulling submodule: {e}",
-            icon="❌",
-            duration="long",
-        )
-        return False
 
 
 def setup_session_state(names: list[str]) -> None:
@@ -253,7 +253,6 @@ def select_candidates(
             sampled_features,
             sampled,
         )
-        return pair.name_a, pair.name_b
     except (RuntimeError, ValueError, AttributeError) as e:
         logger.warning(
             "Active learning pair selection failed: %s. Falling back to basic selection.",
@@ -261,6 +260,8 @@ def select_candidates(
         )
         # Fallback to basic selection (doesn't use features)
         return _select_candidates_fallback(sampled)
+    else:
+        return pair.name_a, pair.name_b
 
 
 def select_candidate_batch(
@@ -491,7 +492,7 @@ def update_preference_and_save(
     # Record comparison in database
     try:
         database.record_comparison(winner, loser, -1)
-    except sqlite3.Error as e:
+    except (sqlite3.Error, ValueError) as e:
         logger.warning("Failed to record comparison: %s", e)
 
     # Compute new ratings only for the two names involved

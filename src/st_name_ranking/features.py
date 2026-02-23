@@ -24,7 +24,15 @@ def extract_phonetic_features(name: str) -> dict[str, float]:
     try:
         # Get Double Metaphone encoding (primary and secondary)
         primary, secondary = doublemetaphone(name)
-
+    except (AttributeError, ValueError, TypeError) as e:
+        logger.warning("Failed to extract phonetic features for '%s': %s", name, e)
+        # Return empty features
+        return {f"phonetic_pos_{i}": 0.0 for i in range(4)} | {
+            "phonetic_length": 0.0,
+            "contains_vowels": 0.0,
+            "has_secondary": 0.0,
+        }
+    else:
         # Handle empty secondary
         primary = primary or ""
         secondary = secondary or ""
@@ -51,14 +59,6 @@ def extract_phonetic_features(name: str) -> dict[str, float]:
         features["has_secondary"] = 1.0 if secondary else 0.0
 
         return features
-    except (AttributeError, ValueError, TypeError) as e:
-        logger.warning("Failed to extract phonetic features for '%s': %s", name, e)
-        # Return empty features
-        return {f"phonetic_pos_{i}": 0.0 for i in range(4)} | {
-            "phonetic_length": 0.0,
-            "contains_vowels": 0.0,
-            "has_secondary": 0.0,
-        }
 
 
 def extract_linguistic_features(name: str) -> dict[str, float]:
