@@ -31,8 +31,6 @@ from st_name_ranking.types import (
 
 logger = logging.getLogger(__name__)
 
-# Track initialization status
-_initialized = False
 
 DB_PATH = Path("data/names.db")
 
@@ -174,14 +172,13 @@ def _migrate_comparisons_table_if_needed(conn: sqlite3.Connection) -> None:
 
 def init_database() -> None:
     """Initialize database schema if it doesn't exist."""
-    global _initialized
-    if _initialized:
+    if getattr(init_database, "_initialized", False):
         logger.debug("Database already initialized, skipping initialization")
         return
 
     # Mark as initialized immediately to prevent race conditions
     # If initialization fails, the app won't work anyway, so we don't need to retry
-    _initialized = True
+    init_database._initialized = True  # type: ignore[attr-defined]
 
     # Check if database file exists
     db_exists = DB_PATH.exists()
@@ -555,7 +552,7 @@ def sync_names_with_submodule(submodule_path: Path = Path("godkendtefornavne")) 
         logger.debug("Submodule commit hash: %s", current_commit)
     except subprocess.SubprocessError as e:
         _msg = f"Failed to get submodule commit hash: {e}"
-        raise RuntimeError(_msg)
+        raise RuntimeError(_msg) from e
 
     # Check if we've already synced this commit
     with get_connection() as conn:
@@ -833,39 +830,6 @@ def get_ratings() -> dict[str, float]:
         return {row[0]: row[1] for row in cursor.fetchall()}
 
 
-def update_rating(name: str, rating: float) -> None:
-    """Update or insert rating for a name."""
-    with get_connection() as conn:
-        # Get name_id
-        name_id = conn.execute(
-            "SELECT id FROM names WHERE name = ?",
-            (name,),
-        ).fetchone()
-        if not name_id:
-            _msg = f"Name not found: {name}"
-            raise ValueError(_msg)
-
-        name_id = name_id[0]
-
-        # Update or insert rating
-        conn.execute(
-            """
-            INSERT OR REPLACE INTO ratings
-            (name_id, rating, matches, last_updated)
-            VALUES (
-                ?,
-                ?,
-                COALESCE((
-                    SELECT matches FROM ratings WHERE name_id = ?
-                ), 0) + 1,
-                ?
-            )
-            """,
-            (name_id, rating, name_id, dt.datetime.now()),
-        )
-    logger.debug("Updated rating for %s: %.1f", name, rating)
-
-
 def update_rating(name: str, rating: float, matches: int | None = None) -> None:
     """Update rating for a name, preserving or setting matches count.
 
@@ -904,6 +868,17 @@ def update_rating(name: str, rating: float, matches: int | None = None) -> None:
         """,
             (name_id, rating, name_id),
         )
+
+
+def update_rating_with_match(name: str, rating: float) -> None:
+    """Update rating for a name (wrapper for compatibility).
+
+    Args:
+        name: Name to update
+        rating: New rating value
+
+    """
+    update_rating(name, rating)
 
 
 def update_ratings_batch(ratings_dict: dict[str, float]) -> None:
@@ -988,6 +963,10 @@ def update_ratings_batch_values(ratings_dict: dict[str, float]) -> None:
             """,
                 (name_id, rating, name_id),
             )
+
+
+# Alias for backward compatibility with tests
+update_rating_value = update_rating
 
 
 def record_comparison(name_a: str, name_b: str, preference: int) -> None:
@@ -1320,7 +1299,7 @@ def get_name_details_batch(
 
         with get_connection() as conn:
             placeholders = ", ".join(["?"] * len(chunk))
-            template = "SELECT name, phonetic_primary, phonetic_secondary FROM names WHERE name IN ({ph})"
+            template = "SELECT name, gender, origin_region FROM names WHERE name IN ({ph})"
             query = template.format(ph=placeholders)
             cursor = conn.execute(query, chunk)
             rows = cursor.fetchall()
@@ -1404,7 +1383,7 @@ def export_database() -> bytes:
             return f.read()
     except OSError as e:
         _msg = f"Failed to read database file: {e}"
-        raise OSError(_msg)
+        raise OSError(_msg) from e
 
 
 def import_database(file_bytes: bytes, *, backup: bool = True) -> None:
@@ -1431,7 +1410,7 @@ def import_database(file_bytes: bytes, *, backup: bool = True) -> None:
                 conn.close()
     except sqlite3.Error as e:
         _msg = f"Uploaded file is not a valid SQLite database: {e}"
-        raise ValueError(_msg)
+        raise ValueError(_msg) from e
 
     # Create backup of current database if it exists
     if backup and DB_PATH.exists():
@@ -1445,11 +1424,10 @@ def import_database(file_bytes: bytes, *, backup: bool = True) -> None:
             f.write(file_bytes)
     except OSError as e:
         _msg = f"Failed to write database file: {e}"
-        raise OSError(_msg)
+        raise OSError(_msg) from e
 
     # Reset initialization flag to force re-initialization
-    global _initialized
-    _initialized = False
+    init_database._initialized = False  # type: ignore[attr-defined]
 
     logger.info("Database imported successfully")
 
