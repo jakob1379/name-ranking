@@ -1,9 +1,12 @@
 """Utility functions for the name ranking application."""
 
+import functools
 import logging
 import sqlite3
 import subprocess
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
 import streamlit as st
@@ -20,6 +23,100 @@ logger = logging.getLogger(__name__)
 
 # Minimum names required for pair selection
 MIN_NAMES_FOR_PAIR_SELECTION = 2
+
+# Thread pool for background model updates
+_model_update_lock = threading.Lock()
+
+
+@functools.lru_cache()
+def get_thread_executor() -> ThreadPoolExecutor:
+    """Shared thread pool for background tasks."""
+    return ThreadPoolExecutor(max_workers=2)
+
+
+def update_model_async(name_a: str, name_b: str, preference: int) -> None:
+    """Queue model update and run in background thread.
+
+    Thread-safe: model updates are queued and executed sequentially.
+    """
+
+    def _update():
+        # Acquire lock to ensure sequential model updates
+        with _model_update_lock:
+            model = get_active_learning_model()
+            features_a = get_name_features(name_a)
+            features_b = get_name_features(name_b)
+
+            # IRLS update (slow, but in background)
+            model.update(features_a, features_b, preference)
+            model.save_to_db()
+
+    # Submit to thread pool
+    executor = get_thread_executor()
+    executor.submit(_update)
+
+
+def update_ratings_async() -> None:
+    """Queue ratings update to run in background thread."""
+
+    def _update():
+        _update_ratings_from_model()
+
+    executor = get_thread_executor()
+    executor.submit(_update)
+
+
+def record_comparison_instant(
+    name_a: str,
+    name_b: str,
+    preference: int,
+    blocking: bool = False,
+) -> None:
+    """Instant comparison recording - just records, no waiting.
+
+    Args:
+        name_a: First name in comparison
+        name_b: Second name in comparison
+        preference: -1 (name_a preferred), 0 (draw), 1 (name_b preferred), 2 (both disliked)
+        blocking: If True, wait for model update to complete (legacy behavior)
+    """
+    from concurrent.futures import wait
+
+    # 1. Fast DB insert (always synchronous)
+    database.record_comparison(name_a, name_b, preference)
+
+    # 2. Queue async model update (non-blocking)
+    future = get_thread_executor().submit(_update_model_sync, name_a, name_b, preference)
+
+    # 3. Queue async ratings update (non-blocking)
+    ratings_future = get_thread_executor().submit(_update_ratings_from_model)
+
+    if blocking:
+        # Wait for background tasks to complete
+        wait([future, ratings_future])
+
+
+def _update_model_sync(name_a: str, name_b: str, preference: int) -> None:
+    """Synchronous model update - called from thread pool.
+
+    Thread-safe: acquires lock to ensure sequential updates.
+    """
+    with _model_update_lock:
+        try:
+            model = get_active_learning_model()
+            features_a = get_name_features(name_a)
+            features_b = get_name_features(name_b)
+
+            if preference == 2:
+                # Both disliked
+                model.update_both_disliked(features_a, features_b)
+            else:
+                # Standard preference (-1, 0, 1)
+                model.update(features_a, features_b, preference)
+
+            model.save_to_db()
+        except (RuntimeError, ValueError, AttributeError):
+            logger.exception("Failed to update model in background")
 
 
 def get_active_learning_model() -> BradleyTerryModel:
@@ -478,47 +575,141 @@ def sync_names_from_submodule() -> int:
         return 0
 
 
+def record_comparison_fast(name_a: str, name_b: str, preference: int) -> None:
+    """Record a comparison in the database without triggering model updates.
+
+    This is the fast path for UI responsiveness - only does a single DB insert
+    without any model retraining or rating recomputation.
+
+    Args:
+        name_a: First name in comparison
+        name_b: Second name in comparison
+        preference: -1 (name_a preferred), 0 (draw), 1 (name_b preferred), 2 (both disliked)
+    """
+    try:
+        database.record_comparison(name_a, name_b, preference)
+        logger.debug("Fast recorded comparison: %s vs %s (pref=%d)", name_a, name_b, preference)
+    except (sqlite3.Error, ValueError) as e:
+        logger.warning("Failed to record comparison: %s", e)
+
+
+def queue_model_update(names: list[str] | None = None) -> None:
+    """Queue a model update to be processed in batch.
+
+    Stores pending comparison count in session state. When threshold is reached,
+    triggers actual model update.
+
+    Args:
+        names: Optional list of names for batch rating update after model training
+    """
+    import streamlit as st
+
+    # Initialize pending updates counter
+    if "pending_model_updates" not in st.session_state:
+        st.session_state.pending_model_updates = 0
+
+    st.session_state.pending_model_updates += 1
+
+    # Trigger batch update every 10 comparisons (configurable)
+    batch_threshold = st.session_state.get("model_update_batch_threshold", 10)
+
+    if st.session_state.pending_model_updates >= batch_threshold:
+        logger.info("Batch model update triggered (%d comparisons)", st.session_state.pending_model_updates)
+        try:
+            # Import here to avoid circular dependency
+            from st_name_ranking.data_loader import initialize_or_load_ratings
+
+            # Re-initialize ratings which loads from database and retrains model
+            new_ratings = initialize_or_load_ratings(names or [])
+            st.session_state.ratings = new_ratings
+            st.session_state.pending_model_updates = 0
+            st.session_state.model_last_updated = time.time()
+            logger.info("Batch model update completed")
+        except Exception:
+            logger.exception("Batch model update failed")
+
+
+def select_candidates_fast(
+    names: list[str],
+    features: np.ndarray | None = None,
+) -> tuple[str, str]:
+    """Fast candidate selection using random sampling.
+
+    Falls back to random pair selection without model inference.
+    This is O(1) vs O(n) for model-based selection.
+
+    Args:
+        names: List of candidate names
+        features: Ignored, kept for API compatibility
+
+    Returns:
+        Tuple of (name_a, name_b)
+    """
+    if len(names) < MIN_NAMES_FOR_PAIR_SELECTION:
+        return "", ""
+
+    rng = np.random.default_rng()
+
+    # Simple random selection - O(1)
+    idx_a, idx_b = rng.choice(len(names), size=2, replace=False)
+    return names[idx_a], names[idx_b]
+
+
+def should_use_model_selection() -> bool:
+    """Check if model-based selection should be used.
+
+    Returns False if model is being updated or hasn't been updated recently.
+    """
+    import streamlit as st
+
+    # If there are pending updates, use fast path
+    if st.session_state.get("pending_model_updates", 0) > 0:
+        return False
+
+    # If model was never updated or last update > 60 seconds ago, use fast path
+    last_update = st.session_state.get("model_last_updated", 0)
+    if time.time() - last_update > 60:
+        return False
+
+    return True
+
+
 def update_preference_and_save(
     ratings: dict[str, float],
     winner: str,
     loser: str,
+    *,
+    blocking: bool = False,
 ) -> dict[str, float]:
     """Update Bayesian preference model with comparison result.
     Returns updated ratings dict derived from model weights.
+
+    Args:
+        ratings: Current ratings dictionary
+        winner: Winning name (preferred)
+        loser: Losing name
+        blocking: If True, wait for model update to complete (legacy behavior)
+                  If False, queue async update and return immediately
     """
-    # Update the model
-    update_model_and_save(winner, loser)
+    # Use instant recording (async by default)
+    record_comparison_instant(winner, loser, -1, blocking=blocking)
 
-    # Record comparison in database
-    try:
-        database.record_comparison(winner, loser, -1)
-    except (sqlite3.Error, ValueError) as e:
-        logger.warning("Failed to record comparison: %s", e)
+    # Return updated ratings (may be stale if non-blocking)
+    if not blocking:
+        # Non-blocking: return current ratings immediately
+        return ratings.copy()
 
-    # Compute new ratings only for the two names involved
+    # Blocking: compute fresh ratings
     try:
         winner_rating = _compute_rating_for_name(winner)
         loser_rating = _compute_rating_for_name(loser)
-
-        # Update in-memory ratings dict
         ratings[winner] = winner_rating
         ratings[loser] = loser_rating
-
-        # Update database for these two names
         database.update_rating_value(winner, winner_rating)
         database.update_rating_value(loser, loser_rating)
-
-        logger.debug(
-            "Updated ratings: %s=%.1f, %s=%.1f",
-            winner,
-            winner_rating,
-            loser,
-            loser_rating,
-        )
         return ratings.copy()
     except (RuntimeError, ValueError) as e:
         logger.warning("Failed to compute updated ratings: %s", e)
-        # Return original ratings as fallback
         return ratings.copy()
 
 
@@ -526,43 +717,33 @@ def update_preference_draw_and_save(
     ratings: dict[str, float],
     player_a: str,
     player_b: str,
+    *,
+    blocking: bool = False,
 ) -> dict[str, float]:
     """Update Bayesian preference model with draw result.
     Returns updated ratings dict derived from model weights.
+
+    Args:
+        ratings: Current ratings dictionary
+        player_a: First name
+        player_b: Second name
+        blocking: If True, wait for model update to complete
     """
-    # Update the model
-    update_model_draw_and_save(player_a, player_b)
+    record_comparison_instant(player_a, player_b, 0, blocking=blocking)
 
-    # Record comparison in database
-    try:
-        database.record_comparison(player_a, player_b, 0)
-    except sqlite3.Error as e:
-        logger.warning("Failed to record draw comparison: %s", e)
+    if not blocking:
+        return ratings.copy()
 
-    # Compute new ratings only for the two names involved
     try:
         rating_a = _compute_rating_for_name(player_a)
         rating_b = _compute_rating_for_name(player_b)
-
-        # Update in-memory ratings dict
         ratings[player_a] = rating_a
         ratings[player_b] = rating_b
-
-        # Update database for these two names
         database.update_rating_value(player_a, rating_a)
         database.update_rating_value(player_b, rating_b)
-
-        logger.debug(
-            "Updated draw ratings: %s=%.1f, %s=%.1f",
-            player_a,
-            rating_a,
-            player_b,
-            rating_b,
-        )
         return ratings.copy()
     except (RuntimeError, ValueError) as e:
         logger.warning("Failed to compute updated ratings: %s", e)
-        # Return original ratings as fallback
         return ratings.copy()
 
 
@@ -570,41 +751,31 @@ def update_preference_down_and_save(
     ratings: dict[str, float],
     player_a: str,
     player_b: str,
+    *,
+    blocking: bool = False,
 ) -> dict[str, float]:
     """Update Bayesian preference model with both disliked result.
     Returns updated ratings dict derived from model weights.
+
+    Args:
+        ratings: Current ratings dictionary
+        player_a: First name
+        player_b: Second name
+        blocking: If True, wait for model update to complete
     """
-    # Update the model
-    update_model_down_and_save(player_a, player_b)
+    record_comparison_instant(player_a, player_b, 2, blocking=blocking)
 
-    # Record down comparison in database (preference=2)
-    try:
-        database.record_comparison(player_a, player_b, 2)
-    except sqlite3.Error as e:
-        logger.warning("Failed to record down comparison: %s", e)
+    if not blocking:
+        return ratings.copy()
 
-    # Compute new ratings only for the two names involved
     try:
         rating_a = _compute_rating_for_name(player_a)
         rating_b = _compute_rating_for_name(player_b)
-
-        # Update in-memory ratings dict
         ratings[player_a] = rating_a
         ratings[player_b] = rating_b
-
-        # Update database for these two names
         database.update_rating_value(player_a, rating_a)
         database.update_rating_value(player_b, rating_b)
-
-        logger.debug(
-            "Updated down ratings: %s=%.1f, %s=%.1f",
-            player_a,
-            rating_a,
-            player_b,
-            rating_b,
-        )
         return ratings.copy()
     except (RuntimeError, ValueError) as e:
         logger.warning("Failed to compute updated ratings: %s", e)
-        # Return original ratings as fallback
         return ratings.copy()

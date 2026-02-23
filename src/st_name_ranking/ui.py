@@ -22,13 +22,17 @@ from st_name_ranking.similarity import (
     load_embedding_model,
 )
 from st_name_ranking.types import PreferenceStats
+from st_name_ranking.name_queue import (
+    NameQueue,
+    clear_queue_session,
+    get_queue_from_session,
+    save_queue_to_session,
+)
+from st_name_ranking.async_model import select_random_pair
+from st_name_ranking.background_queue import get_queue_manager, stop_queue_manager
 from st_name_ranking.utils import (
     get_names_features,
-    select_candidate_batch,
-    select_candidates,
-    update_preference_and_save,
-    update_preference_down_and_save,
-    update_preference_draw_and_save,
+    record_comparison_instant,
 )
 
 logger = logging.getLogger(__name__)
@@ -189,11 +193,13 @@ def render_preferences_panel() -> None:
         st.info("No phonetic preference data available.")
 
 
+@st.fragment
 def render_tournament(names: list[str]) -> None:
     """Render tournament interface for comparing names.
 
     Shows two names side by side with rating scores.
     User clicks on which name they prefer.
+    Uses lazy model updates for instant UI feedback.
     """
 
     logger.debug("Rendering tournament with %d names", len(names))
@@ -201,9 +207,25 @@ def render_tournament(names: list[str]) -> None:
     st.write(f"Comparing {len(names)} names")
     st.caption("Tournament mode: click which name you prefer")
 
+    # Handle empty names list gracefully
+    if len(names) < 2:
+        if len(names) == 0:
+            st.info("No names to compare. Please select at least two names.")
+        else:
+            st.info(f"Only one name ('{names[0]}') selected. Please select at least two names to compare.")
+        return
+
     # Precompute features and names set
     features_matrix = get_names_features(names)
     names_set = set(names)
+
+    # Create placeholders for dynamic content
+    pair_display_placeholder = st.empty()
+    buttons_placeholder = st.empty()
+
+    # Get or create background queue manager for instant transitions
+    queue_size = st.session_state.get("tournament_queue_size", 15)
+    manager = get_queue_manager(names, queue_size)
 
     # Initialize candidates if not set or empty
     if (
@@ -212,13 +234,11 @@ def render_tournament(names: list[str]) -> None:
         or not st.session_state.candidate_a
         or not st.session_state.candidate_b
     ):
-        c_a, c_b = select_candidates(names, features_matrix)
-        st.session_state.candidate_a = c_a
-        st.session_state.candidate_b = c_b
-        # Pre-fill queue with batch for faster navigation
-        batch = select_candidate_batch(names, features_matrix, batch_size=3)
-        valid_batch = [(a, b) for a, b in batch if a in names_set and b in names_set]
-        st.session_state.candidate_queue = valid_batch
+        current_pair = manager.get_pair()
+        if not current_pair:
+            # Fallback if queue empty
+            current_pair = (names[0], names[1]) if len(names) > 1 else (names[0], names[0])
+        st.session_state.candidate_a, st.session_state.candidate_b = current_pair
 
     st.markdown(
         """
@@ -261,121 +281,55 @@ def render_tournament(names: list[str]) -> None:
         unsafe_allow_html=True,
     )
 
+    def update_display(candidate_a: str, candidate_b: str, ratings: dict) -> None:
+        """Update the display with new pair and ratings.
+
+        Called instantly after vote without requiring a full rerun.
+        """
+        # Get both ratings
+        rating_a = ratings.get(candidate_a, INITIAL_SCORE)
+        rating_b = ratings.get(candidate_b, INITIAL_SCORE)
+
+        # Calculate rating differences for delta display
+        delta_a = rating_a - rating_b  # Positive if A is higher rated
+        delta_b = rating_b - rating_a  # Positive if B is higher rated
+
+        # Update pair display
+        with pair_display_placeholder.container():
+            _, col_left, _, col_right, _ = st.columns([0.8, 1, 0.4, 1, 0.8])
+
+            with col_left:
+                display_name_with_rating(candidate_a, rating_a, delta=delta_a)
+
+            with col_right:
+                display_name_with_rating(candidate_b, rating_b, delta=delta_b)
+
+    # Button handlers with background QueueManager for instant transitions
     _, col_left, _, col_right, _ = st.columns([0.8, 1, 0.4, 1, 0.8])
 
-    # Get both ratings before displaying
-    rating_a = st.session_state.ratings.get(
-        st.session_state.candidate_a,
-        INITIAL_SCORE,
-    )
-    rating_b = st.session_state.ratings.get(
-        st.session_state.candidate_b,
-        INITIAL_SCORE,
-    )
-
-    # Calculate rating differences for delta display
-    delta_a = rating_a - rating_b  # Positive if A is higher rated
-    delta_b = rating_b - rating_a  # Positive if B is higher rated
-
     with col_left:
-        display_name_with_rating(
-            st.session_state.candidate_a,
-            rating_a,
-            delta=delta_a,
+        st.markdown("<div style='text-align: center'>", unsafe_allow_html=True)
+        vote_a_clicked = st.button(
+            f"Prefer {st.session_state.candidate_a}",
+            key="vote_a",
+            width="stretch",
+            type="primary",
+            shortcut="Left",
+            help=f"Select {st.session_state.candidate_a} as preferred (Left arrow key)",
         )
-
-        # Centered button container
-        button_container = st.container()
-        with button_container:
-            st.markdown(
-                "<div style='text-align: center'>",
-                unsafe_allow_html=True,
-            )
-            button_clicked = st.button(
-                f"Prefer {st.session_state.candidate_a}",
-                key="vote_a",
-                width="stretch",
-                type="primary",
-                shortcut="Left",
-                help=(f"Select {st.session_state.candidate_a} as preferred (Left arrow key)"),
-            )
-            st.markdown("</div>", unsafe_allow_html=True)
-
-        if button_clicked:
-            update_preference_and_save(
-                st.session_state.ratings,
-                st.session_state.candidate_a,
-                st.session_state.candidate_b,
-            )
-            # Clear queue because model has changed
-            st.session_state.candidate_queue = []
-            # Generate new batch of pairs
-            batch = select_candidate_batch(names, features_matrix, batch_size=3)
-            # Filter valid pairs (should be all)
-            valid_batch = [(a, b) for a, b in batch if a in names_set and b in names_set]
-            if valid_batch:
-                # Pop first pair for immediate display
-                c_a, c_b = valid_batch.pop(0)
-                st.session_state.candidate_a = c_a
-                st.session_state.candidate_b = c_b
-                # Store remaining pairs in queue
-                st.session_state.candidate_queue = valid_batch
-            else:
-                # Fallback to single pair selection
-                c_a, c_b = select_candidates(names, features_matrix)
-                st.session_state.candidate_a = c_a
-                st.session_state.candidate_b = c_b
-            st.rerun()
+        st.markdown("</div>", unsafe_allow_html=True)
 
     with col_right:
-        display_name_with_rating(
-            st.session_state.candidate_b,
-            rating_b,
-            delta=delta_b,
+        st.markdown("<div style='text-align: center'>", unsafe_allow_html=True)
+        vote_b_clicked = st.button(
+            f"Prefer {st.session_state.candidate_b}",
+            key="vote_b",
+            width="stretch",
+            type="primary",
+            shortcut="Right",
+            help=f"Select {st.session_state.candidate_b} as preferred (Right arrow key)",
         )
-
-        # Centered button container (same as left side)
-        button_container = st.container()
-        with button_container:
-            st.markdown(
-                "<div style='text-align: center'>",
-                unsafe_allow_html=True,
-            )
-            button_clicked = st.button(
-                f"Prefer {st.session_state.candidate_b}",
-                key="vote_b",
-                width="stretch",
-                type="primary",
-                shortcut="Right",
-                help=(f"Select {st.session_state.candidate_b} as preferred (Right arrow key)"),
-            )
-            st.markdown("</div>", unsafe_allow_html=True)
-
-        if button_clicked:
-            update_preference_and_save(
-                st.session_state.ratings,
-                st.session_state.candidate_b,
-                st.session_state.candidate_a,
-            )
-            # Clear queue because model has changed
-            st.session_state.candidate_queue = []
-            # Generate new batch of pairs
-            batch = select_candidate_batch(names, features_matrix, batch_size=3)
-            # Filter valid pairs (should be all)
-            valid_batch = [(a, b) for a, b in batch if a in names_set and b in names_set]
-            if valid_batch:
-                # Pop first pair for immediate display
-                c_a, c_b = valid_batch.pop(0)
-                st.session_state.candidate_a = c_a
-                st.session_state.candidate_b = c_b
-                # Store remaining pairs in queue
-                st.session_state.candidate_queue = valid_batch
-            else:
-                # Fallback to single pair selection
-                c_a, c_b = select_candidates(names, features_matrix)
-                st.session_state.candidate_a = c_a
-                st.session_state.candidate_b = c_b
-            st.rerun()
+        st.markdown("</div>", unsafe_allow_html=True)
 
     # Draw and Down buttons centered below both names
     _, col_mid, _ = st.columns([1, 0.4, 1])
@@ -397,58 +351,53 @@ def render_tournament(names: list[str]) -> None:
             help="Mark both names as disliked (Down arrow key)",
         )
 
-    if draw_clicked:
+    # Handle votes with instant async model updates for UI feedback
+    vote_handled = False
+    next_pair = None
+
+    if vote_a_clicked:
+        vote_handled = True
+        # 1. Record comparison instantly (async model update in background)
+        record_comparison_instant(st.session_state.candidate_a, st.session_state.candidate_b, -1)
+        # 2. Get next pair instantly from background queue
+        next_pair = manager.get_pair()
+        if not next_pair:
+            next_pair = select_random_pair(names)
+    elif vote_b_clicked:
+        vote_handled = True
+        # 1. Record comparison instantly (async model update in background)
+        record_comparison_instant(st.session_state.candidate_a, st.session_state.candidate_b, 1)
+        # 2. Get next pair instantly from background queue
+        next_pair = manager.get_pair()
+        if not next_pair:
+            next_pair = select_random_pair(names)
+    elif draw_clicked:
+        vote_handled = True
         st.toast("🤝 you chose a draw!", duration="long")
-        update_preference_draw_and_save(
-            st.session_state.ratings,
-            st.session_state.candidate_a,
-            st.session_state.candidate_b,
-        )
-        # Clear queue because model has changed
-        st.session_state.candidate_queue = []
-        # Generate new batch of pairs
-        batch = select_candidate_batch(names, features_matrix, batch_size=3)
-        # Filter valid pairs (should be all)
-        valid_batch = [(a, b) for a, b in batch if a in names_set and b in names_set]
-        if valid_batch:
-            # Pop first pair for immediate display
-            c_a, c_b = valid_batch.pop(0)
-            st.session_state.candidate_a = c_a
-            st.session_state.candidate_b = c_b
-            # Store remaining pairs in queue
-            st.session_state.candidate_queue = valid_batch
-        else:
-            # Fallback to single pair selection
-            c_a, c_b = select_candidates(names, features_matrix)
-            st.session_state.candidate_a = c_a
-            st.session_state.candidate_b = c_b
-        st.rerun()
+        # 1. Record comparison instantly (async model update in background)
+        record_comparison_instant(st.session_state.candidate_a, st.session_state.candidate_b, 0)
+        # 2. Get next pair instantly from background queue
+        next_pair = manager.get_pair()
+        if not next_pair:
+            next_pair = select_random_pair(names)
     elif down_clicked:
+        vote_handled = True
         st.toast("👎 you disliked both!", duration="long")
-        update_preference_down_and_save(
-            st.session_state.ratings,
-            st.session_state.candidate_a,
-            st.session_state.candidate_b,
-        )
-        # Clear queue because model has changed
-        st.session_state.candidate_queue = []
-        # Generate new batch of pairs
-        batch = select_candidate_batch(names, features_matrix, batch_size=3)
-        # Filter valid pairs (should be all)
-        valid_batch = [(a, b) for a, b in batch if a in names_set and b in names_set]
-        if valid_batch:
-            # Pop first pair for immediate display
-            c_a, c_b = valid_batch.pop(0)
-            st.session_state.candidate_a = c_a
-            st.session_state.candidate_b = c_b
-            # Store remaining pairs in queue
-            st.session_state.candidate_queue = valid_batch
-        else:
-            # Fallback to single pair selection
-            c_a, c_b = select_candidates(names, features_matrix)
-            st.session_state.candidate_a = c_a
-            st.session_state.candidate_b = c_b
-        st.rerun()
+        # 1. Record comparison instantly (async model update in background)
+        record_comparison_instant(st.session_state.candidate_a, st.session_state.candidate_b, 2)
+        # 2. Get next pair instantly from background queue
+        next_pair = manager.get_pair()
+        if not next_pair:
+            next_pair = select_random_pair(names)
+
+    # Update session state and UI instantly after vote (no rerun needed)
+    if vote_handled and next_pair:
+        st.session_state.candidate_a, st.session_state.candidate_b = next_pair
+        # Update UI instantly with st.fragment placeholder updates
+        update_display(next_pair[0], next_pair[1], st.session_state.ratings)
+
+    # Render display with current candidates (will reflect any updates above)
+    update_display(st.session_state.candidate_a, st.session_state.candidate_b, st.session_state.ratings)
 
     with st.expander(label="statistics"):
         st.divider()
@@ -556,10 +505,11 @@ def render_tournament(names: list[str]) -> None:
         #     render_preferences_panel()
 
 
+@st.fragment
 def render_binary_filter(names: list[str]) -> None:
     """Render binary filter interface for including/excluding names.
 
-    Users review names one by one, marking them as included/neutral or excluded/dislike.
+    Users review names one by one, marking them as included or excluded.
     """
     logger.debug("Rendering binary filter with %d names", len(names))
     start_time = time.perf_counter()
@@ -594,9 +544,13 @@ def render_binary_filter(names: list[str]) -> None:
         "exclude names you don't care about.",
     )
     st.caption(
-        "💡 **Keyboard shortcuts**: Left arrow (←) to exclude/dislike, "
-        "Right arrow (→) to include/neutral, Space to include/neutral",
+        "💡 **Keyboard shortcuts**: Left arrow (←) to exclude, Right arrow (→) to include, Space to include",
     )
+
+    # Create placeholders for instant updates
+    progress_placeholder = st.empty()
+    stats_placeholder = st.empty()
+    name_display_placeholder = st.empty()
 
     # Load inclusion decisions from session state or database
     if "name_inclusions" not in st.session_state:
@@ -657,55 +611,53 @@ def render_binary_filter(names: list[str]) -> None:
     current_idx = st.session_state.filter_index
     current_name = names[current_idx]
 
-    # Display progress
-    progress = current_idx / len(names)
-    st.progress(progress, text=f"Progress: {current_idx + 1} of {len(names)}")
+    def update_display(current_name: str, current_idx: int) -> None:
+        """Update display instantly without rerun."""
+        # Progress bar
+        progress = current_idx / len(names)
+        progress_placeholder.progress(progress, text=f"Progress: {current_idx + 1} of {len(names)}")
 
-    # Display stats from session state
-    not_decided = st.session_state.filter_counts_not_decided
-    explicitly_included = st.session_state.filter_counts_included
-    explicitly_excluded = st.session_state.filter_counts_excluded
+        # Stats
+        not_decided = st.session_state.filter_counts_not_decided
+        explicitly_included = st.session_state.filter_counts_included
+        explicitly_excluded = st.session_state.filter_counts_excluded
+        stats_placeholder.caption(
+            f"Not decided: {not_decided} | Included: {explicitly_included} | Excluded: {explicitly_excluded}",
+        )
 
-    st.caption(
-        f"Not decided: {not_decided} | "
-        f"Included/Neutral: {explicitly_included} | "
-        f"Excluded/Dislike: {explicitly_excluded}",
-    )
+        # Name display with colors
+        if current_name not in inclusions:
+            border_color = "#757575"
+            status_text = "Not decided"
+            bg_color = "#FAFAFA"
+        elif inclusions[current_name]:
+            border_color = "#4CAF50"
+            status_text = "Included"
+            bg_color = "#E8F5E9"
+        else:
+            border_color = "#F44336"
+            status_text = "Excluded"
+            bg_color = "#FFEBEE"
 
-    # Display current name prominently with visual decision indicator
-    # Three states: not decided (gray), included/neutral (green), excluded/dislike (red)
-    if current_name not in inclusions:
-        # Not decided yet
-        border_color = "#757575"  # Gray
-        status_text = "Not decided"
-        bg_color = "#FAFAFA"
-    elif inclusions[current_name]:
-        # Explicitly included/neutral
-        border_color = "#4CAF50"  # Green
-        status_text = "Included/Neutral"
-        bg_color = "#E8F5E9"
-    else:
-        # Explicitly excluded/dislike
-        border_color = "#F44336"  # Red
-        status_text = "Excluded/Dislike"
-        bg_color = "#FFEBEE"
+        name_display_placeholder.markdown(
+            f"<div style='border: 4px solid {border_color}; background-color: {bg_color}; "
+            f"border-radius: 12px; padding: 20px; text-align: center;'>"
+            f"<h1 style='font-size: 72px; margin: 0; color: #212121;'>{current_name}</h1>"
+            f"<p style='font-size: 16px; margin: 10px 0 0 0; color: {border_color}; "
+            f"font-weight: bold;'>{status_text}</p>"
+            f"</div>",
+            unsafe_allow_html=True,
+        )
 
-    st.markdown(
-        f"<div style='border: 4px solid {border_color}; background-color: {bg_color}; "
-        f"border-radius: 12px; padding: 20px; text-align: center;'>"
-        f"<h1 style='font-size: 72px; margin: 0; color: #212121;'>{current_name}</h1>"
-        f"<p style='font-size: 16px; margin: 10px 0 0 0; color: {border_color}; "
-        f"font-weight: bold;'>{status_text}</p>"
-        f"</div>",
-        unsafe_allow_html=True,
-    )
+    # Initial display
+    update_display(current_name, current_idx)
     time_after_name_display = time.perf_counter()
 
     # Decision buttons - simplified to two clear options
     col_exclude, col_include = st.columns(2)
     with col_exclude:
         if st.button(
-            "Exclude/Dislike",
+            "Exclude",
             key="exclude_btn",
             use_container_width=True,
             type="secondary",
@@ -717,23 +669,29 @@ def render_binary_filter(names: list[str]) -> None:
             st.session_state.filter_index += 1
             st.toast(f"Excluded: {current_name}", icon="👎")
             st.session_state.last_button_press_time = time.perf_counter()
-            st.rerun()
+            # INSTANT UPDATE - no rerun!
+            next_idx = st.session_state.filter_index
+            if next_idx < len(names):
+                update_display(names[next_idx], next_idx)
     with col_include:
         if st.button(
-            "Include/Neutral",
+            "Include",
             key="include_btn",
             use_container_width=True,
             type="primary",
             shortcut="Right",
         ):
-            # Include (explicitly mark as included/neutral)
+            # Include (explicitly mark as included)
             old_status = inclusions.get(current_name)
             inclusions[current_name] = True
             update_counts(current_name, old_status=old_status, new_status=True)
             st.session_state.filter_index += 1
             st.toast(f"Included: {current_name}", icon="👍")
             st.session_state.last_button_press_time = time.perf_counter()
-            st.rerun()
+            # INSTANT UPDATE - no rerun!
+            next_idx = st.session_state.filter_index
+            if next_idx < len(names):
+                update_display(names[next_idx], next_idx)
 
     # Save decisions periodically (every 50 actions to reduce DB writes)
     if current_idx % 50 == 0:
@@ -751,7 +709,7 @@ def render_binary_filter(names: list[str]) -> None:
     # Batch operations
     col_batch1, col_batch2 = st.columns(2)
     with col_batch1:
-        if st.button("Include All Remaining", type="secondary", help="Include all remaining names as neutral"):
+        if st.button("Include All Remaining", type="secondary", help="Include all remaining names"):
             count = len(names) - current_idx
             for name in names[current_idx:]:
                 inclusions[name] = True
@@ -761,9 +719,10 @@ def render_binary_filter(names: list[str]) -> None:
                 del st.session_state.filter_counts_names_hash
             st.toast(f"Included {count} remaining names", icon="✅")
             st.session_state.last_button_press_time = time.perf_counter()
-            st.rerun()
+            # Fragment-level refresh for batch operations
+            st.rerun(scope="fragment")
     with col_batch2:
-        if st.button("Exclude All Remaining", type="secondary", help="Exclude/dislike all remaining names"):
+        if st.button("Exclude All Remaining", type="secondary", help="Exclude all remaining names"):
             count = len(names) - current_idx
             for name in names[current_idx:]:
                 inclusions[name] = False
@@ -773,7 +732,8 @@ def render_binary_filter(names: list[str]) -> None:
                 del st.session_state.filter_counts_names_hash
             st.toast(f"Excluded {count} remaining names", icon="✅")
             st.session_state.last_button_press_time = time.perf_counter()
-            st.rerun()
+            # Fragment-level refresh for batch operations
+            st.rerun(scope="fragment")
 
     # Navigation buttons
     st.divider()
@@ -782,7 +742,9 @@ def render_binary_filter(names: list[str]) -> None:
         if st.button("Previous", disabled=current_idx == 0):
             st.session_state.filter_index -= 1
             st.session_state.last_button_press_time = time.perf_counter()
-            st.rerun()
+            # INSTANT UPDATE - no full rerun!
+            prev_idx = st.session_state.filter_index
+            update_display(names[prev_idx], prev_idx)
     with col_nav2:
         if st.button("Reset All Decisions", type="secondary"):
             st.session_state.name_inclusions = {}
@@ -794,13 +756,15 @@ def render_binary_filter(names: list[str]) -> None:
             st.session_state.filter_counts_names_hash = names_hash
             save_user_setting("name_inclusions", "{}")
             st.session_state.last_button_press_time = time.perf_counter()
-            st.rerun()
+            # Fragment-level refresh for reset
+            st.rerun(scope="fragment")
     with col_nav3:
         if st.button("Save & Continue", type="primary"):
             save_user_setting("name_inclusions", json.dumps(inclusions))
             st.toast("Decisions saved!", icon="✅")
             # Switch to tournament tab with included names
             st.session_state.active_tab = "Tournament"
+            # This needs full rerun to switch tabs
             st.rerun()
 
     # Show list of excluded names (collapsible)

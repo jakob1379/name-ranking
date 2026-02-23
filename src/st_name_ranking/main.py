@@ -5,16 +5,21 @@ Refactored version with modular imports.
 import json
 import logging
 import secrets
+import sqlite3
 import time
 from datetime import datetime
 
 import streamlit as st
 
 from st_name_ranking import database
-from st_name_ranking.data_loader import load_names_by_gender, save_ratings
+from st_name_ranking.data_loader import load_names_by_gender
 from st_name_ranking.database import initialize_ratings
 from st_name_ranking.ui import render_binary_filter, render_similarity, render_tournament
-from st_name_ranking.utils import setup_session_state, sync_names_from_submodule
+from st_name_ranking.utils import (
+    get_active_learning_model,
+    setup_session_state,
+    sync_names_from_submodule,
+)
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -58,8 +63,8 @@ def main() -> None:
             database.init_database()
             try:
                 stats = database.get_stats()
-                total_names = stats["total_names"]
-                classified_names = stats["classified_names"]
+                total_names = stats.total_names
+                classified_names = stats.classified_names
                 st.caption(f"Total: {total_names} names")
                 if total_names > 0:
                     st.caption(
@@ -82,6 +87,11 @@ def main() -> None:
 
                 # Initialize with all names for ratings
                 setup_session_state(gender_data["All"])
+
+                # Pre-load the active learning model in background
+                # so Tournament tab is ready instantly when clicked
+                get_active_learning_model()
+
                 st.toast(
                     f"Loaded {len(gender_data['All'])} total names",
                     icon="✅",
@@ -169,84 +179,76 @@ def main() -> None:
             )
             st.rerun()
 
+        # Tournament Queue Size Setting
+        st.subheader("Tournament Settings")
+        if "tournament_queue_size" not in st.session_state:
+            st.session_state.tournament_queue_size = 15
+
+        queue_size = st.slider(
+            "Queue size (pairs to preload):",
+            min_value=3,
+            max_value=50,
+            value=st.session_state.tournament_queue_size,
+            help="Number of pairs to preload in tournament. Higher = faster but more memory.",
+        )
+
+        if queue_size != st.session_state.tournament_queue_size:
+            st.session_state.tournament_queue_size = queue_size
+            # Clear the pair queue so it regenerates with new size
+            from st_name_ranking.pair_queue import clear_pair_queue_session
+
+            clear_pair_queue_session()
+            st.toast(f"Queue size set to {queue_size}", icon="⚙️")
+
+        st.divider()
+
         # Ratings management
         st.subheader("Ratings Management")
 
         if "names" in st.session_state and st.session_state.names:
             st.caption(f"Active Dataset: {len(st.session_state.names)} names")
 
-            col1, col2 = st.columns(2)
-            with col1:
-                if st.button("Save Ratings"):
-                    if save_ratings(st.session_state.ratings):
-                        st.toast(
-                            "Ratings saved!",
-                            icon="✅",
-                        )
-            with col2:
-                if st.button(
-                    "Reset Ratings",
-                    help=("Reset all ratings to initial values. This action cannot be undone."),
-                    type="secondary",
-                ):
-                    # Open confirmation dialog
-                    with st.dialog("Confirm Reset Ratings"):  # type: ignore[attr-defined]
-                        st.markdown("### ⚠️ Reset All Ratings?")
-                        st.write(
-                            "This will reset **all** ratings to their initial values.",
-                        )
-                        st.write("**This action cannot be undone.**")
+            if st.button(
+                "Reset Ratings",
+                help=("Reset all ratings to initial values. This action cannot be undone."),
+                type="secondary",
+            ):
+                # Open confirmation dialog
+                with st.dialog("Confirm Reset Ratings"):  # type: ignore[attr-defined]
+                    st.markdown("### ⚠️ Reset All Ratings?")
+                    st.write(
+                        "This will reset **all** ratings to their initial values.",
+                    )
+                    st.write("**This action cannot be undone.**")
 
-                        col_confirm, col_cancel = st.columns(2)
-                        with col_confirm:
-                            if st.button("Yes, Reset Ratings", type="primary"):
-                                st.session_state.ratings = initialize_ratings(
-                                    st.session_state.names,
-                                )
-                                st.toast(
-                                    "✅ Ratings reset to initial values",
-                                    icon="✅",
-                                )
-                                st.rerun()
-                        with col_cancel:
-                            if st.button("Cancel", type="secondary"):
-                                st.rerun()
+                    col_confirm, col_cancel = st.columns(2)
+                    with col_confirm:
+                        if st.button("Yes, Reset Ratings", type="primary"):
+                            st.session_state.ratings = initialize_ratings(
+                                st.session_state.names,
+                            )
+                            st.toast(
+                                "✅ Ratings reset to initial values",
+                                icon="✅",
+                            )
+                            st.rerun()
+                    with col_cancel:
+                        if st.button("Cancel", type="secondary"):
+                            st.rerun()
 
             # Export ratings
             st.subheader("Export")
-            col_export, col_import = st.columns(2)
-            with col_export:
-                if st.button("Export Database as SQLite"):
-                    try:
-                        db_bytes = database.export_database()
-                        st.download_button(
-                            label="Download Database",
-                            data=db_bytes,
-                            file_name=f"name_ranker_{datetime.now().strftime('%Y%m%d_%H%M%S')}.db",
-                            mime="application/x-sqlite3",
-                        )
-                    except (OSError, RuntimeError) as e:
-                        st.error(f"Failed to export database: {e}")
-            with col_import:
-                uploaded_file = st.file_uploader(
-                    "Import SQLite database",
-                    type=["db"],
-                    key="db_upload",
-                    label_visibility="collapsed",
-                )
-                if uploaded_file is not None:
-                    st.warning("Importing a database will replace the current database. Make sure you have a backup.")
-                    confirm = st.checkbox("I understand this will replace the current database", key="import_confirm")
-                    if confirm:
-                        if st.button("Import Database", type="primary"):
-                            try:
-                                database.import_database(uploaded_file.getvalue())
-                                st.success("Database imported successfully! Page will reload.")
-                                st.rerun()
-                            except (OSError, ValueError, RuntimeError) as e:
-                                st.error(f"Failed to import database: {e}")
-                    else:
-                        st.button("Import Database", type="primary", disabled=True)
+            if st.button("Export Database"):
+                try:
+                    db_bytes = database.export_database()
+                    st.download_button(
+                        label="Download Database",
+                        data=db_bytes,
+                        file_name=f"name_ranker_{datetime.now().strftime('%Y%m%d_%H%M%S')}.db",
+                        mime="application/x-sqlite3",
+                    )
+                except (OSError, RuntimeError) as e:
+                    st.error(f"Failed to export database: {e}")
 
     # Main Content
     if "all_names_data" not in st.session_state:
