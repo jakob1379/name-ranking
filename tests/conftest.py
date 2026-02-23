@@ -2,7 +2,7 @@
 
 import tempfile
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -28,19 +28,23 @@ def mock_db_path(temp_db_path):
     # Patch the DB_PATH
     database.DB_PATH = temp_db_path
     # Reset initialization flag
-    database._initialized = False
+    database.init_database._initialized = False
 
     yield temp_db_path
 
     # Restore original path
     database.DB_PATH = original_path
-    database._initialized = False
+    database.init_database._initialized = False
 
 
 @pytest.fixture
 def initialized_db(mock_db_path):
     """Initialize a fresh database with schema."""
     from st_name_ranking.database import get_connection, init_database
+    from st_name_ranking import utils
+
+    # Clear feature extractor cache to prevent stale data between tests
+    utils.get_feature_extractor._cache = None
 
     init_database()
 
@@ -120,34 +124,24 @@ def mock_submodule_path(tmp_path):
 
 @pytest.fixture
 def mock_classifier():
-    """Mock the ethnidata classifier to avoid PyTorch issues."""
-    with patch("ethnidata.EthniData") as mock_ethnidata:
-        mock_instance = mock_ethnidata.return_value
-        mock_instance.predict_nationality.return_value = {
-            "country_name": "Denmark",
-            "confidence": 0.85,
-            "country": "DK",
-            "region": "Europe",
-        }
+    """Mock the ethnidata classifier to avoid missing database file."""
+    from st_name_ranking import origin_classifier, classify_origins
+
+    # Clear singleton cache to ensure fresh classifier
+    origin_classifier.get_classifier._cache = None
+    classify_origins.get_classifier._cache = None
+
+    # The classifier expects a callable that returns (region, confidence) tuple
+    mock_instance = MagicMock(return_value=("European", 0.85))
+    with patch(
+        "st_name_ranking.origin_classifier._create_ethnidata_classifier",
+        return_value=mock_instance,
+    ):
         yield mock_instance
 
 
-@pytest.fixture(autouse=True)
-def cleanup_db_state():
-    """Clean up database state before each test."""
-    from st_name_ranking import database, origin_classifier
-
-    # Reset initialization flag before each test
-    database._initialized = False
-    # Reset classifier singleton
-    origin_classifier._default_classifier = None
-    yield
-    # Reset after test
-    database._initialized = False
-    origin_classifier._default_classifier = None
-
-
 # -----------------------------------------------------------------------------
+
 # Integration test configuration
 # -----------------------------------------------------------------------------
 
