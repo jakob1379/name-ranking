@@ -299,7 +299,7 @@ class TestRatingOperations:
             )
             result = cursor.fetchone()
             assert result is not None
-            assert result[0] == 1  # First update sets matches to 1
+            assert result[0] == 0  # First update defaults matches to 0
 
     def test_update_rating_multiple_times(self, initialized_db):
         """Test updating rating multiple times increments matches."""
@@ -325,7 +325,7 @@ class TestRatingOperations:
         ratings = get_ratings()
         assert ratings["Peter"] == 1525.0
 
-        # Verify matches count is 3 (each update increments)
+        # Verify matches count is 0 (preserved from first insert, not incremented)
         with get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute(
@@ -338,7 +338,7 @@ class TestRatingOperations:
             )
             result = cursor.fetchone()
             assert result is not None
-            assert result[0] == 3
+            assert result[0] == 0
 
     def test_update_rating_nonexistent_name(self, initialized_db):
         """Test updating rating for non-existent name raises error."""

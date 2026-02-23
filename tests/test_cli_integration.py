@@ -53,11 +53,11 @@ def real_db_path(temp_db_path):
     from st_name_ranking import database
 
     original_path = database.DB_PATH
-    original_initialized = database._initialized
+    original_initialized = getattr(database.init_database, "_initialized", False)
 
     # Set temp path and reset initialization
     database.DB_PATH = temp_db_path
-    database._initialized = False
+    database.init_database._initialized = False
 
     # Create data directory if needed
     temp_db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -66,7 +66,8 @@ def real_db_path(temp_db_path):
 
     # Restore original state
     database.DB_PATH = original_path
-    database._initialized = original_initialized
+    if original_initialized:
+        database.init_database._initialized = original_initialized
 
 
 @pytest.fixture
@@ -610,7 +611,7 @@ class TestCLIModelCommands:
                 assert db_samples >= 1, "Model should have training samples in DB"
 
         # Clear the global singleton to simulate fresh process
-        utils._model = None
+        utils.get_active_learning_model._cache = None
 
         # Run model-reset (automatically confirms in test)
         result = cli_runner.invoke(app, ["model-reset"], input="y\n")

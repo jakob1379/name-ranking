@@ -34,9 +34,10 @@ def _init_in_process(db_path_str):
         with database.get_connection() as conn:
             cursor = conn.execute("SELECT COUNT(*) FROM names")
             count = cursor.fetchone()[0]
-        return ("success", count)
     except sqlite3.Error as e:
         return ("error", str(e))
+    else:
+        return ("success", count)
 
 
 def _vote_in_process(args):
@@ -52,9 +53,10 @@ def _vote_in_process(args):
         for i in range(10):
             preference = -1 if i % 2 == 0 else 1
             database.record_comparison("Alice", "Bob", preference)
-        return ("success", process_id)
     except sqlite3.Error as e:
         return ("error", str(e))
+    else:
+        return ("success", process_id)
 
 
 class TestConcurrentDatabaseInitialization:

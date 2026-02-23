@@ -416,14 +416,11 @@ class TestConsistencyAndRecovery:
         # Simulate model update failure
         with patch("st_name_ranking.utils.get_active_learning_model") as mock_get_model:
             mock_model = MagicMock()
-            mock_model.update.side_effect = Exception("Model update failed")
+            mock_model.update.side_effect = RuntimeError("Model update failed")
             mock_get_model.return_value = mock_model
 
-            # Attempt update - should handle gracefully
-            try:
-                utils.update_model_and_save("Winner", "Loser")
-            except (RuntimeError, ValueError, AttributeError):
-                pass  # Expected to fail
+            # Attempt update - should handle gracefully (function catches RuntimeError)
+            utils.update_model_and_save("Winner", "Loser")  # Should not raise
 
         # Ratings should remain unchanged
         final_ratings = get_ratings()

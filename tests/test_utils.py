@@ -127,7 +127,7 @@ class TestPullSubmoduleUpdates:
         mock_result = MagicMock()
         mock_result.returncode = 0
         mock_run.return_value = mock_result
-        mock_db.sync_names_with_submodule.side_effect = Exception("DB error")
+        mock_db.sync_names_with_submodule.side_effect = RuntimeError("DB error")
 
         result = utils.pull_submodule_updates()
 
@@ -172,7 +172,9 @@ class TestPullSubmoduleUpdates:
     @patch("st_name_ranking.utils.st")
     def test_general_exception(self, mock_st, mock_run):
         """Test handling of general exceptions."""
-        mock_run.side_effect = Exception("Network error")
+        from subprocess import SubprocessError
+
+        mock_run.side_effect = SubprocessError("Network error")
 
         result = utils.pull_submodule_updates()
 
@@ -276,7 +278,7 @@ class TestSelectCandidates:
         names = ["Anna", "Peter", "Maria"]
         # Mock model to raise exception
         mock_model = MagicMock()
-        mock_model.select_pair.side_effect = Exception("Model error")
+        mock_model.select_pair.side_effect = RuntimeError("Model error")
         mock_get_model.return_value = mock_model
         # Mock fallback to return a pair
         mock_fallback.return_value = ("Anna", "Peter")
@@ -364,7 +366,7 @@ class TestSelectCandidateBatch:
     def test_select_batch_fallback_on_exception(self, mock_get_names_features, mock_get_model):
         """Test batch selection falls back when model fails."""
         names = ["Anna", "Peter", "Maria"]
-        mock_get_names_features.side_effect = Exception("Feature extraction failed")
+        mock_get_names_features.side_effect = RuntimeError("Feature extraction failed")
         # Mock fallback select_candidates to return a pair
         with patch("st_name_ranking.utils.select_candidates") as mock_select_candidates:
             mock_select_candidates.return_value = ("Anna", "Peter")
@@ -382,7 +384,7 @@ class TestSelectCandidateBatch:
     def test_select_batch_fallback_empty_pair(self, mock_get_names_features, mock_get_model):
         """Test batch selection fallback returns empty list if pair is empty."""
         names = ["Anna", "Peter", "Maria"]
-        mock_get_names_features.side_effect = Exception("Feature extraction failed")
+        mock_get_names_features.side_effect = RuntimeError("Feature extraction failed")
         with patch("st_name_ranking.utils.select_candidates") as mock_select_candidates:
             mock_select_candidates.return_value = ("", "")  # empty pair
             pairs = utils.select_candidate_batch(names, batch_size=2)
@@ -500,7 +502,7 @@ class TestSyncNamesFromSubmodule:
     @patch("st_name_ranking.utils.database")
     def test_sync_error(self, mock_db, mock_st):
         """Test handling sync errors."""
-        mock_db.sync_names_with_submodule.side_effect = Exception("DB error")
+        mock_db.sync_names_with_submodule.side_effect = RuntimeError("DB error")
 
         result = utils.sync_names_from_submodule()
 
@@ -560,7 +562,7 @@ class TestUpdatePreferenceAndSave:
     ):
         """Test when ratings computation fails."""
         ratings = {"Anna": 1500.0, "Peter": 1500.0}
-        mock_compute_rating.side_effect = Exception("Computation error")
+        mock_compute_rating.side_effect = RuntimeError("Computation error")
 
         result = utils.update_preference_and_save(ratings, "Anna", "Peter")
 
@@ -622,7 +624,7 @@ class TestUpdatePreferenceDrawAndSave:
     ):
         """Test when ratings computation fails."""
         ratings = {"Anna": 1500.0, "Peter": 1500.0}
-        mock_compute_rating.side_effect = Exception("Computation error")
+        mock_compute_rating.side_effect = RuntimeError("Computation error")
 
         result = utils.update_preference_draw_and_save(ratings, "Anna", "Peter")
 
@@ -683,7 +685,7 @@ class TestUpdatePreferenceDownAndSave:
     ):
         """Test when ratings computation fails."""
         ratings = {"Anna": 1500.0, "Peter": 1500.0}
-        mock_compute_rating.side_effect = Exception("Computation error")
+        mock_compute_rating.side_effect = RuntimeError("Computation error")
 
         result = utils.update_preference_down_and_save(ratings, "Anna", "Peter")
 
@@ -881,7 +883,7 @@ class TestUpdateRatingsFromModel:
         mock_get_connection.return_value = mock_conn
 
         # Simulate error in feature extraction
-        mock_get_names_features.side_effect = Exception("Feature error")
+        mock_get_names_features.side_effect = RuntimeError("Feature error")
 
         # Should not raise exception
         utils._update_ratings_from_model()
@@ -900,7 +902,7 @@ class TestModelUpdateExceptionHandling:
         """Test exception handling in update_model_and_save."""
         # Mock model that raises exception on update
         mock_model = MagicMock()
-        mock_model.update.side_effect = Exception("Update failed")
+        mock_model.update.side_effect = RuntimeError("Update failed")
         mock_get_model.return_value = mock_model
 
         # Mock features
@@ -914,9 +916,9 @@ class TestModelUpdateExceptionHandling:
 
         # Verify model.update called
         mock_model.update.assert_called_once()
-        # Verify error logged
-        mock_logger.error.assert_called_once()
-        assert "Failed to update model" in mock_logger.error.call_args[0][0]
+        # Verify error logged (logger.exception is used)
+        mock_logger.exception.assert_called_once()
+        assert "Failed to update model" in mock_logger.exception.call_args[0][0]
 
     @patch("st_name_ranking.utils.logger")
     @patch("st_name_ranking.utils.get_name_features")
@@ -924,7 +926,7 @@ class TestModelUpdateExceptionHandling:
     def test_update_model_draw_and_save_exception(self, mock_get_model, mock_get_name_features, mock_logger):
         """Test exception handling in update_model_draw_and_save."""
         mock_model = MagicMock()
-        mock_model.update.side_effect = Exception("Draw update failed")
+        mock_model.update.side_effect = RuntimeError("Draw update failed")
         mock_get_model.return_value = mock_model
 
         mock_get_name_features.side_effect = [
@@ -935,8 +937,8 @@ class TestModelUpdateExceptionHandling:
         utils.update_model_draw_and_save("player_a", "player_b")
 
         mock_model.update.assert_called_once()
-        mock_logger.error.assert_called_once()
-        assert "Failed to update model for draw" in mock_logger.error.call_args[0][0]
+        mock_logger.exception.assert_called_once()
+        assert "Failed to update model for draw" in mock_logger.exception.call_args[0][0]
 
     @patch("st_name_ranking.utils.logger")
     @patch("st_name_ranking.utils.get_name_features")
@@ -944,7 +946,7 @@ class TestModelUpdateExceptionHandling:
     def test_update_model_down_and_save_exception(self, mock_get_model, mock_get_name_features, mock_logger):
         """Test exception handling in update_model_down_and_save."""
         mock_model = MagicMock()
-        mock_model.update_both_disliked.side_effect = Exception("Down update failed")
+        mock_model.update_both_disliked.side_effect = RuntimeError("Down update failed")
         mock_get_model.return_value = mock_model
 
         mock_get_name_features.side_effect = [
@@ -955,8 +957,8 @@ class TestModelUpdateExceptionHandling:
         utils.update_model_down_and_save("player_a", "player_b")
 
         mock_model.update_both_disliked.assert_called_once()
-        mock_logger.error.assert_called_once()
-        assert "Failed to update model for both disliked" in mock_logger.error.call_args[0][0]
+        mock_logger.exception.assert_called_once()
+        assert "Failed to update model for both disliked" in mock_logger.exception.call_args[0][0]
 
     @patch("st_name_ranking.utils.logger")
     @patch("st_name_ranking.utils.get_name_features")

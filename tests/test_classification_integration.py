@@ -21,6 +21,20 @@ from st_name_ranking.database import (
     update_name_origin,
 )
 
+
+# Global fixture to mock ethnidata for all tests in this file
+@pytest.fixture(autouse=True)
+def mock_ethnidata_classifier():
+    """Mock ethnidata to avoid missing database file."""
+    from unittest.mock import patch
+
+    with patch(
+        "st_name_ranking.origin_classifier._create_ethnidata_classifier",
+        return_value=False,
+    ):
+        yield
+
+
 # -----------------------------------------------------------------------------
 # Test Doubles (Realistic implementations, not just mocks)
 # -----------------------------------------------------------------------------
@@ -102,7 +116,10 @@ class TestClassificationChainIntegration:
 
     def test_danish_name_uses_rule_based_classifier(self, initialized_db):
         """Test that Danish name with Nordic characters is caught by rule-based classifier."""
-        classifier = origin_classifier.OriginClassifier(reference_names={})
+        classifier = origin_classifier.OriginClassifier(
+            reference_names={},
+            ethnidata_classifier=False,
+        )
 
         # Name with Nordic character should be caught by rule-based
         region, confidence = classifier.classify("Jørgen")
@@ -113,7 +130,10 @@ class TestClassificationChainIntegration:
 
     def test_danish_suffix_uses_rule_based_classifier(self, initialized_db):
         """Test that Danish name with Nordic suffix is caught by rule-based classifier."""
-        classifier = origin_classifier.OriginClassifier(reference_names={})
+        classifier = origin_classifier.OriginClassifier(
+            reference_names={},
+            ethnidata_classifier=False,
+        )
 
         # Common Danish suffix
         region, confidence = classifier.classify("Hansen")
@@ -140,7 +160,11 @@ class TestClassificationChainIntegration:
         reference_names = get_names_with_origins(confidence_threshold=0.5)
 
         # Name phonetically similar to Magnus
-        classifier = origin_classifier.OriginClassifier(reference_names=reference_names)
+        # Disable ethnidata to avoid broken dependency
+        classifier = origin_classifier.OriginClassifier(
+            reference_names=reference_names,
+            ethnidata_classifier=False,
+        )
 
         # Magnis is phonetically similar to Magnus
         region, confidence = classifier.classify("Magnis")
@@ -185,7 +209,10 @@ class TestClassificationChainIntegration:
 
     def test_confidence_scoring_through_chain(self, initialized_db):
         """Test that confidence values are properly calculated at each chain step."""
-        classifier = origin_classifier.OriginClassifier(reference_names={})
+        classifier = origin_classifier.OriginClassifier(
+            reference_names={},
+            ethnidata_classifier=False,
+        )
 
         # Rule-based should have highest confidence for Nordic names
         _, rule_conf = classifier.classify("Bjørn")
@@ -198,7 +225,10 @@ class TestClassificationChainIntegration:
 
     def test_fallback_to_international_when_all_fail(self, initialized_db):
         """Test that classifier falls back to International when no classifier matches."""
-        classifier = origin_classifier.OriginClassifier(reference_names={})
+        classifier = origin_classifier.OriginClassifier(
+            reference_names={},
+            ethnidata_classifier=False,
+        )
 
         # Name that won't match any classifier pattern
         region, confidence = classifier.classify("Qwertyuiop")
@@ -590,7 +620,10 @@ class TestErrorHandling:
 
     def test_classifier_handles_empty_reference_names(self, initialized_db):
         """Test classifier with empty reference names dictionary."""
-        classifier = origin_classifier.OriginClassifier(reference_names={})
+        classifier = origin_classifier.OriginClassifier(
+            reference_names={},
+            ethnidata_classifier=False,
+        )
 
         # Should skip phonetic step and go to fallback
         region, confidence = classifier.classify("NonNordicName")
@@ -745,7 +778,10 @@ class TestEdgeCases:
 
     def test_empty_name_handling(self, initialized_db):
         """Test handling of empty or whitespace-only names."""
-        classifier = origin_classifier.OriginClassifier(reference_names={})
+        classifier = origin_classifier.OriginClassifier(
+            reference_names={},
+            ethnidata_classifier=False,
+        )
 
         # Empty string should fall back to International
         region, confidence = classifier.classify("")
@@ -753,7 +789,10 @@ class TestEdgeCases:
 
     def test_single_character_name(self, initialized_db):
         """Test classification of single-character names."""
-        classifier = origin_classifier.OriginClassifier(reference_names={})
+        classifier = origin_classifier.OriginClassifier(
+            reference_names={},
+            ethnidata_classifier=False,
+        )
 
         region, confidence = classifier.classify("A")
         # Should not crash, likely falls back to International
@@ -762,7 +801,10 @@ class TestEdgeCases:
 
     def test_very_long_name(self, initialized_db):
         """Test classification of very long names."""
-        classifier = origin_classifier.OriginClassifier(reference_names={})
+        classifier = origin_classifier.OriginClassifier(
+            reference_names={},
+            ethnidata_classifier=False,
+        )
 
         long_name = "A" * 200
         region, confidence = classifier.classify(long_name)
@@ -772,7 +814,10 @@ class TestEdgeCases:
 
     def test_unicode_names(self, initialized_db):
         """Test classification of various Unicode names."""
-        classifier = origin_classifier.OriginClassifier(reference_names={})
+        classifier = origin_classifier.OriginClassifier(
+            reference_names={},
+            ethnidata_classifier=False,
+        )
 
         unicode_names = [
             "José",  # Spanish

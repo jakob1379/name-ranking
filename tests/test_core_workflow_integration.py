@@ -31,13 +31,13 @@ def temp_db():
 
     original_path = database.DB_PATH
     database.DB_PATH = db_path
-    database._initialized = False
+    database.init_database._initialized = False
 
     yield db_path
 
     # Cleanup
     database.DB_PATH = original_path
-    database._initialized = False
+    database.init_database._initialized = False
     if db_path.exists():
         db_path.unlink()
 

@@ -116,7 +116,7 @@ class TestInitDatabaseIntegration:
             patch("sys.stdout", new_callable=StringIO) as mock_stdout,
             patch("sys.stderr", new_callable=StringIO),
         ):
-            mock_sync.side_effect = Exception("Submodule not found")
+            mock_sync.side_effect = RuntimeError("Submodule not found")
 
             sys.argv = ["init_database.py"]
 
@@ -138,7 +138,7 @@ class TestInitDatabaseIntegration:
         }
 
         # Mock classify_all_names to raise an exception
-        mock_classify_all = MagicMock(side_effect=Exception("Classification API error"))
+        mock_classify_all = MagicMock(side_effect=RuntimeError("Classification API error"))
 
         with (
             patch("st_name_ranking.init_database.init_database"),

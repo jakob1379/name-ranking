@@ -12,8 +12,7 @@ class TestGetClassifier:
 
     def setup_method(self):
         """Clear classifier cache before each test."""
-        if hasattr(classify_origins.get_classifier, "_classifier"):
-            delattr(classify_origins.get_classifier, "_classifier")
+        classify_origins.get_classifier._cache = None
 
     def test_get_classifier_success(self):
         """Test successful classifier loading."""
@@ -94,32 +93,14 @@ class TestClassifyName:
 
     def test_classify_name_success(self, mock_classifier, initialized_db):
         """Test successful name classification."""
-        # Setup region mapping
-        from st_name_ranking.database import get_connection
-
-        with get_connection() as conn:
-            # Use unique country to avoid default mapping conflict
-            conn.execute(
-                "DELETE FROM region_mapping WHERE nationality = ?",
-                ("TestCountry3",),
-            )
-            conn.execute(
-                "INSERT INTO region_mapping (nationality, region) VALUES (?, ?)",
-                ("TestCountry3", "TestRegion3"),
-            )
-
-        # Mock classifier returns TestCountry3 with high confidence
-        mock_classifier.predict_nationality.return_value = {
-            "country_name": "TestCountry3",
-            "confidence": 0.85,
-            "country": "TC",
-            "region": "Test",
-        }
+        # The mock classifier returns (region, confidence) tuple directly
+        # Configure it to return a specific region
+        mock_classifier.return_value = ("TestRegion", 0.85)
 
         result = classify_origins.classify_name("Anna")
 
-        assert result == ("TestRegion3", 0.85)
-        mock_classifier.predict_nationality.assert_called_once_with("Anna")
+        assert result == ("TestRegion", 0.85)
+        mock_classifier.assert_called_once_with("Anna")
 
     def test_classify_name_unknown_region(
         self,
@@ -127,33 +108,32 @@ class TestClassifyName:
         initialized_db,
     ):
         """Test classification with unknown nationality."""
-        mock_classifier.predict_nationality.return_value = {
-            "country_name": "XX",
-            "confidence": 0.75,
-            "country": "XX",
-            "region": "Unknown",
-        }
+        # Mock returns low confidence -> triggers fallback
+        mock_classifier.return_value = ("Unknown", 0.05)
 
         result = classify_origins.classify_name("UnknownName")
 
-        assert result == ("International", 0.375)  # 0.75 * 0.5 penalty
+        # Falls back to International due to low confidence
+        assert result == ("International", 0.1)
 
     def test_classify_name_import_error(self, initialized_db):
         """Test when ethnidata is not installed."""
-        with patch("ethnidata.EthniData", side_effect=ImportError):
-            # Should return None because classification fails
+        # Need to patch the specific module where _create_ethnidata_classifier is used
+        with patch(
+            "st_name_ranking.origin_classifier._create_ethnidata_classifier",
+            side_effect=ImportError,
+        ):
+            # When ethnidata fails, classifier falls back to International
             result = classify_origins.classify_name("Anna")
-            assert result is None
+            assert result == ("International", 0.1)
 
     def test_classify_name_exception(self, mock_classifier, initialized_db):
         """Test handling of classifier exceptions."""
-        mock_classifier.predict_nationality.side_effect = Exception(
-            "Classifier error",
-        )
+        mock_classifier.side_effect = RuntimeError("Classifier error")
 
         result = classify_origins.classify_name("Anna")
-        # Should fall back to International with low confidence
-        assert result == ("International", 0.1)
+        # classify_name catches RuntimeError and returns None
+        assert result is None
 
 
 class TestClassifyAllNames:

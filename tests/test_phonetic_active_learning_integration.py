@@ -679,7 +679,7 @@ class TestUtilsIntegration:
 
         # Force model to fail by mocking
         with patch("st_name_ranking.utils.get_active_learning_model") as mock_get_model:
-            mock_get_model.side_effect = Exception("Model failure")
+            mock_get_model.side_effect = RuntimeError("Model failure")
 
             # Should fallback to basic selection
             name_a, name_b = select_candidates(names)
