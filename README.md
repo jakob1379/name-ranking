@@ -20,7 +20,7 @@ Database initialized successfully.
 Synced 4,847 names from submodule.
 
 # Start the application
-$ uv run streamlit run st_name_ranking/main.py
+$ uv run streamlit run src/st_name_ranking/main.py
 
   You can now view your Streamlit app in your browser.
 

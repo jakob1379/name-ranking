@@ -52,7 +52,7 @@ The database now contains **4,847 Danish names**.
 ### Step 4: Start the Application
 
 ```bash
-$ uv run streamlit run st_name_ranking/main.py
+$ uv run streamlit run src/st_name_ranking/main.py
 
   You can now view your Streamlit app in your browser.
 

@@ -98,7 +98,7 @@ def main():
         print()
         print("Alternatively, take screenshots manually:")
         print("  1. Start the application:")
-        print("     uv run streamlit run st_name_ranking/main.py")
+        print("     uv run streamlit run src/st_name_ranking/main.py")
         print("  2. Open http://localhost:8501 in your browser")
         print("  3. Capture screenshots of:")
         print("     - Main tournament view")
