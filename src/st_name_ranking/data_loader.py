@@ -212,6 +212,7 @@ def load_submodule_json() -> list[dict[str, str]]:
 
 
 def load_names_by_gender(
+    *,
     sync_with_submodule: bool = False,
 ) -> dict[str, list[str]]:
     """Load names from database, categorized by gender.

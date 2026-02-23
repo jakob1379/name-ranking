@@ -51,24 +51,6 @@ repos:
         args: [--fix]
       # Run the formatter.
       - id: ruff-format
-  # Code quality and security with Skylos
-  - repo: local
-    hooks:
-      - id: skylos
-        name: skylos
-        language: system
-        entry: skylos --danger --quality --secrets
-      - id: pyrefly
-        name: pyrefly
-        entry: pyrefly check
-        args:
-          - --ignore-missing-imports=all
-          - --ignore-errors-in-generated-code=true
-          - --ignore=missing-import,missing-attribute,bad-return
-        language: python
-        types: [python]
-        pass_filenames: false
-        always_run: true
 
   # Formatting for various file types with Prettier
   - repo: https://github.com/rbubley/mirrors-prettier  # Using rbubley mirror

@@ -146,6 +146,7 @@ def extract_all_features(
     name: str,
     gender: str | None = None,
     origin_region: str | None = None,
+    *,
     include_phonetic: bool = True,
     include_linguistic: bool = True,
     include_metadata: bool = True,

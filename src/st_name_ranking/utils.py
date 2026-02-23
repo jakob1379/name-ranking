@@ -91,7 +91,7 @@ def _compute_rating_for_name(name: str) -> float:
     return rating
 
 
-def pull_submodule_updates(classify_origins: bool = False) -> bool:
+def pull_submodule_updates(*, classify_origins: bool = False) -> bool:
     """Pull latest updates from the git submodule and sync with database.
     If classify_origins is True and ethnidata is available, classify origins.
     Returns True if successful.

@@ -1407,7 +1407,7 @@ def export_database() -> bytes:
         raise OSError(_msg)
 
 
-def import_database(file_bytes: bytes, backup: bool = True) -> None:
+def import_database(file_bytes: bytes, *, backup: bool = True) -> None:
     """Replace current database with uploaded SQLite database.
 
     Args:

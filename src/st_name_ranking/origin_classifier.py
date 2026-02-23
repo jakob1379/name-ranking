@@ -418,7 +418,7 @@ class OriginClassifier:
     def __init__(
         self,
         reference_names: dict[str, tuple[str, float, str, str]] | None = None,
-        ethnidata_classifier: ClassifierFunc | bool | None = None,
+        ethnidata_classifier: ClassifierFunc | bool | None = None,  # noqa: FBT001
     ) -> None:
         """Args:
         reference_names: Dict of known name -> (region, confidence, phonetic_primary, phonetic_secondary) for
