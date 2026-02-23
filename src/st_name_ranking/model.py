@@ -337,7 +337,8 @@ class BradleyTerryModel:
         """
         n = len(names)
         if n < MIN_NAMES_FOR_PAIR_SELECTION:
-            raise ValueError("Need at least 2 names for pair selection")
+            _msg = "Need at least 2 names for pair selection"
+            raise ValueError(_msg)
 
         # Group names by phonetic primary code
         clusters = _group_names_by_phonetic(names)
@@ -400,9 +401,11 @@ class BradleyTerryModel:
         """
         n = len(names)
         if n < MIN_NAMES_FOR_PAIR_SELECTION:
-            raise ValueError("Need at least 2 names for pair selection")
+            _msg = "Need at least 2 names for pair selection"
+            raise ValueError(_msg)
         if k < 1:
-            raise ValueError("k must be at least 1")
+            _msg = "k must be at least 1"
+            raise ValueError(_msg)
 
         # Group names by phonetic primary code
         clusters = _group_names_by_phonetic(names)

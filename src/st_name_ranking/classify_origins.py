@@ -67,9 +67,8 @@ def get_classifier() -> Classifier:
     try:
         from ethnidata import EthniData  # noqa: PLC0415
     except ImportError:
-        raise ImportError(
-            "ethnidata not installed. Install with: pip install ethnidata",
-        )
+        _msg = "ethnidata not installed. Install with: pip install ethnidata"
+        raise ImportError(_msg)
 
     _classifier_cache = EthniData()
     logger.debug("Initialized ethnidata classifier")

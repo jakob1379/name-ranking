@@ -1,1 +1,0 @@
-=== ANN Check === run ruff check src/ --select=ANN

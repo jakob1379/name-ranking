@@ -539,7 +539,8 @@ def sync_names_with_submodule(submodule_path: Path = Path("godkendtefornavne")) 
     logger.debug("Syncing names from submodule")
     json_path = submodule_path / "allenavne.json"
     if not json_path.exists():
-        raise FileNotFoundError(f"Submodule JSON not found: {json_path}")
+        _msg = f"Submodule JSON not found: {json_path}"
+        raise FileNotFoundError(_msg)
 
     # Get current submodule commit hash
     try:
@@ -553,7 +554,8 @@ def sync_names_with_submodule(submodule_path: Path = Path("godkendtefornavne")) 
         current_commit = result.stdout.strip()
         logger.debug("Submodule commit hash: %s", current_commit)
     except subprocess.SubprocessError as e:
-        raise RuntimeError(f"Failed to get submodule commit hash: {e}")
+        _msg = f"Failed to get submodule commit hash: {e}"
+        raise RuntimeError(_msg)
 
     # Check if we've already synced this commit
     with get_connection() as conn:
@@ -578,7 +580,8 @@ def sync_names_with_submodule(submodule_path: Path = Path("godkendtefornavne")) 
 
     # Validate columns
     if not all(col in df.columns for col in ["name", "gender"]):
-        raise ValueError("JSON missing required columns 'name' and/or 'gender'")
+        _msg = "JSON missing required columns 'name' and/or 'gender'"
+        raise ValueError(_msg)
 
     # Filter valid names
     from st_name_ranking.data_loader import is_valid_name  # noqa: PLC0415
@@ -839,7 +842,8 @@ def update_rating(name: str, rating: float) -> None:
             (name,),
         ).fetchone()
         if not name_id:
-            raise ValueError(f"Name not found: {name}")
+            _msg = f"Name not found: {name}"
+            raise ValueError(_msg)
 
         name_id = name_id[0]
 
@@ -852,23 +856,25 @@ def update_rating(name: str, rating: float) -> None:
                 ?,
                 ?,
                 COALESCE((
-                    SELECT matches + 1 FROM ratings
-                    WHERE name_id = ?
-                ), 1),
-                CURRENT_TIMESTAMP
+                    SELECT matches FROM ratings WHERE name_id = ?
+                ), 0) + 1,
+                ?
             )
-        """,
-            (name_id, rating, name_id),
+            """,
+            (name_id, rating, name_id, dt.datetime.now()),
         )
+    logger.debug("Updated rating for %s: %.1f", name, rating)
 
 
-def update_rating_with_match(name: str, rating: float) -> None:
-    """Update rating and increment match count."""
-    update_rating(name, rating)
+def update_rating(name: str, rating: float, matches: int | None = None) -> None:
+    """Update rating for a name, preserving or setting matches count.
 
+    Args:
+        name: Name to update
+        rating: New rating value
+        matches: Optional matches count. If None, preserves existing or defaults to 0.
 
-def update_rating_value(name: str, rating: float) -> None:
-    """Update rating value without incrementing match count."""
+    """
     with get_connection() as conn:
         # Get name_id
         name_id = conn.execute(
@@ -876,7 +882,8 @@ def update_rating_value(name: str, rating: float) -> None:
             (name,),
         ).fetchone()
         if not name_id:
-            raise ValueError(f"Name not found: {name}")
+            _msg = f"Name not found: {name}"
+            raise ValueError(_msg)
 
         name_id = name_id[0]
 
@@ -995,7 +1002,8 @@ def record_comparison(name_a: str, name_b: str, preference: int) -> None:
         ValueError: If preference not in (-1, 0, 1, 2)
     """
     if preference not in (-1, 0, 1, 2):
-        raise ValueError("preference must be -1, 0, 1, or 2")
+        _msg = "preference must be -1, 0, 1, or 2"
+        raise ValueError(_msg)
 
     with get_connection() as conn:
         # Get name IDs
@@ -1005,7 +1013,8 @@ def record_comparison(name_a: str, name_b: str, preference: int) -> None:
         )
         row = cursor.fetchone()
         if not row:
-            raise ValueError(f"Name not found: {name_a}")
+            _msg = f"Name not found: {name_a}"
+            raise ValueError(_msg)
         name_a_id = row[0]
 
         cursor = conn.execute(
@@ -1014,7 +1023,8 @@ def record_comparison(name_a: str, name_b: str, preference: int) -> None:
         )
         row = cursor.fetchone()
         if not row:
-            raise ValueError(f"Name not found: {name_b}")
+            _msg = f"Name not found: {name_b}"
+            raise ValueError(_msg)
         name_b_id = row[0]
 
         # Insert comparison (ignore duplicates due to UNIQUE constraint)
@@ -1383,7 +1393,8 @@ def export_database() -> bytes:
         IOError: If unable to read database file.
     """
     if not DB_PATH.exists():
-        raise FileNotFoundError(f"Database file not found at {DB_PATH}")
+        _msg = f"Database file not found at {DB_PATH}"
+        raise FileNotFoundError(_msg)
 
     # Ensure any pending writes are flushed by closing all connections
     # SQLite handles concurrent reads fine, but we need to ensure no open write transactions
@@ -1392,7 +1403,8 @@ def export_database() -> bytes:
         with open(DB_PATH, "rb") as f:
             return f.read()
     except OSError as e:
-        raise OSError(f"Failed to read database file: {e}")
+        _msg = f"Failed to read database file: {e}"
+        raise OSError(_msg)
 
 
 def import_database(file_bytes: bytes, backup: bool = True) -> None:
@@ -1418,7 +1430,8 @@ def import_database(file_bytes: bytes, backup: bool = True) -> None:
             finally:
                 conn.close()
     except sqlite3.Error as e:
-        raise ValueError(f"Uploaded file is not a valid SQLite database: {e}")
+        _msg = f"Uploaded file is not a valid SQLite database: {e}"
+        raise ValueError(_msg)
 
     # Create backup of current database if it exists
     if backup and DB_PATH.exists():
@@ -1431,7 +1444,8 @@ def import_database(file_bytes: bytes, backup: bool = True) -> None:
         with open(DB_PATH, "wb") as f:
             f.write(file_bytes)
     except OSError as e:
-        raise OSError(f"Failed to write database file: {e}")
+        _msg = f"Failed to write database file: {e}"
+        raise OSError(_msg)
 
     # Reset initialization flag to force re-initialization
     global _initialized

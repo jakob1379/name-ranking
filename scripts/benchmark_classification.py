@@ -51,11 +51,9 @@ def main():
     src_path = Path(__file__).parent.parent / "src"
     sys.path.insert(0, str(src_path))
     from st_name_ranking.database import (
-        get_names_with_origins,
         get_unclassified_names,
         init_database,
     )
-    from st_name_ranking.origin_classifier import OriginClassifier
 
     print("=== Origin Classification Performance Benchmark ===\n")
 
