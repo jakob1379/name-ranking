@@ -1,6 +1,9 @@
 """Utility functions for the name ranking application."""
 
 import logging
+import sqlite3
+import subprocess
+import time
 
 import numpy as np
 import streamlit as st
@@ -12,9 +15,11 @@ from st_name_ranking.data_loader import initialize_or_load_ratings
 from st_name_ranking.features import FeatureExtractor
 from st_name_ranking.model import BradleyTerryModel, initialize_model_if_needed
 from st_name_ranking.phonetic_similarity import phonetic_similarity
-from st_name_ranking.types import NamePair
 
 logger = logging.getLogger(__name__)
+
+# Minimum names required for pair selection
+MIN_NAMES_FOR_PAIR_SELECTION = 2
 
 # Global instances for model and feature extractor
 _model = None
@@ -96,9 +101,6 @@ def pull_submodule_updates(classify_origins: bool = False) -> bool:
         classify_origins,
     )
     try:
-        import subprocess  # nosec: B404 - git commands are safe, no user input
-        import time
-
         with st.spinner("Pulling latest name data from git submodule..."):
             result = subprocess.run(  # nosec
                 ["git", "-C", "godkendtefornavne", "pull"],
@@ -132,7 +134,7 @@ def pull_submodule_updates(classify_origins: bool = False) -> bool:
                             "No new names to add",
                             icon="ℹ️",
                         )
-                except Exception as sync_error:
+                except (RuntimeError, ValueError, subprocess.SubprocessError) as sync_error:
                     st.toast(
                         f"Failed to sync names: {sync_error}",
                         icon="❌",
@@ -145,7 +147,7 @@ def pull_submodule_updates(classify_origins: bool = False) -> bool:
                 try:
                     # Ensure database is initialized before classification
                     database.init_database()
-                    from st_name_ranking.classify_origins import classify_all_names
+                    from st_name_ranking.classify_origins import classify_all_names  # noqa: PLC0415
 
                     with st.spinner("Classifying name origins..."):
                         # Classify only unclassified names
@@ -165,7 +167,7 @@ def pull_submodule_updates(classify_origins: bool = False) -> bool:
                         "ethnidata not installed. Run: pip install ethnidata",
                         icon="⚠️",
                     )
-                except Exception as classify_error:
+                except (RuntimeError, ValueError) as classify_error:
                     st.toast(
                         f"Failed to classify origins: {classify_error}",
                         icon="❌",
@@ -183,7 +185,7 @@ def pull_submodule_updates(classify_origins: bool = False) -> bool:
             duration="long",
         )
         return False
-    except Exception as e:
+    except subprocess.SubprocessError as e:
         st.toast(
             f"Error pulling submodule: {e}",
             icon="❌",
@@ -219,7 +221,7 @@ def select_candidates(
                  If None, features will be computed on the fly.
 
     """
-    if len(names) < 2:
+    if len(names) < MIN_NAMES_FOR_PAIR_SELECTION:
         return "", ""
 
     rng = np.random.default_rng()
@@ -252,9 +254,10 @@ def select_candidates(
             sampled,
         )
         return pair.name_a, pair.name_b
-    except Exception as e:
+    except (RuntimeError, ValueError, AttributeError) as e:
         logger.warning(
-            f"Active learning pair selection failed: {e}. Falling back to basic selection.",
+            "Active learning pair selection failed: %s. Falling back to basic selection.",
+            e,
         )
         # Fallback to basic selection (doesn't use features)
         return _select_candidates_fallback(sampled)
@@ -268,7 +271,7 @@ def select_candidate_batch(
     """Select a batch of candidate pairs for active learning.
     Returns list of (name_a, name_b) pairs.
     """
-    if len(names) < 2:
+    if len(names) < MIN_NAMES_FOR_PAIR_SELECTION:
         return []
     batch_size = max(batch_size, 1)
     rng = np.random.default_rng()
@@ -298,9 +301,10 @@ def select_candidate_batch(
         )
         # Convert to list of (name_a, name_b)
         return [(pair.name_a, pair.name_b) for pair in pairs]
-    except Exception as e:
+    except (RuntimeError, ValueError, AttributeError) as e:
         logger.warning(
-            f"Active learning batch selection failed: {e}. Falling back to single pair selection.",
+            "Active learning batch selection failed: %s. Falling back to single pair selection.",
+            e,
         )
         # Fallback to single pair selection
         pair = select_candidates(names, features)
@@ -311,7 +315,7 @@ def _select_candidates_fallback(names: list[str]) -> tuple[str, str]:
     """Fallback candidate selection using comparison counts and phonetic similarity.
     Used when active learning model fails.
     """
-    if len(names) < 2:
+    if len(names) < MIN_NAMES_FOR_PAIR_SELECTION:
         return "", ""
     rng = np.random.default_rng()
 
@@ -366,8 +370,8 @@ def update_model_and_save(winner: str, loser: str) -> None:
         model.save_to_db()
         # Ratings are updated separately via update_preference_and_save
 
-    except Exception as e:
-        logger.error(f"Failed to update model: {e}")
+    except (RuntimeError, ValueError, AttributeError):
+        logger.exception("Failed to update model")
         # Don't crash the UI, but log the error
 
 
@@ -387,8 +391,8 @@ def update_model_draw_and_save(player_a: str, player_b: str) -> None:
         model.save_to_db()
         # Ratings are updated separately via update_preference_draw_and_save
 
-    except Exception as e:
-        logger.error(f"Failed to update model for draw: {e}")
+    except (RuntimeError, ValueError, AttributeError):
+        logger.exception("Failed to update model for draw")
 
 
 def update_model_down_and_save(player_a: str, player_b: str) -> None:
@@ -407,8 +411,8 @@ def update_model_down_and_save(player_a: str, player_b: str) -> None:
         model.save_to_db()
         # Ratings are updated separately via update_preference_down_and_save
 
-    except Exception as e:
-        logger.error(f"Failed to update model for both disliked: {e}")
+    except (RuntimeError, ValueError, AttributeError):
+        logger.exception("Failed to update model for both disliked")
 
 
 def _update_ratings_from_model() -> None:
@@ -441,8 +445,8 @@ def _update_ratings_from_model() -> None:
             ratings_dict[name] = rating
         database.update_ratings_batch_values(ratings_dict)
 
-    except Exception as e:
-        logger.warning(f"Failed to update ratings from model: {e}")
+    except (RuntimeError, ValueError) as e:
+        logger.warning("Failed to update ratings from model: %s", e)
 
 
 def sync_names_from_submodule() -> int:
@@ -464,7 +468,7 @@ def sync_names_from_submodule() -> int:
                     icon="ℹ️",
                 )
             return inserted
-    except Exception as e:
+    except (RuntimeError, ValueError, subprocess.SubprocessError) as e:
         st.toast(
             f"Failed to sync names: {e}",
             icon="❌",
@@ -487,8 +491,8 @@ def update_preference_and_save(
     # Record comparison in database
     try:
         database.record_comparison(winner, loser, -1)
-    except Exception as e:
-        logger.warning(f"Failed to record comparison: {e}")
+    except sqlite3.Error as e:
+        logger.warning("Failed to record comparison: %s", e)
 
     # Compute new ratings only for the two names involved
     try:
@@ -504,11 +508,15 @@ def update_preference_and_save(
         database.update_rating_value(loser, loser_rating)
 
         logger.debug(
-            f"Updated ratings: {winner}={winner_rating:.1f}, {loser}={loser_rating:.1f}",
+            "Updated ratings: %s=%.1f, %s=%.1f",
+            winner,
+            winner_rating,
+            loser,
+            loser_rating,
         )
         return ratings.copy()
-    except Exception as e:
-        logger.warning(f"Failed to compute updated ratings: {e}")
+    except (RuntimeError, ValueError) as e:
+        logger.warning("Failed to compute updated ratings: %s", e)
         # Return original ratings as fallback
         return ratings.copy()
 
@@ -527,8 +535,8 @@ def update_preference_draw_and_save(
     # Record comparison in database
     try:
         database.record_comparison(player_a, player_b, 0)
-    except Exception as e:
-        logger.warning(f"Failed to record draw comparison: {e}")
+    except sqlite3.Error as e:
+        logger.warning("Failed to record draw comparison: %s", e)
 
     # Compute new ratings only for the two names involved
     try:
@@ -544,11 +552,15 @@ def update_preference_draw_and_save(
         database.update_rating_value(player_b, rating_b)
 
         logger.debug(
-            f"Updated draw ratings: {player_a}={rating_a:.1f}, {player_b}={rating_b:.1f}",
+            "Updated draw ratings: %s=%.1f, %s=%.1f",
+            player_a,
+            rating_a,
+            player_b,
+            rating_b,
         )
         return ratings.copy()
-    except Exception as e:
-        logger.warning(f"Failed to compute updated ratings: {e}")
+    except (RuntimeError, ValueError) as e:
+        logger.warning("Failed to compute updated ratings: %s", e)
         # Return original ratings as fallback
         return ratings.copy()
 
@@ -567,8 +579,8 @@ def update_preference_down_and_save(
     # Record down comparison in database (preference=2)
     try:
         database.record_comparison(player_a, player_b, 2)
-    except Exception as e:
-        logger.warning(f"Failed to record down comparison: {e}")
+    except sqlite3.Error as e:
+        logger.warning("Failed to record down comparison: %s", e)
 
     # Compute new ratings only for the two names involved
     try:
@@ -584,10 +596,14 @@ def update_preference_down_and_save(
         database.update_rating_value(player_b, rating_b)
 
         logger.debug(
-            f"Updated down ratings: {player_a}={rating_a:.1f}, {player_b}={rating_b:.1f}",
+            "Updated down ratings: %s=%.1f, %s=%.1f",
+            player_a,
+            rating_a,
+            player_b,
+            rating_b,
         )
         return ratings.copy()
-    except Exception as e:
-        logger.warning(f"Failed to compute updated ratings: {e}")
+    except (RuntimeError, ValueError) as e:
+        logger.warning("Failed to compute updated ratings: %s", e)
         # Return original ratings as fallback
         return ratings.copy()

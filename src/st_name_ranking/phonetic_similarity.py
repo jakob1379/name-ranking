@@ -2,6 +2,8 @@
 
 import logging
 
+from metaphone import doublemetaphone
+
 logger = logging.getLogger(__name__)
 
 
@@ -10,11 +12,9 @@ def compute_phonetic_codes(name: str) -> tuple[str, str | None]:
     Returns (primary_code, secondary_code).
     Secondary code may be None if not applicable.
     """
-    from metaphone import doublemetaphone
-
     primary, secondary = doublemetaphone(name)
     # doublemetaphone returns empty string for no secondary code
-    secondary = secondary if secondary else None
+    secondary = secondary or None
     return primary, secondary
 
 

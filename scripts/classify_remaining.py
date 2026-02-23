@@ -4,13 +4,6 @@ import sys
 import time
 from pathlib import Path
 
-# Add src to Python path for imports
-src_path = Path(__file__).parent.parent / "src"
-sys.path.insert(0, str(src_path))
-
-from st_name_ranking.classify_origins import classify_all_names  # noqa: E402
-from st_name_ranking.database import get_stats  # noqa: E402
-
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(message)s",
@@ -18,6 +11,13 @@ logging.basicConfig(
 
 
 def main():
+    # Add src to Python path for imports
+    src_path = Path(__file__).parent.parent / "src"
+    sys.path.insert(0, str(src_path))
+
+    from st_name_ranking.classify_origins import classify_all_names
+    from st_name_ranking.database import get_stats
+
     stats = get_stats()
     unclassified = stats["unclassified_names"]
     if unclassified == 0:
@@ -40,7 +40,7 @@ def main():
     except KeyboardInterrupt:
         print("\nInterrupted.")
         sys.exit(1)
-    except Exception as e:
+    except (RuntimeError, ValueError) as e:
         print(f"\nError: {e}")
         import traceback
 

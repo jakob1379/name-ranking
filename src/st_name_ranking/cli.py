@@ -13,6 +13,7 @@ from rich.table import Table
 # Import database functions
 from st_name_ranking.classify_origins import classify_all_names
 from st_name_ranking.database import (
+    get_connection,
     get_stats,
     init_database,
     sync_names_with_submodule,
@@ -35,12 +36,20 @@ console = Console()
 
 
 def print_success(message: str) -> None:
-    """Print a success message."""
+    """Print a success message.
+
+    Args:
+        message: The message to display.
+    """
     console.print(f"[green]✓[/green] {message}")
 
 
 def print_error(message: str) -> None:
-    """Print an error message."""
+    """Print an error message.
+
+    Args:
+        message: The message to display.
+    """
     console.print(f"[red]✗[/red] {message}")
 
 
@@ -95,7 +104,7 @@ def init(
             inserted = sync_names_with_submodule()
             progress.update(task, completed=True)
             print_success(f"Synced {inserted} new names from submodule")
-        except Exception as e:
+        except (RuntimeError, ValueError) as e:
             print_error(f"Failed to sync names: {e}")
             raise typer.Exit(code=1)
 
@@ -166,7 +175,7 @@ def process_command(limit: int | None = None, batch_size: int = 100) -> None:
         console.print("    ...")
         console.print("  ]")
         raise typer.Exit(code=1)
-    except Exception as e:
+    except (RuntimeError, ValueError) as e:
         print_error(f"Classification failed: {e}")
         raise typer.Exit(code=1)
 
@@ -278,7 +287,7 @@ def model_status() -> None:
         print_info(f"Features: {', '.join(state.feature_names[:5])}...")
         print_info(f"Total features: {len(state.feature_names)}")
 
-    except Exception as e:
+    except (RuntimeError, ValueError) as e:
         print_error(f"Failed to get model status: {e}")
 
 
@@ -297,8 +306,6 @@ def model_reset() -> None:
 
     try:
         # Delete model state from database
-        from st_name_ranking.database import get_connection
-
         with get_connection() as conn:
             conn.execute("DELETE FROM model_state WHERE id = 1")
 
@@ -308,7 +315,7 @@ def model_reset() -> None:
 
         print_success("Model reset successfully. New model initialized.")
 
-    except Exception as e:
+    except (RuntimeError, ValueError) as e:
         print_error(f"Failed to reset model: {e}")
 
 

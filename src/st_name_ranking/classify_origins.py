@@ -9,13 +9,24 @@ This script:
 5. Handles batch processing with progress reporting
 """
 
+import argparse
 import logging
 import sys
 import time
+from typing import Any, NamedTuple
+
+
+class ClassificationResult(NamedTuple):
+    """Origin classification result."""
+
+    region: str
+    confidence: float
+
 
 from st_name_ranking.database import (
     get_connection,
     get_names_with_origins,
+    get_stats,
     get_unclassified_names,
     update_name_origin,
 )
@@ -25,21 +36,44 @@ from st_name_ranking.origin_classifier import (
 
 logger = logging.getLogger(__name__)
 
+# Minimum confidence threshold for classification results
+MIN_CONFIDENCE_THRESHOLD = 0.1
 
-def get_classifier():
-    """Get or create the ethnidata classifier (lazy load)."""
+# Module-level cache for ethnidata classifier
+_classifier_cache: Any | None = None
+
+# Module-level cache for reference names
+_reference_names_cache: dict[str, tuple[str, float, str, str]] | None = None
+
+
+# Type alias for the classifier function
+Classifier = "Callable[[str], ClassificationResult | None]"
+
+
+def get_classifier() -> Classifier:
+    """Get or create the ethnidata classifier (lazy load).
+
+    Returns:
+        Function that takes a name and returns (region, confidence) or None.
+
+    Raises:
+        ImportError: If ethnidata package is not installed.
+    """
+    global _classifier_cache
+
+    if _classifier_cache is not None:
+        return _classifier_cache
+
     try:
-        from ethnidata import EthniData
+        from ethnidata import EthniData  # noqa: PLC0415
     except ImportError:
         raise ImportError(
             "ethnidata not installed. Install with: pip install ethnidata",
         )
 
-    if not hasattr(get_classifier, "_classifier"):
-        get_classifier._classifier = EthniData()
-        logger.debug("Initialized ethnidata classifier")
-
-    return get_classifier._classifier
+    _classifier_cache = EthniData()
+    logger.debug("Initialized ethnidata classifier")
+    return _classifier_cache
 
 
 def get_region_for_nationality(nationality: str) -> tuple[str, float]:
@@ -81,7 +115,7 @@ def classify_name(name: str) -> tuple[str, float] | None:
 
         region, confidence = classifier.classify(name)
 
-        if confidence < 0.1:  # Fallback if classifier returns minimal confidence
+        if confidence < MIN_CONFIDENCE_THRESHOLD:  # Fallback if classifier returns minimal confidence
             return None
 
         logger.debug(
@@ -92,27 +126,37 @@ def classify_name(name: str) -> tuple[str, float] | None:
         )
         return region, confidence
 
-    except Exception as e:
+    except (ImportError, AttributeError, ValueError, RuntimeError) as e:
         logger.warning("Error classifying name '%s': %s", name, e)
         return None
 
 
 def _get_reference_names() -> dict[str, tuple[str, float, str, str]]:
     """Get dictionary of known name -> (region, confidence, phonetic_primary, phonetic_secondary) from database.
-    Cached for performance.
+
+    Cached for performance using module-level cache variable.
+
+    Returns:
+        Dictionary mapping name to (region, confidence, phonetic_primary, phonetic_secondary).
     """
-    if not hasattr(_get_reference_names, "_cache"):
-        try:
-            _get_reference_names._cache = get_names_with_origins(
-                confidence_threshold=0.5,
-            )
-            logger.debug(
-                f"Loaded {len(_get_reference_names._cache)} reference names",
-            )
-        except Exception as e:
-            logger.warning(f"Failed to load reference names: {e}")
-            _get_reference_names._cache = {}
-    return _get_reference_names._cache
+    global _reference_names_cache
+
+    if _reference_names_cache is not None:
+        return _reference_names_cache
+
+    try:
+        _reference_names_cache = get_names_with_origins(
+            confidence_threshold=0.5,
+        )
+        logger.debug(
+            "Loaded %d reference names",
+            len(_reference_names_cache),
+        )
+    except sqlite3.Error as e:
+        logger.warning("Failed to load reference names: %s", e)
+        _reference_names_cache = {}
+
+    return _reference_names_cache
 
 
 def classify_batch(names_batch: list, batch_size: int = 100) -> int:
@@ -160,11 +204,15 @@ def _classify_individually(names_batch: list) -> int:
 
         if (i + 1) % 10 == 0:
             logger.debug(
-                f"  Individually processed {i + 1}/{len(names_batch)} names",
+                "  Individually processed %d/%d names",
+                i + 1,
+                len(names_batch),
             )
 
     logger.info(
-        f"Individually classified {classified_count}/{len(names_batch)} names",
+        "Individually classified %d/%d names",
+        classified_count,
+        len(names_batch),
     )
     return classified_count
 
@@ -184,10 +232,10 @@ def classify_all_names(
         return 0
 
     total = len(unclassified)
-    logger.info(f"Found {total} unclassified names.")
+    logger.info("Found %d unclassified names.", total)
 
     if limit and limit < total:
-        logger.info(f"Limiting to {limit} names.")
+        logger.info("Limiting to %d names.", limit)
         unclassified = unclassified[:limit]
         total = len(unclassified)
 
@@ -202,7 +250,9 @@ def classify_all_names(
     for i in range(0, total, batch_size):
         batch = unclassified[i : i + batch_size]
         logger.debug(
-            f"Processing batch {i // batch_size + 1} ({len(batch)} names)",
+            "Processing batch %d (%d names)",
+            i // batch_size + 1,
+            len(batch),
         )
 
         batch_classified = classify_batch(batch, batch_size)
@@ -229,18 +279,18 @@ def classify_all_names(
 
     elapsed = time.time() - start_time
     logger.info("✅ Classification complete!")
-    logger.info(f"   Classified {classified} of {total} names")
+    logger.info("   Classified %d of %d names", classified, total)
     logger.info(
-        f"   Time: {elapsed:.1f} seconds ({elapsed / total:.2f} sec/name)",
+        "   Time: %.1f seconds (%.2f sec/name)",
+        elapsed,
+        elapsed / total,
     )
 
     return classified
 
 
-def main():
+def main() -> None:
     """Command-line interface."""
-    import argparse
-
     parser = argparse.ArgumentParser(description="Classify name origins")
     parser.add_argument(
         "--limit",
@@ -262,8 +312,6 @@ def main():
     args = parser.parse_args()
 
     if args.stats:
-        from st_name_ranking.database import get_stats
-
         stats = get_stats()
         total = stats["total_names"]
         classified = stats["classified_names"]

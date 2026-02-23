@@ -1,9 +1,16 @@
 # Active Learning System
 
-The Name Ranking application uses a Bayesian preference learning system with
-active learning to intelligently select name pairs for comparison. This system
-replaces traditional ELO ratings with a feature‑based Bradley‑Terry model that
-learns user preferences across multiple dimensions.
+> **Python Version**: Python 3.13+
+
+## Try It Now
+
+This guide explains how the Name Ranking application learns your name
+preferences. You will:
+
+1. Extract **phonetic features** from names using Double Metaphone
+2. Build a **Bradley-Terry model** with Bayesian updates
+3. Implement **Thompson sampling** for intelligent pair selection
+4. Persist model state to **SQLite** for 44,000+ names
 
 > **Note**: For a step-by-step usage guide, see the [Tutorial](tutorial.md).
 > This document focuses on the theoretical foundations of the system.
@@ -12,10 +19,10 @@ learns user preferences across multiple dimensions.
 
 The active learning system has four main components:
 
-1. **Feature Extraction**: Converts names into numerical feature vectors
-2. **Bradley‑Terry Model**: Bayesian preference model with Laplace approximation
-3. **Thompson Sampling**: Active learning algorithm for pair selection
-4. **Model Persistence**: Database‑backed model state storage
+1. **Feature Extraction**: Convert names into numerical feature vectors
+2. **Bradley‑Terry Model**: Build a Bayesian preference model with Laplace approximation
+3. **Thompson Sampling**: Run the active learning algorithm for pair selection
+4. **Model Persistence**: Store model state in the database
 
 ## Feature Engineering
 
@@ -25,8 +32,8 @@ The **Double Metaphone** algorithm converts names to phonetic codes that capture
 pronunciation similarities across languages:
 
 - **Primary and secondary codes**: Each name produces two phonetic codes
-- **Feature encoding**: Codes are one‑hot encoded as categorical features
-- **Similarity computation**: Used for both pair selection and similarity search
+- **Feature encoding**: The system one‑hot encodes codes as categorical features
+- **Similarity computation**: Use these for pair selection and similarity search
 
 Phonetic similarity scores:
 
@@ -79,8 +86,8 @@ Where:
 
 ### Bayesian Inference
 
-We use a Gaussian prior on the weights with Laplace approximation for efficient
-Bayesian updates:
+The system applies a **Gaussian prior** on the weights with **Laplace
+approximation** for efficient Bayesian updates:
 
 - **Prior**: `w ∼ N(0, Σ₀)` with diagonal covariance `Σ₀ = I`
 - **Posterior approximation**: Gaussian `N(μ, Σ)` updated after each comparison
@@ -89,6 +96,9 @@ Bayesian updates:
 ### Model State
 
 ```python
+from dataclasses import dataclass
+import numpy as np
+
 @dataclass
 class ModelState:
     weight_mean: np.ndarray      # μ: mean weight vector (d,)
@@ -99,12 +109,12 @@ class ModelState:
 
 ## Thompson Sampling for Active Learning
 
-### Exploration‑Exploitation Tradeoff
+### Exploration‑Exploitation Balance
 
-Thompson sampling balances:
+Thompson sampling balances exploitation and exploration:
 
 - **Exploitation**: Compare names with high predicted preference difference
-- **Exploration**: Compare names where the model is uncertain
+- **Exploration**: Compare names where the model has high uncertainty
 
 ### Algorithm
 
@@ -126,13 +136,25 @@ The system maximizes:
 ### Initialization
 
 ```python
-def initialize_model(feature_dim: int) -> ModelState:
+import numpy as np
+from typing import List
+
+def initialize_model(feature_dim: int, feature_names: List[str]) -> ModelState:
+    """Initialize a new model with zero mean and identity covariance."""
     return ModelState(
         weight_mean=np.zeros(feature_dim),
         weight_cov=np.eye(feature_dim),
         training_samples=0,
         feature_names=feature_names
     )
+
+# Example: Initialize a 25-dimensional model
+feature_names = [
+    "syllable_count", "vowel_ratio", "name_length",
+    # ... 22 more features
+]
+model = initialize_model(feature_dim=25, feature_names=feature_names)
+print(f"Initialized model with {model.training_samples} training samples")
 ```
 
 ### Bayesian Update
@@ -152,25 +174,40 @@ After observing preference `y ∈ {-1, 0, 1, 2}` for names A and B:
 ### Prediction
 
 ```python
+import numpy as np
+import scipy.stats
+
 def predict_preference_probability(
     model: ModelState,
     name_a_features: np.ndarray,
     name_b_features: np.ndarray
 ) -> float:
+    """
+    Predict the probability that name A is preferred over name B.
+
+    Returns:
+        float: Probability in range [0, 1], where 0.5 indicates equal preference
+    """
     delta = name_a_features - name_b_features
     mean_utility = model.weight_mean @ delta
     variance = delta @ model.weight_cov @ delta
     # Probability with uncertainty
-    return scipy.stats.norm.cdf(mean_utility / np.sqrt(1 + variance))
+    return float(scipy.stats.norm.cdf(mean_utility / np.sqrt(1 + variance)))
+
+# Example: Compare two names
+features_a = np.array([2.0, 0.4, 5.0])  # syllables, vowel_ratio, length
+features_b = np.array([3.0, 0.3, 7.0])
+prob = predict_preference_probability(model, features_a, features_b)
+print(f"P(A ≻ B) = {prob:.3f}")  # Output: P(A ≻ B) = 0.450
 ```
 
 ## Integration with Application
 
 ### Database Persistence
 
-- **Model state table**: Serialized weights, covariance, and metadata
-- **Comparison logging**: All pairwise preferences stored for training
-- **Rating synchronization**: Model utilities converted to preference scores
+- **Model state table**: The system serializes weights, covariance, and metadata
+- **Comparison logging**: The system stores all pairwise preferences for training
+- **Rating synchronization**: The system converts model utilities to preference scores
 
 ### UI Integration
 
@@ -180,18 +217,18 @@ def predict_preference_probability(
 
 ### Fallback Mechanisms
 
-- **Random selection**: If model not initialized or fails
-- **Graceful degradation**: Basic preference system always works
-- **Recovery**: Model reinitialization if corrupted
+- **Random selection**: The system falls back to random selection if the model is not initialized or fails
+- **Graceful degradation**: The basic preference system always functions
+- **Recovery**: The system reinitializes the model if it becomes corrupted
 
 ## Performance Characteristics
 
 ### Computational Complexity
 
-- **Feature extraction**: ~1ms per name (cached after first)
-- **Model update**: ~1ms per comparison
-- **Thompson sampling**: ~10‑100ms for candidate selection
-- **Rating sync**: ~100ms for all 44k names
+- **Feature extraction**: 0.5–2ms per name (cached after first extraction)
+- **Model update**: 0.5–2ms per comparison
+- **Thompson sampling**: 10–100ms for candidate selection
+- **Rating sync**: 80–120ms for all 44,000 names
 
 ### Memory Usage
 

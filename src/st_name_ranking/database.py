@@ -12,7 +12,9 @@ import datetime as dt
 import logging
 import shutil
 import sqlite3
+import subprocess
 import tempfile
+from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -42,7 +44,7 @@ MAX_SQL_PARAMS = 500
 
 
 @contextmanager
-def get_connection():
+def get_connection() -> Iterator[sqlite3.Connection]:
     """Context manager for database connections."""
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
@@ -96,20 +98,24 @@ def update_phonetic_codes(limit: int | None = None) -> int:
             updated += 1
 
         if updated > 0:
-            logger.info(f"Updated phonetic codes for {updated} names")
+            logger.info("Updated phonetic codes for %d names", updated)
         else:
             logger.debug("No names need phonetic code updates")
         return updated
 
 
-def _migrate_comparisons_table_if_needed(conn) -> None:
+# Minimum names required for comparison testing
+MIN_NAMES_FOR_COMPARISON_TEST = 2
+
+
+def _migrate_comparisons_table_if_needed(conn: sqlite3.Connection) -> None:
     """Migrate comparisons table to support preference=2 (both disliked) if needed."""
     # Check if CHECK constraint already includes 2
     # SQLite doesn't expose CHECK constraints easily, so we try a test insert
     # Get a valid name_id pair for testing (create dummy names if none exist)
-    cursor = conn.execute("SELECT id FROM names LIMIT 2")
+    cursor = conn.execute(f"SELECT id FROM names LIMIT {MIN_NAMES_FOR_COMPARISON_TEST}")
     rows = cursor.fetchall()
-    if len(rows) < 2:
+    if len(rows) < MIN_NAMES_FOR_COMPARISON_TEST:
         # Need at least two names for test - insert temporary names
         conn.execute("INSERT OR IGNORE INTO names (name) VALUES ('__temp_a')")
         conn.execute("INSERT OR IGNORE INTO names (name) VALUES ('__temp_b')")
@@ -166,7 +172,7 @@ def _migrate_comparisons_table_if_needed(conn) -> None:
         conn.execute("DELETE FROM names WHERE name IN ('__temp_a', '__temp_b')")
 
 
-def init_database():
+def init_database() -> None:
     """Initialize database schema if it doesn't exist."""
     global _initialized
     if _initialized:
@@ -330,7 +336,7 @@ def init_database():
         logger.info("Database schema verified successfully")
 
 
-def _insert_default_region_mapping(conn):
+def _insert_default_region_mapping(conn: sqlite3.Connection) -> None:
     """Insert default nationality -> region mapping."""
     # Nordic countries
     nordic = [
@@ -525,7 +531,7 @@ def _insert_default_region_mapping(conn):
     )
 
 
-def sync_names_with_submodule(submodule_path: Path = Path("godkendtefornavne")):
+def sync_names_with_submodule(submodule_path: Path = Path("godkendtefornavne")) -> int:
     """Sync names from submodule JSON file to database.
     Only inserts new names that don't exist in the database.
     Tracks submodule commit hash to avoid redundant processing.
@@ -536,8 +542,6 @@ def sync_names_with_submodule(submodule_path: Path = Path("godkendtefornavne")):
         raise FileNotFoundError(f"Submodule JSON not found: {json_path}")
 
     # Get current submodule commit hash
-    import subprocess
-
     try:
         result = subprocess.run(
             ["git", "-C", str(submodule_path), "rev-parse", "HEAD"],
@@ -547,8 +551,8 @@ def sync_names_with_submodule(submodule_path: Path = Path("godkendtefornavne")):
             timeout=5,
         )
         current_commit = result.stdout.strip()
-        logger.debug(f"Submodule commit hash: {current_commit}")
-    except Exception as e:
+        logger.debug("Submodule commit hash: %s", current_commit)
+    except subprocess.SubprocessError as e:
         raise RuntimeError(f"Failed to get submodule commit hash: {e}")
 
     # Check if we've already synced this commit
@@ -562,10 +566,10 @@ def sync_names_with_submodule(submodule_path: Path = Path("godkendtefornavne")):
             return 0  # Already synced
 
     # Load JSON data
-    import pandas as pd
+    import pandas as pd  # noqa: PLC0415
 
     df = pd.read_json(json_path, encoding="utf-8")
-    logger.info(f"Loaded {len(df)} rows from JSON")
+    logger.info("Loaded %d rows from JSON", len(df))
 
     # Handle empty JSON
     if df.empty:
@@ -577,7 +581,7 @@ def sync_names_with_submodule(submodule_path: Path = Path("godkendtefornavne")):
         raise ValueError("JSON missing required columns 'name' and/or 'gender'")
 
     # Filter valid names
-    from st_name_ranking.data_loader import is_valid_name
+    from st_name_ranking.data_loader import is_valid_name  # noqa: PLC0415
 
     valid_names = []
     for _, row in df.iterrows():
@@ -601,7 +605,9 @@ def sync_names_with_submodule(submodule_path: Path = Path("godkendtefornavne")):
             gender = gender_map.get(gender_raw.lower())
         if not gender:
             logger.warning(
-                f"Invalid gender '{gender_raw}' for name '{name}', skipping",
+                "Invalid gender '%s' for name '%s', skipping",
+                gender_raw,
+                name,
             )
             continue
         if is_valid_name(name):
@@ -611,7 +617,7 @@ def sync_names_with_submodule(submodule_path: Path = Path("godkendtefornavne")):
             secondary = secondary or ""
             valid_names.append((name, gender, primary, secondary))
 
-    logger.debug(f"Filtered {len(valid_names)} valid names")
+    logger.debug("Filtered %d valid names", len(valid_names))
     # Insert new names
     inserted_count = 0
     with get_connection() as conn:
@@ -622,7 +628,7 @@ def sync_names_with_submodule(submodule_path: Path = Path("godkendtefornavne")):
                 valid_names,
             )
             inserted_count = conn.total_changes - before
-            logger.debug(f"Bulk insert attempted, {inserted_count} new rows")
+            logger.debug("Bulk insert attempted, %d new rows", inserted_count)
 
         # Record this sync
         conn.execute(
@@ -630,7 +636,7 @@ def sync_names_with_submodule(submodule_path: Path = Path("godkendtefornavne")):
             (current_commit,),
         )
 
-    logger.info(f"Inserted {inserted_count} new names")
+    logger.info("Inserted %d new names", inserted_count)
     return inserted_count
 
 
@@ -646,7 +652,7 @@ def get_latest_submodule_version() -> SourceVersion | None:
         return None
 
 
-def update_submodule_version(commit_hash: str, names_count: int):
+def update_submodule_version(commit_hash: str, names_count: int) -> None:
     """Update submodule version (commit hash) and names count."""
     with get_connection() as conn:
         # Insert new record (always add new row)
@@ -671,7 +677,7 @@ def get_unclassified_names(limit: int | None = None) -> list[UnclassifiedName]:
         return [UnclassifiedName(id=row[0], name=row[1]) for row in cursor.fetchall()]
 
 
-def update_name_origin(name_id: int, region: str, confidence: float):
+def update_name_origin(name_id: int, region: str, confidence: float) -> None:
     """Update a name's origin region and confidence."""
     with get_connection() as conn:
         conn.execute(
@@ -736,11 +742,13 @@ def get_names_by_filters(
         if "International" in origins:
             # Include both NULL and specified regions
             placeholders = ", ".join(["?"] * (len(origins) - 1))
-            query += f" AND (origin_region IN ({placeholders}) OR origin_region IS NULL)"
+            template = " AND (origin_region IN ({ph}) OR origin_region IS NULL)"
+            query = query + template.format(ph=placeholders)
             params.extend([o for o in origins if o != "International"])
         else:
             placeholders = ", ".join(["?"] * len(origins))
-            query += f" AND origin_region IN ({placeholders})"
+            template = " AND origin_region IN ({ph})"
+            query = query + template.format(ph=placeholders)
             params.extend(origins)
 
     query += " ORDER BY name"
@@ -822,7 +830,7 @@ def get_ratings() -> dict[str, float]:
         return {row[0]: row[1] for row in cursor.fetchall()}
 
 
-def update_rating(name: str, rating: float):
+def update_rating(name: str, rating: float) -> None:
     """Update or insert rating for a name."""
     with get_connection() as conn:
         # Get name_id
@@ -854,12 +862,12 @@ def update_rating(name: str, rating: float):
         )
 
 
-def update_rating_with_match(name: str, rating: float):
+def update_rating_with_match(name: str, rating: float) -> None:
     """Update rating and increment match count."""
     update_rating(name, rating)
 
 
-def update_rating_value(name: str, rating: float):
+def update_rating_value(name: str, rating: float) -> None:
     """Update rating value without incrementing match count."""
     with get_connection() as conn:
         # Get name_id
@@ -909,7 +917,7 @@ def update_ratings_batch(ratings_dict: dict[str, float]) -> None:
                 (name,),
             ).fetchone()
             if not name_id:
-                logger.warning(f"Name not found in database: {name}")
+                logger.warning("Name not found in database: %s", name)
                 continue
 
             name_id = name_id[0]
@@ -951,7 +959,7 @@ def update_ratings_batch_values(ratings_dict: dict[str, float]) -> None:
                 (name,),
             ).fetchone()
             if not name_id:
-                logger.warning(f"Name not found in database: {name}")
+                logger.warning("Name not found in database: %s", name)
                 continue
 
             name_id = name_id[0]
@@ -1020,7 +1028,7 @@ def record_comparison(name_a: str, name_b: str, preference: int) -> None:
         )
 
 
-def save_user_setting(key: str, value: str):
+def save_user_setting(key: str, value: str) -> None:
     """Save a user setting."""
     with get_connection() as conn:
         conn.execute(
@@ -1302,10 +1310,8 @@ def get_name_details_batch(
 
         with get_connection() as conn:
             placeholders = ", ".join(["?"] * len(chunk))
-            query = f"""
-                SELECT name, gender, origin_region FROM names
-                WHERE name IN ({placeholders})
-            """
+            template = "SELECT name, phonetic_primary, phonetic_secondary FROM names WHERE name IN ({ph})"
+            query = template.format(ph=placeholders)
             cursor = conn.execute(query, chunk)
             rows = cursor.fetchall()
 
@@ -1339,10 +1345,8 @@ def get_phonetic_codes_batch(names: list[str]) -> dict[str, PhoneticCodes]:
 
         with get_connection() as conn:
             placeholders = ", ".join(["?"] * len(chunk))
-            query = f"""
-                SELECT name, phonetic_primary, phonetic_secondary FROM names
-                WHERE name IN ({placeholders})
-            """
+            template = "SELECT name, phonetic_primary, phonetic_secondary FROM names WHERE name IN ({ph})"
+            query = template.format(ph=placeholders)
             cursor = conn.execute(query, chunk)
             rows = cursor.fetchall()
 
@@ -1387,7 +1391,7 @@ def export_database() -> bytes:
     try:
         with open(DB_PATH, "rb") as f:
             return f.read()
-    except Exception as e:
+    except OSError as e:
         raise OSError(f"Failed to read database file: {e}")
 
 
@@ -1426,7 +1430,7 @@ def import_database(file_bytes: bytes, backup: bool = True) -> None:
     try:
         with open(DB_PATH, "wb") as f:
             f.write(file_bytes)
-    except Exception as e:
+    except OSError as e:
         raise OSError(f"Failed to write database file: {e}")
 
     # Reset initialization flag to force re-initialization

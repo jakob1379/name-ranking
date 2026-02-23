@@ -5,9 +5,9 @@ for Bayesian updates and Thompson sampling for active learning.
 Includes phonetic cluster-aware pair selection to maximize diversity.
 """
 
+import io
 import json
 import logging
-import pickle
 from dataclasses import dataclass
 from functools import lru_cache
 
@@ -18,8 +18,18 @@ from st_name_ranking.types import NamePair, PhoneticCodes
 
 logger = logging.getLogger(__name__)
 
+# Model constants
+MIN_NAMES_FOR_PAIR_SELECTION = 2
+MIN_CROSS_CLUSTER_PAIRS = 10
+UTILITY_DIFFERENCE_THRESHOLD = 0.1
+TRIVIAL_COMPARISON_PENALTY = 0.5
 
-@lru_cache(maxsize=128)
+# Cache configuration
+PHONETIC_CACHE_SIZE = 128  # ~50KB for typical name datasets
+MAX_PAIR_ATTEMPTS_MULTIPLIER = 10
+
+
+@lru_cache(maxsize=PHONETIC_CACHE_SIZE)
 def _get_phonetic_codes_cached(names_tuple: tuple[str, ...]) -> dict[str, PhoneticCodes]:
     """Cached version of get_phonetic_codes_batch.
 
@@ -61,13 +71,13 @@ def _select_cross_cluster_pairs(
     """
     cluster_ids = list(clusters.keys())
 
-    if len(cluster_ids) < 2:
+    if len(cluster_ids) < MIN_NAMES_FOR_PAIR_SELECTION:
         # Only one cluster - can't do cross-cluster selection
         return []
 
     pairs = []
     attempts = 0
-    max_attempts = n_pairs * 10  # Prevent infinite loops
+    max_attempts = n_pairs * MAX_PAIR_ATTEMPTS_MULTIPLIER  # Prevent infinite loops
 
     while len(pairs) < n_pairs and attempts < max_attempts:
         attempts += 1
@@ -99,20 +109,22 @@ class ModelState:
     training_samples: int
     feature_names: list[str]
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         # Ensure arrays are float64 for stability
         self.weight_mean = self.weight_mean.astype(np.float64)
         self.weight_cov = self.weight_cov.astype(np.float64)
 
     @property
-    def feature_dim(self):
+    def feature_dim(self) -> int:
         return self.weight_mean.shape[0]
 
     def to_blob(self) -> tuple[bytes, bytes, list[str]]:
-        """Serialize model state to database BLOB format."""
-        weights_blob = pickle.dumps(self.weight_mean)
-        cov_blob = pickle.dumps(self.weight_cov)
-        return weights_blob, cov_blob, self.feature_names
+        """Serialize model state to database BLOB format using numpy."""
+        weights_buffer = io.BytesIO()
+        np.save(weights_buffer, self.weight_mean)
+        cov_buffer = io.BytesIO()
+        np.save(cov_buffer, self.weight_cov)
+        return weights_buffer.getvalue(), cov_buffer.getvalue(), self.feature_names
 
     @classmethod
     def from_blob(
@@ -122,9 +134,11 @@ class ModelState:
         feature_names: list[str],
         training_samples: int,
     ) -> "ModelState":
-        """Deserialize model state from database BLOB format."""
-        weight_mean = pickle.loads(weights_blob)
-        weight_cov = pickle.loads(cov_blob)
+        """Deserialize model state from database BLOB format using numpy."""
+        weights_buffer = io.BytesIO(weights_blob)
+        weight_mean = np.load(weights_buffer)
+        cov_buffer = io.BytesIO(cov_blob)
+        weight_cov = np.load(cov_buffer)
         return cls(weight_mean, weight_cov, training_samples, feature_names)
 
     @classmethod
@@ -151,7 +165,7 @@ class BradleyTerryModel:
     Laplace approximation (iterative reweighted least squares).
     """
 
-    def __init__(self, feature_names: list[str], prior_variance: float = 1.0):
+    def __init__(self, feature_names: list[str], prior_variance: float = 1.0) -> None:
         """Initialize model.
 
         Args:
@@ -188,7 +202,7 @@ class BradleyTerryModel:
         features_a: np.ndarray,
         features_b: np.ndarray,
         preference: int,
-    ):
+    ) -> None:
         """Update model with a single comparison.
 
         Args:
@@ -204,7 +218,7 @@ class BradleyTerryModel:
         self,
         features_a: np.ndarray,
         features_b: np.ndarray,
-    ):
+    ) -> None:
         """Update model with both names disliked.
 
         Treats both names as less preferred than a neutral baseline.
@@ -227,7 +241,7 @@ class BradleyTerryModel:
     def update_batch(
         self,
         comparisons: list[tuple[np.ndarray, np.ndarray, int]],
-    ):
+    ) -> None:
         """Update model with a batch of comparisons using IRLS.
 
         Args:
@@ -322,7 +336,7 @@ class BradleyTerryModel:
 
         """
         n = len(names)
-        if n < 2:
+        if n < MIN_NAMES_FOR_PAIR_SELECTION:
             raise ValueError("Need at least 2 names for pair selection")
 
         # Group names by phonetic primary code
@@ -335,7 +349,7 @@ class BradleyTerryModel:
         n_candidates = min(1000, n * (n - 1) // 2)
         cross_cluster_pairs = _select_cross_cluster_pairs(clusters, n_candidates, self.rng)
 
-        if len(cross_cluster_pairs) >= 10:
+        if len(cross_cluster_pairs) >= MIN_CROSS_CLUSTER_PAIRS:
             # Use cross-cluster pairs for selection
             idx_a = np.array([p[0] for p in cross_cluster_pairs])
             idx_b = np.array([p[1] for p in cross_cluster_pairs])
@@ -366,7 +380,7 @@ class BradleyTerryModel:
         utility_diff = np.abs(utilities[idx_a] - utilities[idx_b])  # (m,)
         score = var_score.copy()
         # Penalize trivial comparisons
-        score[utility_diff < 0.1] *= 0.5
+        score[utility_diff < UTILITY_DIFFERENCE_THRESHOLD] *= TRIVIAL_COMPARISON_PENALTY
 
         best_idx = np.argmax(score)
         i = int(idx_a[best_idx])
@@ -385,7 +399,7 @@ class BradleyTerryModel:
         Returns list of NamePair for the top K pairs.
         """
         n = len(names)
-        if n < 2:
+        if n < MIN_NAMES_FOR_PAIR_SELECTION:
             raise ValueError("Need at least 2 names for pair selection")
         if k < 1:
             raise ValueError("k must be at least 1")
@@ -403,7 +417,7 @@ class BradleyTerryModel:
         # Try to select cross-cluster pairs first
         cross_cluster_pairs = _select_cross_cluster_pairs(clusters, n_candidates, self.rng)
 
-        if len(cross_cluster_pairs) >= 10:
+        if len(cross_cluster_pairs) >= MIN_CROSS_CLUSTER_PAIRS:
             # Use cross-cluster pairs for selection
             idx_a = np.array([p[0] for p in cross_cluster_pairs])
             idx_b = np.array([p[1] for p in cross_cluster_pairs])
@@ -446,7 +460,7 @@ class BradleyTerryModel:
         )  # (m,)
         utility_diff = np.abs(utilities[idx_a] - utilities[idx_b])  # (m,)
         score = var_score.copy()
-        score[utility_diff < 0.1] *= 0.5
+        score[utility_diff < UTILITY_DIFFERENCE_THRESHOLD] *= TRIVIAL_COMPARISON_PENALTY
 
         # Get top k indices by score
         if k >= len(score):
@@ -505,7 +519,7 @@ class BradleyTerryModel:
         """
         return features @ self.state.weight_mean
 
-    def save_to_db(self):
+    def save_to_db(self) -> None:
         """Save model state to database."""
         weights_blob, cov_blob, feature_names = self.state.to_blob()
 
@@ -550,12 +564,13 @@ class BradleyTerryModel:
                 # Load feature names from JSON
                 stored_feature_names = json.loads(feature_names_json)
                 # Verify dimension matches weights blob
-                weight_mean = pickle.loads(weights_blob)
+                weights_buffer = io.BytesIO(weights_blob)
+                weight_mean = np.load(weights_buffer)
                 if len(stored_feature_names) != len(weight_mean):
                     logger.warning(
-                        f"Stored feature names count ({len(stored_feature_names)}) "
-                        f"does not match weight dimension ({len(weight_mean)}). "
-                        f"Model corrupted, reinitializing.",
+                        "Stored feature names count (%d) does not match weight dimension (%d). Model corrupted, reinitializing.",
+                        len(stored_feature_names),
+                        len(weight_mean),
                     )
                     return False
                 # Check if stored feature names match expected feature names

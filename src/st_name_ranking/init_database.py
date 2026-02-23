@@ -21,7 +21,22 @@ from st_name_ranking.database import (
 )
 
 
-def main():
+def main() -> None:
+    """Initialize the database and optionally run classification.
+
+    This function sets up the database schema, syncs names from the
+    godkendtefornavne submodule, and optionally runs initial origin
+    classification if the --classify flag is provided.
+
+    Args:
+        None
+
+    Returns:
+        None
+
+    Raises:
+        SystemExit: If name sync fails or classification fails unexpectedly.
+    """
     parser = argparse.ArgumentParser(
         description="Initialize name ranking database",
     )
@@ -41,14 +56,14 @@ def main():
     try:
         inserted = sync_names_with_submodule()
         print(f"✓ Synced {inserted} new names from submodule")
-    except Exception as e:
+    except (RuntimeError, ValueError) as e:
         print(f"✗ Failed to sync names: {e}")
         sys.exit(1)
 
     if args.classify:
         print("Running initial origin classification...")
         try:
-            from st_name_ranking.classify_origins import classify_all_names
+            from st_name_ranking.classify_origins import classify_all_names  # noqa: PLC0415
 
             classified = classify_all_names()
             print(f"✓ Classified {classified} names")
@@ -57,7 +72,7 @@ def main():
                 "✗ ethnidata not installed. Install with: pip install ethnidata",
             )
             print("  Or run later: python classify_origins.py")
-        except Exception as e:
+        except (RuntimeError, ValueError) as e:
             print(f"✗ Classification failed: {e}")
 
     # Show statistics

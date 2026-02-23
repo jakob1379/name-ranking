@@ -10,32 +10,38 @@ modeled after the excellent
 
 This tutorial covers everything from the simplest installation to advanced
 features, with clear explanations of how the application works and the theory
-behind it.
+behind the Bayesian preference model.
 
 ## Quick Start
 
 ### The Simplest Example
 
-Let's get the application running as quickly as possible. First, make sure you
-have the prerequisites:
+Get the application running in 3 steps. First, ensure you have the prerequisites:
 
-- **Python 3.13** or higher
+- **Python 3.13+** (required)
 - **Git** (for submodule management)
 - **[uv](https://github.com/astral-sh/uv)** - fast Python package manager
 
 ```bash
 # Clone the repository with submodules
-git clone --recurse-submodules https://github.com/yourusername/sort-names.git
-cd sort-names
+$ git clone --recurse-submodules https://github.com/yourusername/sort-names.git
+$ cd sort-names
 
 # Install dependencies
-uv sync
+$ uv sync
 
 # Initialize the database
-uv run name-db init
+$ uv run name-db init
+Database initialized successfully.
+Synced 44,127 names from dataset.
 
 # Start the application
-uv run streamlit run src/st_name_ranking/main.py
+$ uv run streamlit run src/st_name_ranking/main.py
+
+  You can now view your Streamlit app in your browser.
+
+  Local URL: http://localhost:8501
+  Network URL: http://192.168.1.100:8501
 ```
 
 The application will open in your default web browser at
@@ -63,8 +69,8 @@ sidebar:
 Sidebar → Database Management → Sync Names
 ```
 
-You should see a toast notification: "Loaded X total names" where X is around
-44,000 for the full Danish name dataset.
+You should see a toast notification: "Loaded 44,127 total names" for the full
+Danish name dataset.
 
 ### Understanding the Interface
 
@@ -130,8 +136,9 @@ When you make a choice:
 4. **Show Progress**: The comparison counter increments and ratings update
 
 ```python
-# Simplified version of what happens
-def process_vote(name_a, name_b, preference):
+# Pseudo-code: Simplified version of the voting process
+def process_vote(name_a: str, name_b: str, preference: int) -> tuple[str, str]:
+    """Process a user vote and return the next name pair."""
     # Store comparison with preference value
     database.record_comparison(name_a, name_b, preference)
 
@@ -167,7 +174,7 @@ For rapid voting, use these keyboard shortcuts:
 
 The application doesn't just count votes—it learns a **mathematical model** of
 your preferences. This model understands that names have features (phonetic,
-linguistic, metadata) and that you might prefer certain types of names.
+linguistic, metadata) and that you prefer certain types of names.
 
 #### The Bradley-Terry Model
 
@@ -201,8 +208,9 @@ The system doesn't show random names. It uses **Thompson sampling** to balance:
 - **Diversity**: Ensure you see different types of names
 
 ```python
-# Simplified Thompson sampling
-def select_next_names():
+# Pseudo-code: Simplified Thompson sampling
+def select_next_names() -> tuple[str, str]:
+    """Select the next pair of names using Thompson sampling."""
     # Sample weights from current Bayesian posterior
     sampled_weights = sample_from_posterior(model)
 
@@ -252,21 +260,24 @@ tab lets you find names similar to a target using three different methods.
 4. **Explore results** - click on similar names to see details
 
 ```python
+from typing import List
+
 # Example similarity search
-similar = find_similar_names(
+similar: List[str] = find_similar_names(
     target="Anna",
     method="phonetic",
     limit=10,
     threshold=0.7
 )
-# Returns: ["Anne", "Anya", "Ana", "Hanna", "Annika", ...]
+print(similar)
+# Output: ["Anne", "Anya", "Ana", "Hanna", "Annika", ...]
 ```
 
 ### When to Use Each Method
 
 - **Looking for variants**: Use **string similarity** (e.g., "Catherine" vs
   "Katherine")
-- **Exploring themes**: Use **vector similarity** (e.g., "River" might match
+- **Exploring themes**: Use **vector similarity** (e.g., "River" matches
   "Brook", "Lake")
 - **Matching sound**: Use **phonetic similarity** (e.g., "Sean" vs "Shawn")
 
@@ -277,8 +288,8 @@ similar = find_similar_names(
 
 ### What is Origin Classification?
 
-The application can automatically predict name nationalities using the
-`ethnidata` library, then map countries to geographic regions.
+The application predicts name nationalities using the
+`ethnidata` library, then maps countries to geographic regions.
 
 ### How It Works
 
@@ -298,9 +309,13 @@ In the sidebar under "Database Management":
 3. Use the **Origin Filter** to explore names by region
 
 ```python
+from typing import Dict, Union
+
 # Example classification
-result = classify_name_origin("Lars")
-# Returns: {
+result: Dict[str, Union[str, float]] = classify_name_origin("Lars")
+print(result)
+# Output:
+# {
 #   "country": "Denmark",
 #   "region": "Nordic",
 #   "confidence": 0.92
@@ -378,19 +393,27 @@ For advanced users, there's a command-line interface:
 
 ```bash
 # Initialize database (schema + sync names)
-uv run name-db init
+$ uv run name-db init
 
 # Classify origins (100 names at a time)
-uv run name-db process --limit 100
+$ uv run name-db process --limit 100
 
 # Show database statistics
-uv run name-db stats
+$ uv run name-db stats
+Total names: 44,127
+Classified origins: 12,450 (28%)
+Comparisons made: 156
 
 # Check model status
-uv run name-db model-status
+$ uv run name-db model-status
+Model: Trained
+Features: 25 dimensions
+Last update: 2 minutes ago
 
 # Reset the active learning model
-uv run name-db model-reset
+$ uv run name-db model-reset
+Model weights reset to uniform.
+All ratings cleared.
 ```
 
 ## Troubleshooting
@@ -403,10 +426,10 @@ uv run name-db model-reset
 
 ```bash
 # Ensure submodule is initialized
-git submodule update --init
+$ git submodule update --init
 
 # Manually sync names
-uv run name-db init
+$ uv run name-db init
 ```
 
 #### "Failed to classify origins"
@@ -415,18 +438,18 @@ uv run name-db init
 
 ```bash
 # Ensure ethnidata is installed
-uv add ethnidata
+$ uv add ethnidata
 
 # Check internet connection (required for model download)
 # Try with a smaller batch
-uv run name-db process --limit 10
+$ uv run name-db process --limit 10
 ```
 
 #### "Model not updating"
 
 **Solution**: The model needs data to learn!
 
-- Make at least **10-20 comparisons** before expecting meaningful updates
+- Make at least **20 comparisons** before expecting meaningful updates
 - Try different types of names (use filters to explore)
 - Reset the model if needed: `uv run name-db model-reset`
 

@@ -345,7 +345,7 @@ class TestConcurrentAccess:
                 model.save_to_db()
                 results.append(f"Worker {worker_id}: Success")
                 return model.state.training_samples
-            except Exception as e:
+            except (RuntimeError, ValueError, sqlite3.Error, AttributeError) as e:
                 errors.append(f"Worker {worker_id}: {e}")
                 return None
 
@@ -399,7 +399,7 @@ class TestConcurrentAccess:
                         _ = model.state.training_samples
                 results.append(f"Worker {worker_id}: Success")
                 return True
-            except Exception as e:
+            except (RuntimeError, ValueError, sqlite3.Error, AttributeError) as e:
                 errors.append(f"Worker {worker_id}: {e}")
                 return False
 

@@ -35,7 +35,7 @@ def _init_in_process(db_path_str):
             cursor = conn.execute("SELECT COUNT(*) FROM names")
             count = cursor.fetchone()[0]
         return ("success", count)
-    except Exception as e:
+    except sqlite3.Error as e:
         return ("error", str(e))
 
 
@@ -53,7 +53,7 @@ def _vote_in_process(args):
             preference = -1 if i % 2 == 0 else 1
             database.record_comparison("Alice", "Bob", preference)
         return ("success", process_id)
-    except Exception as e:
+    except sqlite3.Error as e:
         return ("error", str(e))
 
 
@@ -77,7 +77,7 @@ class TestConcurrentDatabaseInitialization:
             try:
                 database.init_database()
                 results.append("success")
-            except Exception as e:
+            except sqlite3.Error as e:
                 errors.append(str(e))
 
         # Spawn multiple threads to initialize simultaneously
@@ -174,7 +174,7 @@ class TestConcurrentVoting:
                     database.update_rating(name_a, 1500.0 + i)
 
                     successful_votes.append((thread_id, i))
-                except Exception as e:
+                except sqlite3.Error as e:
                     errors.append((thread_id, i, str(e)))
 
         # Create and start threads
@@ -352,7 +352,7 @@ class TestReadConsistency:
         # Insert test names
         with database.get_connection() as conn:
             for i in range(100):
-                conn.execute(f"INSERT INTO names (name, gender) VALUES ('Name{i}', 'Female')")
+                conn.execute("INSERT INTO names (name, gender) VALUES (?, ?)", (f"Name{i}", "Female"))
 
         read_results = []
         write_errors = []
@@ -366,7 +366,7 @@ class TestReadConsistency:
                         break
                     database.update_rating(f"Name{i % 100}", 1500.0 + (i % 100))
                     time.sleep(0.001)  # Small delay to allow interleaving
-            except Exception as e:
+            except sqlite3.Error as e:
                 write_errors.append(str(e))
 
         def reader_worker():
@@ -378,7 +378,7 @@ class TestReadConsistency:
                     ratings = database.get_ratings()
                     read_results.append(len(ratings))
                     time.sleep(0.002)
-            except Exception as e:
+            except sqlite3.Error as e:
                 read_results.append(f"error: {e}")
 
         # Start writer thread
@@ -472,10 +472,10 @@ class TestConnectionPool:
                     names = [row[0] for row in cursor.fetchall()]
 
                     # Write
-                    conn.execute(f"INSERT INTO names (name, gender) VALUES ('Worker{worker_id}', 'Female')")
+                    conn.execute("INSERT INTO names (name, gender) VALUES (?, ?)", (f"Worker{worker_id}", "Female"))
 
                     results.append((worker_id, len(names)))
-            except Exception as e:
+            except sqlite3.Error as e:
                 errors.append((worker_id, str(e)))
 
         # Create multiple threads using connections simultaneously
@@ -581,7 +581,7 @@ class TestTransactionRollback:
         # Insert test names
         with database.get_connection() as conn:
             for i in range(5):
-                conn.execute(f"INSERT INTO names (name, gender) VALUES ('RollbackName{i}', 'Female')")
+                conn.execute("INSERT INTO names (name, gender) VALUES (?, ?)", (f"RollbackName{i}", "Female"))
 
         # Attempt batch update with failure
         try:
@@ -676,7 +676,7 @@ class TestSingletonRaceConditions:
             try:
                 model = utils.get_active_learning_model()
                 models.append(id(model))
-            except Exception as e:
+            except (RuntimeError, ValueError, AttributeError) as e:
                 errors.append(str(e))
 
         # Spawn threads to get model simultaneously
@@ -715,7 +715,7 @@ class TestSingletonRaceConditions:
             try:
                 extractor = utils.get_feature_extractor()
                 extractors.append(id(extractor))
-            except Exception as e:
+            except (RuntimeError, ValueError, AttributeError) as e:
                 errors.append(str(e))
 
         threads = [threading.Thread(target=get_extractor_worker) for _ in range(10)]
@@ -745,7 +745,7 @@ class TestDatabaseIntegrity:
                     conn.execute("INSERT INTO names (name, gender) VALUES ('UniqueName', 'Female')")
             except sqlite3.IntegrityError:
                 errors.append("unique_violation")
-            except Exception as e:
+            except sqlite3.Error as e:
                 errors.append(str(e))
 
         # Only first insert should succeed
@@ -819,7 +819,7 @@ class TestConcurrentComparisonRecording:
         def record_worker():
             try:
                 database.record_comparison("IdemA", "IdemB", -1)
-            except Exception:
+            except sqlite3.Error:
                 pass
 
         threads = [threading.Thread(target=record_worker) for _ in range(20)]
@@ -851,7 +851,7 @@ class TestConcurrentComparisonRecording:
         def update_worker(preference):
             try:
                 database.record_comparison("RaceA", "RaceB", preference)
-            except Exception:
+            except sqlite3.Error:
                 pass
 
         threads = [
@@ -892,7 +892,7 @@ class TestUtilsConcurrency:
         names = ["ModelA", "ModelB", "ModelC", "ModelD"]
         with database.get_connection() as conn:
             for name in names:
-                conn.execute(f"INSERT INTO names (name, gender) VALUES ('{name}', 'Female')")
+                conn.execute("INSERT INTO names (name, gender) VALUES (?, ?)", (name, "Female"))
 
         errors = []
 
@@ -902,7 +902,7 @@ class TestUtilsConcurrency:
                     winner = names[i % len(names)]
                     loser = names[(i + 1) % len(names)]
                     utils.update_model_and_save(winner, loser)
-            except Exception as e:
+            except (RuntimeError, ValueError, sqlite3.Error) as e:
                 errors.append((thread_id, str(e)))
 
         threads = [threading.Thread(target=model_update_worker, args=(i,)) for i in range(5)]
@@ -933,7 +933,7 @@ class TestUtilsConcurrency:
         names = ["PrefA", "PrefB"]
         with database.get_connection() as conn:
             for name in names:
-                conn.execute(f"INSERT INTO names (name, gender) VALUES ('{name}', 'Female')")
+                conn.execute("INSERT INTO names (name, gender) VALUES (?, ?)", (name, "Female"))
 
         ratings = dict.fromkeys(names, 1500.0)
 
@@ -943,7 +943,7 @@ class TestUtilsConcurrency:
             try:
                 for i in range(5):
                     utils.update_preference_and_save(ratings, "PrefA", "PrefB")
-            except Exception as e:
+            except (RuntimeError, ValueError, sqlite3.Error) as e:
                 errors.append((thread_id, str(e)))
 
         threads = [threading.Thread(target=preference_worker, args=(i,)) for i in range(5)]
@@ -999,7 +999,7 @@ class TestConnectionTimeoutAndLocks:
                         ("Male" if thread_id % 2 == 0 else "Female", "LockTest"),
                     )
                 write_times.append((thread_id, time.time() - start))
-            except Exception as e:
+            except sqlite3.Error as e:
                 errors.append((thread_id, str(e)))
 
         threads = [threading.Thread(target=slow_writer, args=(i,)) for i in range(10)]
@@ -1032,7 +1032,7 @@ class TestStressConcurrency:
         num_names = 50
         with database.get_connection() as conn:
             for i in range(num_names):
-                conn.execute(f"INSERT INTO names (name, gender) VALUES ('Stress{i}', 'Female')")
+                conn.execute("INSERT INTO names (name, gender) VALUES (?, ?)", (f"Stress{i}", "Female"))
 
         operations = []
         errors = []
@@ -1060,7 +1060,7 @@ class TestStressConcurrency:
                         database.get_stats()
 
                     operations.append((worker_id, op_type))
-            except Exception as e:
+            except (RuntimeError, ValueError, sqlite3.Error) as e:
                 errors.append((worker_id, str(e)))
 
         # Run many threads
@@ -1089,7 +1089,7 @@ class TestStressConcurrency:
         # Insert test names
         with database.get_connection() as conn:
             for i in range(10):
-                conn.execute(f"INSERT INTO names (name, gender) VALUES ('Long{i}', 'Female')")
+                conn.execute("INSERT INTO names (name, gender) VALUES (?, ?)", (f"Long{i}", "Female"))
 
         reader_completed = threading.Event()
         writer_completed = threading.Event()
@@ -1102,7 +1102,7 @@ class TestStressConcurrency:
                         conn.execute("SELECT * FROM names")
                         time.sleep(0.001)
                 reader_completed.set()
-            except Exception as e:
+            except sqlite3.Error as e:
                 print(f"Long reader error: {e}")
 
         def quick_writer():
@@ -1110,7 +1110,7 @@ class TestStressConcurrency:
                 for i in range(20):
                     database.update_rating(f"Long{i % 10}", 1500.0 + i)
                 writer_completed.set()
-            except Exception as e:
+            except sqlite3.Error as e:
                 print(f"Quick writer error: {e}")
 
         # Start long reader

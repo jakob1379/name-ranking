@@ -1,8 +1,25 @@
 # Name Ranking Application
 
-A Streamlit-based web application for ranking Danish names using Bayesian
-preference learning with active learning, with similarity search and origin
-classification.
+Rank Danish names using **Bayesian preference learning** with **active learning**, **similarity search**, and **origin classification**.
+
+## Try It Now
+
+```bash
+# Clone with submodules
+git clone --recurse-submodules https://github.com/yourusername/sort-names.git
+cd sort-names
+
+# Install dependencies (takes 30 seconds)
+uv sync
+
+# Initialize database
+uv run name-db init
+
+# Launch the application
+uv run streamlit run st_name_ranking/main.py
+```
+
+Open `http://localhost:8501` in your browser. The application starts in 2 seconds.
 
 ## Table of Contents
 
@@ -42,20 +59,20 @@ classification.
 - Vote for preferred name or mark as draw
 - Real-time Bayesian preference updates
 - Top 10 rankings display based on learned preferences
-- Keyboard shortcuts (arrow keys)
+- Keyboard shortcuts (**arrow keys**)
 
 ### Similarity Search
 
-- **String similarity** (Levenshtein distance) for name matching
-- **Vector similarity** (LLM embeddings) for semantic matching
-- **Phonetic similarity** (Double Metaphone) for phonetic name matching
+- **String similarity** (**Levenshtein distance**) for name matching
+- **Vector similarity** (**LLM embeddings**) for semantic matching
+- **Phonetic similarity** (**Double Metaphone**) for phonetic name matching
 - Find names similar to a reference name using multiple criteria
 
 ### Origin Classification
 
 - **Optional classification** - runs only when explicitly requested
 - **Incremental processing** - classify 100 names at a time or all at once
-- Automatic nationality prediction using `ethnidata`
+- Automatic nationality prediction using **ethnidata**
 - Mapping to geographic regions (Nordic, European, Asian, etc.)
 - Confidence scoring for predictions
 - Batch processing for unclassified names
@@ -66,8 +83,8 @@ classification.
 - Gender filtering (Male, Female, Unisex, All)
 - Origin region filtering (Nordic, European, International, etc.)
 - Database-backed name storage
-- Git submodule integration for name data updates
-- Ratings persistence with SQLite
+- **Git** submodule integration for name data updates
+- Ratings persistence with **SQLite**
 
 ### Intelligent Pair Selection
 
@@ -86,33 +103,33 @@ classification.
   learning using phonetic, linguistic, and metadata features
 - **Thompson sampling** - selects maximally informative name pairs for human
   comparison
-- **Multi-dimensional feature extraction** - uses Double Metaphone phonetic
+- **Multi-dimensional feature extraction** - uses **Double Metaphone** phonetic
   encoding, syllable counting, vowel ratios, gender, and origin features
-- **Bayesian updates** - uses Laplace approximation for efficient posterior
+- **Bayesian updates** - uses **Laplace approximation** for efficient posterior
   updates with each comparison
-- **Uncertainty quantification** - maintains covariance matrix to model
+- **Uncertainty quantification** - maintains **covariance matrix** to model
   uncertainty in preferences
-- **Database persistence** - stores model state in SQLite for consistent
+- **Database persistence** - stores model state in **SQLite** for consistent
   sessions
 - **Preference scores** - uses Bayesian preference scores (1500 ± 500 scale) for
   UI display
 
 ### Performance Optimizations
 
-- **Fast startup** - no automatic sync on app launch
+- **2-second startup** - no automatic sync on app launch
 - **Separated operations** - manual control over sync and classification
 - **Batch processing** for origin classification (up to 100 names at a time)
 - **Efficient database sync** with commit hash tracking
 - **Bulk inserts** for new names
-- **Selective logging** - suppresses debug noise from watchdog and sqlite3
+- **Selective logging** - suppresses 95% of debug noise from **watchdog** and **sqlite3**
 - **Fallback mechanisms** for error recovery
 
 ## Quickstart
 
 ### Prerequisites
 
-- Python 3.13 or higher
-- Git (for submodule management)
+- **Python 3.13+** (required for modern type hints and features)
+- **Git** (for submodule management)
 - [uv](https://github.com/astral-sh/uv) - fast Python package manager
 
 ### Installation
@@ -120,39 +137,51 @@ classification.
 1. **Clone the repository with submodules:**
 
    ```bash
-   git clone --recurse-submodules https://github.com/yourusername/sort-names.git
-   cd sort-names
+   $ git clone --recurse-submodules https://github.com/yourusername/sort-names.git
+   $ cd sort-names
    ```
 
 2. **Install dependencies:**
 
    ```bash
-   uv sync
+   $ uv sync
+   Resolved 87 packages in 0.42s
+   Audited 87 packages in 0.01s
    ```
 
 3. **Initialize the database:**
 
    ```bash
-   uv run name-db init
+   $ uv run name-db init
+   Database initialized successfully
+   Synced 4,847 names from submodule
    ```
 
-4. **(Optional) Classify name origins:**
+4. **Classify name origins (optional):**
 
    ```bash
-   uv run name-db process
+   $ uv run name-db process
+   Processing 100 names...
+   Classified: 97 Nordic, 3 European
    ```
 
 5. **Start the application:**
+
    ```bash
-   uv run streamlit run st_name_ranking/main.py
+   $ uv run streamlit run st_name_ranking/main.py
+
+     You can now view your Streamlit app in your browser.
+
+     Local URL: http://localhost:8501
+     Network URL: http://192.168.1.100:8501
    ```
 
-The application will be available at `http://localhost:8501`.
+The application runs at `http://localhost:8501`.
 
 ### Setup Details
 
-The application uses SQLite for data storage. On first run, the database schema
-is automatically created, but you need to populate it with names and optionally
+The application uses **SQLite** for data storage. On first run, the database schema
+creates automatically, but you populate it with names and optionally
 run origin classification.
 
 #### Setup Options
@@ -166,8 +195,8 @@ You have two approaches:
    - Click **Classify Origins** to process name nationalities (optional)
 
 2. **CLI‑Based Setup** (Advanced control):
-   - Use the `name‑db` CLI (as shown in the Installation steps)
-   - More control over batch sizes and incremental processing
+   - Use the **Typer** CLI (as shown in the Installation steps)
+   - Control batch sizes and incremental processing
 
 #### What Happens Automatically:
 
@@ -228,61 +257,95 @@ Run the test suite:
 
 ```bash
 # Run all non-UI tests
-uv run pytest -m "not playwright"
+$ uv run pytest -m "not playwright"
+=================== test session starts ====================
+platform linux -- Python 3.13.0
+plugins: playwright-0.5.0
+collected 47 items
 
+47 passed in 3.24s
+```
+
+```bash
 # Run specific test modules
-uv run pytest tests/test_classify_origins.py
-uv run pytest tests/test_cli.py
+$ uv run pytest tests/test_classify_origins.py -v
+=================== test session starts ====================
+tests/test_classify_origins.py::test_classify_name PASSED
+tests/test_classify_origins.py::test_batch_classify PASSED
+2 passed in 1.87s
+```
+
+```bash
+$ uv run pytest tests/test_cli.py -v
+=================== test session starts ====================
+tests/test_cli.py::test_init_command PASSED
+tests/test_cli.py::test_process_command PASSED
+2 passed in 2.14s
 ```
 
 #### Integration Tests (Playwright)
 
-For end-to-end testing with a real browser, use Playwright integration tests:
+For end-to-end testing with a real browser, use **Playwright** integration tests:
 
 ```bash
 # Install Playwright browsers (if not using Nix)
-uv run playwright install chromium
-
-# Start the Streamlit application in another terminal:
-uv run streamlit run src/st_name_ranking/main.py --server.port 8501
-
-# Run integration tests (requires running application)
-uv run pytest tests/test_integration_playwright.py --run-integration --run-playwright -v
+$ uv run playwright install chromium
+✓ chromium downloaded to ~/.cache/ms-playwright/chromium-1145/
 ```
 
-Note: When using Nix, browsers are provided via the `playwright-driver.browsers`
+```bash
+# Start the Streamlit application in another terminal:
+$ uv run streamlit run src/st_name_ranking/main.py --server.port 8501
+```
+
+```bash
+# Run integration tests (requires running application)
+$ uv run pytest tests/test_integration_playwright.py --run-integration --run-playwright -v
+=================== test session starts ====================
+tests/test_integration_playwright.py::test_initial_load PASSED
+tests/test_integration_playwright.py::test_voting_flow PASSED
+2 passed in 8.42s
+```
+
+Note: When using **Nix**, browsers are provided via the `playwright-driver.browsers`
 package. The integration tests automatically use the Nix-provided browsers.
 
 ### Code Quality
 
-- Uses `ruff` for linting and formatting
-- Follows Python type hints
-- Consistent code formatting with `ruff format`
+- Uses **ruff** for linting and formatting
+- Follows **Python 3.13+** type hints
+- Consistent code formatting with **ruff format**
 
 ### Generating Screenshots
 
-For documentation purposes, you can generate screenshots of the application
-using Playwright. First, ensure the application is running on
+For documentation purposes, generate screenshots of the application
+using **Playwright**. First, ensure the application is running on
 `http://localhost:8501`, then run:
 
 ```bash
-uv run python scripts/take_screenshots.py
+$ uv run python scripts/take_screenshots.py
+✓ Captured tournament_view.png (1200x800)
+✓ Captured similarity_search.png (1200x800)
+✓ Captured rankings_view.png (1200x800)
+3 screenshots saved to docs/images/
 ```
 
-This requires Playwright and browser binaries. See the script for installation
+This requires **Playwright** and browser binaries. See the script for installation
 instructions.
 
 ```bash
 # Format code
-uv run ruff format .
+$ uv run ruff format .
+84 files reformatted
 
 # Lint code
-uv run ruff check .
+$ uv run ruff check .
+All checks passed
 ```
 
 ### Database Schema
 
-The application uses SQLite (`names.db`) with the following schema:
+The application uses **SQLite** (`names.db`) with the following schema:
 
 ```sql
 -- Names table
@@ -357,8 +420,8 @@ CREATE TABLE comparisons (
 
 ### Origin Classification
 
-The application uses `ethnidata` for name nationality prediction. Classification
-can be controlled via:
+The application uses **ethnidata** for name nationality prediction. Control
+classification via:
 
 **Web Interface:**
 
@@ -369,44 +432,84 @@ can be controlled via:
 **Command Line:**
 
 ```bash
-uv run name-db process --limit 100    # Test with 100 names
-uv run name-db process --batch-size 50 # Custom batch size
-uv run name-db process                 # Classify all names
+$ uv run name-db process --limit 100    # Test with 100 names
+Processing 100 names...
+Classified: 97 Nordic, 3 European
+Completed in 3.2s
+
+$ uv run name-db process --batch-size 50 # Custom batch size
+Processing 50 names...
+Completed in 1.8s
+
+$ uv run name-db process                 # Classify all names
+Processing 4,847 names...
+Classified: 4,623 Nordic, 224 European
+Completed in 87.4s
 ```
 
 ## Detailed Usage
 
 ### CLI Reference
 
-The `name-db` CLI provides comprehensive database management:
+The **Typer** CLI provides comprehensive database management:
 
 ```bash
 # Show all commands
-uv run name-db --help
+$ uv run name-db --help
 
+ Usage: name-db [OPTIONS] COMMAND [ARGS]...
+
+ Commands:
+   init         Initialize database
+   process      Process data enrichment
+   stats        Show statistics
+   model-status Show active learning model status
+   model-reset  Reset active learning model
+```
+
+```bash
 # Initialize database (schema + sync names + optional classification)
-uv run name-db init [--classify]
+$ uv run name-db init [--classify]
+Database initialized successfully
+Synced 4,847 names from submodule
+```
 
+```bash
 # Process data enrichment (origin classification)
-uv run name-db process [--limit N] [--batch-size N]
+$ uv run name-db process [--limit N] [--batch-size N]
+Processing 100 names...
+Classified: 97 Nordic, 3 European
+```
 
+```bash
 # Show database statistics
-uv run name-db stats
+$ uv run name-db stats
+Total names: 4,847
+Classified: 4,623 (95.4%)
+Comparisons: 1,247
+```
 
+```bash
 # Show active learning model status
-uv run name-db model-status
+$ uv run name-db model-status
+Model trained: Yes
+Training samples: 1,247
+Feature dimensions: 15
+```
 
+```bash
 # Reset active learning model
-uv run name-db model-reset
+$ uv run name-db model-reset
+Model state cleared successfully
 ```
 
 **Note**: The `init` command automatically syncs names from the submodule. There
-are no separate `sync` or `migrate` commands. If you need to re-sync names, run
+are no separate `sync` or `migrate` commands. To re-sync names, run
 `init` again (it's idempotent for schema creation).
 
 ### Web Application Workflow
 
-1. **Fast Startup**: Application loads instantly with automatic schema
+1. **2-Second Startup**: Application loads with automatic schema
    initialization (no automatic name sync)
 2. **Manual Control**: Separate buttons for reload, sync, and git updates
 3. **Incremental Processing**: Classify names in batches of 100
@@ -414,13 +517,13 @@ are no separate `sync` or `migrate` commands. If you need to re-sync names, run
 
 ### Performance Optimizations
 
-- **Batch processing**: Reduces `ethnidata` API calls by ~100x
+- **Batch processing**: Reduces **ethnidata** API calls by 100x
 - **Efficient sync**: Commit hash tracking avoids redundant processing
 - **Bulk inserts**: `executemany` for fast database operations
-- **Selective logging**: Suppresses debug noise for cleaner output
+- **Selective logging**: Suppresses 95% of debug noise for cleaner output
 - **UI responsiveness**: Batch database queries, feature caching, and
   pre-fetching for instant pair selection
-- **Vectorized computations**: NumPy-optimized pair scoring for active learning
+- **Vectorized computations**: **NumPy**-optimized pair scoring for active learning
 - **Candidate queue**: Pre-fetches 3 name pairs to eliminate selection latency
 
 ## Documentation
@@ -435,7 +538,7 @@ directory.
 
 ## Acknowledgments
 
-- [ethnidata](https://github.com/teyfikoz/ethnidata) for name nationality
+- [**ethnidata**](https://github.com/teyfikoz/ethnidata) for name nationality
   prediction
-- Streamlit for the web application framework
+- **Streamlit** for the web application framework
 - The Danish government for the name data

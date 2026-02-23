@@ -51,8 +51,8 @@ def extract_phonetic_features(name: str) -> dict[str, float]:
         features["has_secondary"] = 1.0 if secondary else 0.0
 
         return features
-    except Exception as e:
-        logger.warning(f"Failed to extract phonetic features for '{name}': {e}")
+    except (AttributeError, ValueError, TypeError) as e:
+        logger.warning("Failed to extract phonetic features for '%s': %s", name, e)
         # Return empty features
         return {f"phonetic_pos_{i}": 0.0 for i in range(4)} | {
             "phonetic_length": 0.0,
@@ -77,7 +77,7 @@ def extract_linguistic_features(name: str) -> dict[str, float]:
         syllable_count = hyphenated.count("-") + 1
         features["syllable_count"] = syllable_count / 6.0  # Normalize
         features["syllable_density"] = syllable_count / max(len(name), 1)
-    except Exception:
+    except (AttributeError, ValueError):
         # Fallback: rough estimate based on vowels
         vowel_count = sum(1 for c in name_lower if c in "aeiouyæøå")
         syllable_count = max(1, vowel_count // 2)
@@ -190,7 +190,7 @@ def features_to_vector(
 class FeatureExtractor:
     """Cached feature extractor for batch processing."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._feature_names = None
         self._feature_cache = {}
 

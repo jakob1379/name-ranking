@@ -134,7 +134,7 @@ class TestModelErrorHandling:
             result = new_model.load_from_db()
             # If it returns False, the corruption was handled gracefully
             assert result is False, "Should fail to load corrupted model"
-        except (pickle.UnpicklingError, Exception) as e:
+        except (pickle.UnpicklingError, ValueError, RuntimeError, OSError) as e:
             # Current behavior: exception is raised
             # This is the known issue - model doesn't handle corrupted pickle data
             assert "pickle" in str(e).lower() or "truncated" in str(e).lower() or isinstance(e, pickle.UnpicklingError)
@@ -422,7 +422,7 @@ class TestConsistencyAndRecovery:
             # Attempt update - should handle gracefully
             try:
                 utils.update_model_and_save("Winner", "Loser")
-            except Exception:
+            except (RuntimeError, ValueError, AttributeError):
                 pass  # Expected to fail
 
         # Ratings should remain unchanged

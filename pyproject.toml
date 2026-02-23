@@ -1,13 +1,13 @@
 [build-system]
-requires = ["setuptools>=80.9.0", "wheel"]
+requires = ["setuptools>=82.0.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [dependency-groups]
 dev = [
-  "poethepoet>=0.40.0",
-  "ruff>=0.14.13",
-  "prek>=0.2.29",
-  "commitizen>=4.11.6",
+  "poethepoet>=0.42.0",
+  "ruff>=0.15.2",
+  "prek>=0.3.3",
+  "commitizen>=4.13.8",
   "pytest>=9.0.2",
   "pytest-cov>=7.0.0",
   "pytest-playwright>=0.7.2",
@@ -16,10 +16,10 @@ dev = [
   "pytest-xdist>=3.8.0",
   "pytest-timeout>=2.4.0",
   "pytest-asyncio>=1.3.0",
-  "ipython>=9.9.0",
-  "ty>=0.0.12",
-  "mkdocstrings-python>=2.0.1",
-  "zensical>=0.0.16"
+  "ipython>=9.10.0",
+  "ty>=0.0.18",
+  "mkdocstrings-python>=2.0.3",
+  "zensical>=0.0.23"
 ]
 
 [project]
@@ -30,19 +30,19 @@ readme = "README.md"
 authors = [
   {name = "Jakob Stender Guldberg", email = "jakob1379@gmail.com"}
 ]
-requires-python = ">=3.13,<3.14"
+requires-python = ">=3.14,<3.15"
 dependencies = [
   "httpx>=0.28.1",
-  "ethnidata>=4.1.1",
-  "numpy>=2.4.1",
+  "ethnidata>=4.3.1",
+  "numpy>=2.4.2",
   "pandas>=2.3.3",
   "rapidfuzz>=3.14.3",
   "metaphone",
   "pyphen>=0.17.2",
-  "rich>=14.2.0",
-  "sentence-transformers>=5.2.0",
-  "streamlit>=1.53.0",
-  "typer>=0.21.1"
+  "rich>=14.3.3",
+  "sentence-transformers>=5.2.3",
+  "streamlit>=1.54.0",
+  "typer>=0.24.1"
 ]
 
 [project.scripts]
@@ -81,21 +81,27 @@ line-length = 120 # use whatever number makes you happy
 # Test-specific exemptions are in tests/ruff.toml
 select = ["ALL"]
 ignore = [
-  "ANN",     # Type annotations (optional for now)
-  "D",       # Docstrings (optional for now)
-  "G004",    # logging-f-string (commonly needed)
-  "RUF001",  # Ambiguous unicode (intentional in UI)
+  "D",       # Docstrings (85 remaining - tackle incrementally)
+  "RUF001",  # Ambiguous unicode (intentional for Danish names)
   "RUF002",  # Ambiguous unicode in docstrings
   "RUF003",  # Ambiguous unicode in comments
-  "SLF001",  # Private member access (lazy loading patterns)
-  "S301",    # Pickle usage (internal/trusted data)
-  "S608",    # SQL injection (safe with placeholders)
-  "F401",    # Unused import (handled separately)
+  "S301",    # Pickle - documented safe (internal data only)
+  "S608",    # SQL - false positives with parameterized queries
+  "S311",    # Random - UI demo only (not security)
+  "ANN401",  # Any type - DataFrame row processing
 ]
 
 [tool.ruff.lint.isort]
 # so it knows to group first-party stuff last
 known-first-party = ["st_name_ranking"]
+
+[tool.ruff.lint.per-file-ignores]
+# CLI entry points - print statements are user-facing output
+"src/st_name_ranking/init_database.py" = ["T201"]
+"src/st_name_ranking/classify_origins.py" = ["T201"]
+# __main__ blocks for testing - print is acceptable
+"src/st_name_ranking/origin_classifier.py" = ["T201"]
+"src/st_name_ranking/database.py" = ["T201"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

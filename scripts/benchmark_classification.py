@@ -11,16 +11,6 @@ from pathlib import Path
 
 logging.basicConfig(level=logging.WARNING)
 
-# Add src to Python path for imports
-src_path = Path(__file__).parent.parent / "src"
-sys.path.insert(0, str(src_path))
-from st_name_ranking.database import (  # noqa: E402
-    get_names_with_origins,
-    get_unclassified_names,
-    init_database,
-)
-from st_name_ranking.origin_classifier import OriginClassifier  # noqa: E402
-
 
 def benchmark_reference_names_load() -> tuple[
     dict[str, tuple[str, float, str, str]],
@@ -57,6 +47,16 @@ def benchmark_classification_batch(
 
 
 def main():
+    # Add src to Python path for imports
+    src_path = Path(__file__).parent.parent / "src"
+    sys.path.insert(0, str(src_path))
+    from st_name_ranking.database import (
+        get_names_with_origins,
+        get_unclassified_names,
+        init_database,
+    )
+    from st_name_ranking.origin_classifier import OriginClassifier
+
     print("=== Origin Classification Performance Benchmark ===\n")
 
     # Initialize database

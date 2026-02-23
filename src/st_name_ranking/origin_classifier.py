@@ -13,13 +13,33 @@ accuracy, prioritizing speed for batch processing of ~50k names.
 
 import logging
 import re
-from typing import Any
+import unicodedata
+from collections.abc import Callable
+from typing import Any, NamedTuple, Optional
+
+
+class OriginResult(NamedTuple):
+    """Name origin classification result."""
+
+    region: str
+    confidence: float
+
 
 from metaphone import doublemetaphone
 
 from st_name_ranking.database import get_connection
 
 logger = logging.getLogger(__name__)
+
+# Classification thresholds
+MIN_ETHNICOLR_CONFIDENCE = 0.3
+MIN_ETHNIDATA_CONFIDENCE = 0.3
+HIGH_CONFIDENCE_THRESHOLD = 0.6
+MEDIUM_CONFIDENCE_THRESHOLD = 0.5
+LOW_CONFIDENCE_THRESHOLD = 0.4
+
+# Phonetic similarity threshold
+MIN_PHONETIC_SIMILARITY = 0.6
 
 # Region categories matching the database region_mapping
 REGIONS = [
@@ -62,12 +82,16 @@ def _get_region_for_nationality(nationality: str) -> tuple[str, float]:
         return "International", 0.5
 
 
-def _create_ethnidata_classifier():
+# Type alias for classifier that returns (region, confidence) or None
+ClassifierFunc = Callable[[str], OriginResult | None]
+
+
+def _create_ethnidata_classifier() -> ClassifierFunc | bool:
     """Create an ethnidata classifier callable that returns (region, confidence).
     Returns the classifier instance, or False if ethnidata not installed.
     """
     try:
-        from ethnidata import EthniData
+        from ethnidata import EthniData  # noqa: PLC0415
     except ImportError:
         logger.debug("ethnidata not installed")
         return False
@@ -93,8 +117,8 @@ def _create_ethnidata_classifier():
             # Adjust confidence
             confidence = confidence * confidence_adjust
             return region, confidence
-        except Exception as e:
-            logger.debug(f"ethnidata classification failed for '{name}': {e}")
+        except (ImportError, AttributeError, ValueError) as e:
+            logger.debug("ethnidata classification failed for '%s': %s", name, e)
             return None
 
     return classify_with_ethnidata
@@ -166,8 +190,6 @@ def normalize_name(name: str) -> str:
     - Lowercase
     - Remove extra whitespace
     """
-    import unicodedata
-
     name = unicodedata.normalize("NFKD", name).strip().lower()
     name = re.sub(r"\s+", " ", name)
     return name
@@ -187,7 +209,7 @@ def rule_based_nordic_detection(name: str) -> tuple[str | None, float]:
 
     # Check for Nordic characters (strongest signal)
     if any(char in NORDIC_CHARS for char in name):
-        logger.debug(f"Name '{name}' contains Nordic characters → Nordic")
+        logger.debug("Name '%s' contains Nordic characters → Nordic", name)
         return "Nordic", 0.95
 
     # Check suffixes
@@ -195,7 +217,10 @@ def rule_based_nordic_detection(name: str) -> tuple[str | None, float]:
         if normalized.endswith(suffix):
             confidence = weight * 0.9  # Slightly discount suffix-only evidence
             logger.debug(
-                f"Name '{name}' ends with '{suffix}' → Nordic (confidence: {confidence:.2f})",
+                "Name '%s' ends with '%s' → Nordic (confidence: %.2f)",
+                name,
+                suffix,
+                confidence,
             )
             return "Nordic", confidence
 
@@ -209,7 +234,10 @@ def rule_based_nordic_detection(name: str) -> tuple[str | None, float]:
     primary, secondary = doublemetaphone(name)
     if primary in NORDIC_PHONETIC_CODES or secondary in NORDIC_PHONETIC_CODES:
         logger.debug(
-            f"Name '{name}' has Nordic phonetic code {primary}/{secondary} → Nordic",
+            "Name '%s' has Nordic phonetic code %s/%s → Nordic",
+            name,
+            primary,
+            secondary,
         )
         return "Nordic", 0.75
 
@@ -261,25 +289,27 @@ def phonetic_similarity_classification(
             best_confidence = score * ref_conf * 0.9  # Discount for phonetic similarity
             best_region = ref_region
 
-    if best_region and best_confidence > 0.3:
+    if best_region and best_confidence > MIN_PHONETIC_SIMILARITY:
         logger.debug(
-            f"Name '{name}' phonetically matches {best_region} (score: {best_score:.2f}, "
-            f"confidence: {best_confidence:.2f})",
+            "Name '%s' phonetically matches %s (score: %.2f, confidence: %.2f)",
+            name,
+            best_region,
+            best_score,
+            best_confidence,
         )
         return best_region, best_confidence
 
     return None, 0.0
 
 
-def get_ethnicolr_classifier():
+def get_ethnicolr_classifier() -> Optional["EthnicolrClassifier"]:
     """Lazy loader for ethnicolr classifier."""
     try:
-        import numpy as np
-        import pandas as pd
-        from ethnicolr import pred_wiki_ln
+        import pandas as pd  # noqa: PLC0415
+        from ethnicolr import pred_wiki_ln  # noqa: PLC0415
 
         class EthnicolrClassifier:
-            def __init__(self):
+            def __init__(self) -> None:
                 self._model_loaded = False
 
             def classify_batch(
@@ -306,11 +336,11 @@ def get_ethnicolr_classifier():
                         classifications.append((region, confidence))
 
                     return classifications
-                except Exception as e:
-                    logger.warning(f"ethnicolr classification failed: {e}")
+                except (ImportError, AttributeError, ValueError, RuntimeError) as e:
+                    logger.warning("ethnicolr classification failed: %s", e)
                     return [(None, 0.0)] * len(names)
 
-        def _map_ethnicolr_to_region(row) -> tuple[str | None, float]:
+        def _map_ethnicolr_to_region(row: Any) -> tuple[str | None, float]:
             """Map ethnicolr's 13 categories to our 8 regions."""
             # Find category with highest probability
             category_cols = [
@@ -388,8 +418,8 @@ class OriginClassifier:
     def __init__(
         self,
         reference_names: dict[str, tuple[str, float, str, str]] | None = None,
-        ethnidata_classifier: Any | None = None,
-    ):
+        ethnidata_classifier: ClassifierFunc | bool | None = None,
+    ) -> None:
         """Args:
         reference_names: Dict of known name -> (region, confidence, phonetic_primary, phonetic_secondary) for
                         phonetic similarity classification.
@@ -415,7 +445,7 @@ class OriginClassifier:
         """
         # 1. Rule‑based Nordic detection
         region, confidence = rule_based_nordic_detection(name)
-        if region and confidence >= 0.6:
+        if region and confidence >= HIGH_CONFIDENCE_THRESHOLD:
             return region, confidence
 
         # 2. Phonetic similarity (if we have reference names)
@@ -424,7 +454,7 @@ class OriginClassifier:
                 name,
                 self.reference_names,
             )
-            if region and confidence >= 0.5:
+            if region and confidence >= MEDIUM_CONFIDENCE_THRESHOLD:
                 return region, confidence
 
         # 3. ethnicolr (if installed)
@@ -432,11 +462,13 @@ class OriginClassifier:
             try:
                 results = self.ethnicolr.classify_batch([name])
                 region, confidence = results[0]
-                if region and confidence >= 0.4:
+                if region and confidence >= LOW_CONFIDENCE_THRESHOLD:
                     return region, confidence
-            except Exception as e:
+            except (ImportError, AttributeError, ValueError) as e:
                 logger.debug(
-                    f"ethnicolr classification failed for '{name}': {e}",
+                    "ethnicolr classification failed for '%s': %s",
+                    name,
+                    e,
                 )
 
         # 4. ethnidata (if installed) - lazy load
@@ -448,11 +480,13 @@ class OriginClassifier:
                 result = self.ethnidata(name)  # call the classifier callable
                 if result and isinstance(result, tuple):
                     region, confidence = result
-                    if confidence >= 0.3:
+                    if confidence >= MIN_ETHNIDATA_CONFIDENCE:
                         return region, confidence
-            except Exception as e:
+            except (ImportError, AttributeError, ValueError) as e:
                 logger.debug(
-                    f"ethnidata classification failed for '{name}': {e}",
+                    "ethnidata classification failed for '%s': %s",
+                    name,
+                    e,
                 )
 
         # 5. Fallback: International with low confidence
@@ -490,11 +524,11 @@ class OriginClassifier:
 
             results.extend(chunk_results)
 
-            logger.debug(f"Processed {i + len(chunk_names)}/{len(names)} names")
+            logger.debug("Processed %d/%d names", i + len(chunk_names), len(names))
 
         return results
 
-    def _load_ethnidata(self):
+    def _load_ethnidata(self) -> ClassifierFunc | bool:
         """Lazy load ethnidata classifier."""
         return _create_ethnidata_classifier()
 

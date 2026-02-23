@@ -1,6 +1,8 @@
 """UI rendering functions for the name ranking application."""
 
+import json
 import logging
+import time
 from typing import Literal
 
 import pandas as pd
@@ -11,6 +13,8 @@ from st_name_ranking.database import (
     get_preference_stats_by_gender,
     get_preference_stats_by_origin,
     get_preference_stats_by_phonetic,
+    load_user_setting,
+    save_user_setting,
 )
 from st_name_ranking.similarity import (
     get_string_similarity_scores,
@@ -558,8 +562,6 @@ def render_binary_filter(names: list[str]) -> None:
     Users review names one by one, marking them as included/neutral or excluded/dislike.
     """
     logger.debug("Rendering binary filter with %d names", len(names))
-    import time
-
     start_time = time.perf_counter()
 
     # Clear last button press time (used for performance monitoring)
@@ -598,14 +600,10 @@ def render_binary_filter(names: list[str]) -> None:
 
     # Load inclusion decisions from session state or database
     if "name_inclusions" not in st.session_state:
-        import json
-
-        from st_name_ranking.database import load_user_setting
-
         try:
             inclusions_json = load_user_setting("name_inclusions", "{}")
             st.session_state.name_inclusions = json.loads(inclusions_json)
-        except Exception:
+        except json.JSONDecodeError:
             st.session_state.name_inclusions = {}
 
     inclusions = st.session_state.name_inclusions
@@ -739,10 +737,6 @@ def render_binary_filter(names: list[str]) -> None:
 
     # Save decisions periodically (every 50 actions to reduce DB writes)
     if current_idx % 50 == 0:
-        import json
-
-        from st_name_ranking.database import save_user_setting
-
         # Time JSON serialization and database save
         json_start = time.perf_counter()
         inclusions_json = json.dumps(inclusions)
@@ -752,7 +746,7 @@ def render_binary_filter(names: list[str]) -> None:
         save_user_setting("name_inclusions", inclusions_json)
         save_time = (time.perf_counter() - save_start) * 1000
 
-        logger.debug(f"Periodic save: JSON={json_time:.1f}ms, DB={save_time:.1f}ms, entries={len(inclusions)}")
+        logger.debug("Periodic save: JSON=%.1fms, DB=%.1fms, entries=%d", json_time, save_time, len(inclusions))
 
     # Batch operations
     col_batch1, col_batch2 = st.columns(2)
@@ -798,17 +792,11 @@ def render_binary_filter(names: list[str]) -> None:
             st.session_state.filter_counts_included = 0
             st.session_state.filter_counts_excluded = 0
             st.session_state.filter_counts_names_hash = names_hash
-            from st_name_ranking.database import save_user_setting
-
             save_user_setting("name_inclusions", "{}")
             st.session_state.last_button_press_time = time.perf_counter()
             st.rerun()
     with col_nav3:
         if st.button("Save & Continue", type="primary"):
-            import json
-
-            from st_name_ranking.database import save_user_setting
-
             save_user_setting("name_inclusions", json.dumps(inclusions))
             st.toast("Decisions saved!", icon="✅")
             # Switch to tournament tab with included names
@@ -861,7 +849,7 @@ def render_binary_filter(names: list[str]) -> None:
         sections.append(f"name_display: {name_display_ms:.1f}ms")
 
     section_str = ", ".join(sections) if sections else "no section timing"
-    logger.debug(f"render_binary_filter completed in {elapsed_ms:.1f}ms ({section_str})")
+    logger.debug("render_binary_filter completed in %.1fms (%s)", elapsed_ms, section_str)
 
 
 def render_similarity(names: list[str]) -> None:

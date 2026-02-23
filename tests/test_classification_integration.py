@@ -227,7 +227,7 @@ class TestClassificationChainIntegration:
                     }
                     region = region_map.get(country, "International")
                     return region, confidence
-            except Exception:
+            except (ImportError, AttributeError, ValueError):
                 pass
             return None
 
@@ -673,7 +673,7 @@ class TestClassifyOriginsIntegration:
                     }
                     region = region_map.get(country, "International")
                     return region, confidence
-            except Exception:
+            except (ImportError, AttributeError, ValueError):
                 pass
             return None
 

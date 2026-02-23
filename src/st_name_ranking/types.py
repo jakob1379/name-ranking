@@ -16,6 +16,7 @@ class NameRecord(NamedTuple):
         gender: Gender classification (Male, Female, Unisex, or None)
         origin_region: Geographic origin region or None
         origin_confidence: Confidence score for origin classification (0-1)
+
     """
 
     id: int
@@ -31,6 +32,7 @@ class UnclassifiedName(NamedTuple):
     Attributes:
         id: Database ID of the name
         name: The actual name string
+
     """
 
     id: int
@@ -46,6 +48,7 @@ class DatabaseStats(NamedTuple):
         unclassified_names: Number of names without origin classification
         rated_names: Number of names with ratings
         origin_distribution: Dict mapping region -> count
+
     """
 
     total_names: int

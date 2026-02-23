@@ -4,7 +4,7 @@ Refactored version with modular imports.
 
 import json
 import logging
-import random
+import secrets
 import time
 from datetime import datetime
 
@@ -65,7 +65,7 @@ def main() -> None:
                     st.caption(
                         f"Classified: {classified_names} ({classified_names / total_names:.0%})",
                     )
-            except Exception:
+            except sqlite3.Error:
                 st.caption("Database stats unavailable")
 
         st.divider()
@@ -105,7 +105,8 @@ def main() -> None:
         # Gender Filtering
         st.subheader("Gender Filter")
         if "gender_filter" not in st.session_state:
-            st.session_state.gender_filter = random.choice(["Male", "Female"])  # noqa: S311
+            # Random initial gender for demo purposes
+            st.session_state.gender_filter = secrets.choice(["Male", "Female"])
 
         # Use pills for gender selection - modern, tab-like appearance
         gender_option = st.pills(
@@ -142,7 +143,7 @@ def main() -> None:
                 # Validate that saved origins are still available
                 saved_origins = [o for o in saved_origins if o in available_regions]
                 st.session_state.origin_filter = saved_origins
-            except Exception:
+            except json.JSONDecodeError:
                 # Default: empty list (show all regions)
                 st.session_state.origin_filter = []
 
@@ -163,7 +164,7 @@ def main() -> None:
                 json.dumps(selected_origins),
             )
             st.toast(
-                f"Filter: {selected_origins if selected_origins else 'All'}",
+                f"Filter: {selected_origins or 'All'}",
                 icon="ℹ️",
             )
             st.rerun()
@@ -224,7 +225,7 @@ def main() -> None:
                             file_name=f"name_ranker_{datetime.now().strftime('%Y%m%d_%H%M%S')}.db",
                             mime="application/x-sqlite3",
                         )
-                    except Exception as e:
+                    except (OSError, RuntimeError) as e:
                         st.error(f"Failed to export database: {e}")
             with col_import:
                 uploaded_file = st.file_uploader(
@@ -242,7 +243,7 @@ def main() -> None:
                                 database.import_database(uploaded_file.getvalue())
                                 st.success("Database imported successfully! Page will reload.")
                                 st.rerun()
-                            except Exception as e:
+                            except (OSError, ValueError, RuntimeError) as e:
                                 st.error(f"Failed to import database: {e}")
                     else:
                         st.button("Import Database", type="primary", disabled=True)
@@ -265,7 +266,7 @@ def main() -> None:
                 st.success(
                     f"Database has {total_names} names. Try reloading the page.",
                 )
-        except Exception:
+        except sqlite3.Error:
             st.warning("Unable to read database statistics.")
 
         return
@@ -275,7 +276,7 @@ def main() -> None:
     # Get current origin filter
     current_origins = st.session_state.get("origin_filter", [])
     # Empty list means no origin filtering (show all regions)
-    origins_to_filter = current_origins if current_origins else None
+    origins_to_filter = current_origins or None
 
     # Get filtered names using database with caching
     cache_key = f"filtered_names_{current_gender}_{tuple(sorted(current_origins)) if current_origins else 'all'}"
@@ -304,8 +305,11 @@ def main() -> None:
         db_init_time = (db_time - start_time) * 1000
         query_time = (filter_time - db_time) * 1000
         logger.debug(
-            f"Computed filtered names (cache miss): {len(filtered_names)} names, "
-            f"total={total_time:.1f}ms, db_init={db_init_time:.1f}ms, query={query_time:.1f}ms",
+            "Computed filtered names (cache miss): %d names, total=%.1fms, db_init=%.1fms, query=%.1fms",
+            len(filtered_names),
+            total_time,
+            db_init_time,
+            query_time,
         )
 
     if not filtered_names:
@@ -346,8 +350,8 @@ def main() -> None:
         loaded = json.loads(inclusions_json)
         if isinstance(loaded, dict):
             inclusions = loaded
-    except Exception as e:
-        logger.warning(f"Failed to parse inclusions JSON: {e}")
+    except json.JSONDecodeError as e:
+        logger.warning("Failed to parse inclusions JSON: %s", e)
 
     # Filter names: include names that are not explicitly excluded (default True)
     filtered_names_included = [
@@ -400,16 +404,16 @@ def main() -> None:
     # Log total execution time
     end_time = time.perf_counter()
     elapsed_ms = (end_time - start_time) * 1000
-    logger.debug(f"main() execution time: {elapsed_ms:.1f}ms (active tab: {st.session_state.active_tab})")
+    logger.debug("main() execution time: %.1fms (active tab: %s)", elapsed_ms, st.session_state.active_tab)
 
 
 if __name__ == "__main__":
     try:
         main()
-    except Exception as e:
+    except (RuntimeError, ValueError, OSError) as e:
         import traceback
 
-        print(f"Fatal error in main: {e}")
+        logger.error("Fatal error in main: %s", e)
         traceback.print_exc()
         # Try to show error in Streamlit if possible
         import sys

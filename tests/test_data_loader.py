@@ -1,5 +1,6 @@
 """Tests for st_name_ranking.data_loader module."""
 
+import sqlite3
 from unittest.mock import patch
 
 import pytest
@@ -114,7 +115,7 @@ class TestLoadRatings:
     @patch("st_name_ranking.data_loader.database.init_database")
     def test_load_ratings_database_error(self, mock_init):
         """Test load_ratings handles database errors."""
-        mock_init.side_effect = Exception("Database error")
+        mock_init.side_effect = sqlite3.Error("Database error")
         ratings = data_loader.load_ratings()
         assert ratings is None
 

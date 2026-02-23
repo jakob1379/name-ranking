@@ -3,6 +3,7 @@
 import logging
 import os
 import re
+import sqlite3
 
 import pandas as pd
 import streamlit as st
@@ -11,6 +12,11 @@ from st_name_ranking import database
 from st_name_ranking.database import INITIAL_SCORE, initialize_ratings
 
 logger = logging.getLogger(__name__)
+
+# Constants for validation and logging
+MIN_NAME_LENGTH = 2
+MAX_INVALID_NAME_LOG = 5
+LARGE_DATASET_THRESHOLD = 1000
 
 
 def is_valid_name(name: str) -> bool:
@@ -58,8 +64,8 @@ def is_valid_name(name: str) -> bool:
         if re.match(pattern, name_lower, re.IGNORECASE):
             return False
 
-    # Name should have at least 2 characters
-    if len(name_lower) < 2:
+    # Name should have at least MIN_NAME_LENGTH characters
+    if len(name_lower) < MIN_NAME_LENGTH:
         return False
 
     return True
@@ -72,7 +78,7 @@ def load_ratings() -> dict[str, float] | None:
     try:
         database.init_database()
         return database.get_ratings()
-    except Exception as e:
+    except sqlite3.Error as e:
         st.toast(
             f"Could not load ratings from database: {e}",
             icon="⚠️",
@@ -114,7 +120,7 @@ def save_ratings(
             icon="ℹ️",
         )
         return True
-    except Exception as e:
+    except sqlite3.Error as e:
         st.toast(
             f"Failed to save ratings to database: {e}",
             icon="❌",
@@ -179,7 +185,7 @@ def load_submodule_json() -> list[dict[str, str]]:
                 valid_items.append({"name": name, "gender": gender})
             else:
                 invalid_count += 1
-                if invalid_count <= 5:  # Log first few invalid names
+                if invalid_count <= MAX_INVALID_NAME_LOG:  # Log first few invalid names
                     st.toast(
                         f"Skipping invalid name entry: '{name}'",
                         icon="⚠️",
@@ -196,7 +202,7 @@ def load_submodule_json() -> list[dict[str, str]]:
             icon="✅",
         )
         return valid_items
-    except Exception as e:
+    except (FileNotFoundError, ValueError, RuntimeError) as e:
         st.toast(
             f"Failed to load submodule JSON: {e}",
             icon="❌",
@@ -250,14 +256,14 @@ def load_names_by_gender(
 
         # Log counts (but only if we have many names to avoid toast spam)
         total_names = sum(len(names) for names in gender_data.values())
-        if total_names > 1000:  # Only show toast for large datasets
+        if total_names > LARGE_DATASET_THRESHOLD:  # Only show toast for large datasets
             st.toast(
                 f"Loaded {total_names} names from database",
                 icon="✅",
             )
 
         return gender_data
-    except Exception as e:
+    except sqlite3.Error as e:
         st.toast(
             f"Failed to load names by gender from database: {e}",
             icon="❌",
@@ -287,11 +293,11 @@ def load_submodule_csv_fallback() -> list[str]:
                                 all_names.append(name)
                             else:
                                 invalid_count += 1
-                                if invalid_count <= 5:  # Log first few invalid names
-                                    st.toast(
-                                        f"Skipping invalid CSV entry: '{name}'",
-                                        icon="⚠️",
-                                    )
+                if invalid_count <= MAX_INVALID_NAME_LOG:  # Log first few invalid names
+                    st.toast(
+                        f"Skipping invalid CSV entry: '{name}'",
+                        icon="⚠️",
+                    )
             else:
                 st.toast(
                     f"Submodule CSV file not found: {file_path}",
@@ -318,7 +324,7 @@ def load_submodule_csv_fallback() -> list[str]:
             icon="✅",
         )
         return names
-    except Exception as e:
+    except OSError as e:
         st.toast(
             f"Failed to load from CSV fallback: {e}",
             icon="❌",

@@ -284,7 +284,7 @@ if __name__ == "__main__":
     except AssertionError as e:
         print_progress(f"PERFORMANCE TEST FAILED: {e}")
         sys.exit(1)
-    except Exception as e:
+    except (RuntimeError, ValueError, OSError) as e:
         print_progress(f"TEST ERROR: {e}")
         import traceback
 
