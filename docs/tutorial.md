@@ -1,42 +1,58 @@
----
-icon: lucide/book-open
----
-
 # Tutorial
 
-Learn how to use the Name Ranking application in this step-by-step tutorial,
-modeled after the excellent
-[Typer tutorial](https://typer.tiangolo.com/tutorial/) structure.
+Learn to use the Name Ranking application through hands-on examples.
 
-This tutorial covers everything from the simplest installation to advanced
-features, with clear explanations of how the application works and the theory
-behind the Bayesian preference model.
+This tutorial takes you from installation to advanced usage in **15 minutes**.
 
-## Quick Start
+## Prerequisites
 
-### The Simplest Example
+You need:
 
-Get the application running in 3 steps. First, ensure you have the prerequisites:
+- **Python 3.13+**
+- **Git**
+- [uv](https://github.com/astral-sh/uv) package manager
 
-- **Python 3.13+** (required)
-- **Git** (for submodule management)
-- **[uv](https://github.com/astral-sh/uv)** - fast Python package manager
+Verify your Python version:
 
 ```bash
-# Clone the repository with submodules
+$ python --version
+Python 3.13.0
+```
+
+## Installation
+
+### Step 1: Clone the Repository
+
+```bash
+# Clone with submodules to get the name dataset
 $ git clone --recurse-submodules https://github.com/yourusername/sort-names.git
 $ cd sort-names
+```
 
-# Install dependencies
+### Step 2: Install Dependencies
+
+```bash
+# Install all packages
 $ uv sync
+Resolved 87 packages in 0.42s
+Audited 87 packages in 0.01s
+```
 
-# Initialize the database
+### Step 3: Initialize the Database
+
+```bash
+# Create database schema and load names
 $ uv run name-db init
 Database initialized successfully.
-Synced 44,127 names from dataset.
+Synced 4,847 names from submodule.
+```
 
-# Start the application
-$ uv run streamlit run src/st_name_ranking/main.py
+The database now contains **4,847 Danish names**.
+
+### Step 4: Start the Application
+
+```bash
+$ uv run streamlit run st_name_ranking/main.py
 
   You can now view your Streamlit app in your browser.
 
@@ -44,142 +60,117 @@ $ uv run streamlit run src/st_name_ranking/main.py
   Network URL: http://192.168.1.100:8501
 ```
 
-The application will open in your default web browser at
-`http://localhost:8501`.
+Your browser opens automatically. The application loads in **2 seconds**.
 
-> **Tip**: If you see "No names loaded in the database", click **Sync Names** in
-> the sidebar. This loads names from the included dataset.
+!!! note "No Automatic Sync"
+    The application does not sync names automatically on startup. You ran `name-db init` to load names via CLI. You can also click **Sync Names** in the sidebar.
 
-## First Steps
+## First Comparison
 
-### What You'll See
+### What You See
 
-When you first open the application, you'll see:
+The **Tournament** tab displays:
 
-1. **Main Title**: "Name Preference Ranker"
-2. **Sidebar**: Contains database management, filters, and controls
-3. **Main Area**: Empty initially, will show tournament interface
+1. **Two names** side-by-side (selected by **Thompson sampling**)
+2. **Four voting buttons**:
+   - **← Prefer Left**: You like the left name more
+   - **Draw**: Both names are equal
+   - **Down**: You dislike both names
+   - **Prefer Right →**: You like the right name more
+3. **Top 10 rankings**: Current best names based on your preferences
+4. **Comparison counter**: How many votes you have made
 
-### Syncing Names
+### Make Your First Vote
 
-The application needs names to work with. Click the **Sync Names** button in the
-sidebar:
+Click **← Prefer Left** or press the **left arrow key**.
 
-```
-Sidebar → Database Management → Sync Names
-```
+The application records your preference and displays two new names.
 
-You should see a toast notification: "Loaded 44,127 total names" for the full
-Danish name dataset.
-
-### Understanding the Interface
-
-The application has two main tabs:
-
-1. **Tournament**: Compare names side-by-side
-2. **Similarity Search**: Find names similar to a target
-
-> **Tip**: Names are loaded from a git submodule containing official Danish name
-> data. The application tracks which names have been processed to avoid
-> redundant work.
-
-## Tournament Mode
-
-### What is a Name Tournament?
-
-The tournament interface shows two names side-by-side. Your job is simple:
-choose which name you prefer, or mark them as equal.
-
-Think of it like a sports tournament bracket, but for names!
-
-### Your First Comparison
-
-When you open the Tournament tab, you'll see:
-
-```
-Left Side: [Name A]
-Right Side: [Name B]
-
-Buttons: ← Prefer Left | Draw | Down | Prefer Right →
-```
-
-#### The Four Voting Options
-
-1. **← Prefer Left**: You like the left name more than the right name
-2. **Prefer Right →**: You like the right name more than the left name
-3. **Draw** (🤝): Both names are equally good (or equally acceptable)
-4. **Down** (👎): **Dislike both names** - neither is appealing
-
-> **Tip**: Use "Draw" when you're indifferent between two names you like, and "Down" when you actively dislike both options. The system learns differently from each choice.
-
-**Try it now**: Click "Prefer Left" for the name on the left, or use the **left
-arrow key** on your keyboard.
+!!! tip "Keyboard Shortcuts"
+    Use arrow keys for speed:
+    - **←** Prefer left
+    - **→** Prefer right
+    - **↑** Draw (equal)
+    - **↓** Dislike both
 
 ### What Happens Behind the Scenes
 
-When you make a choice:
+When you vote, the system:
 
-1. **Record Comparison**: Your preference is stored in the `comparisons` table with one of four values:
-   - `-1`: Prefer left name (name_a > name_b)
-   - `1`: Prefer right name (name_b > name_a)
-   - `0`: Draw (both equally preferred)
-   - `2`: Down (dislike both names)
-
-   > **Note**: The database schema automatically migrates to support the "down" preference for existing installations.
-
-2. **Update Model**: The Bradley-Terry Bayesian model updates based on your preference:
-   - For preferences `-1`/`1`: Updates relative strength between names
-   - For draws (`0`): Treats names as equal in preference
-   - For downs (`2`): Treats both names as less preferred than a neutral baseline
-
-3. **Select New Pair**: Thompson sampling selects the next pair that maximizes information gain
-4. **Show Progress**: The comparison counter increments and ratings update
+1. **Records the comparison** in **SQLite** with your preference (`-1`, `0`, `1`, or `2`)
+2. **Updates the Bayesian model** using **Laplace approximation**
+3. **Syncs ratings** from model weights to preference scores
+4. **Selects new names** using **Thompson sampling** for maximum information gain
 
 ```python
-# Pseudo-code: Simplified version of the voting process
-def process_vote(name_a: str, name_b: str, preference: int) -> tuple[str, str]:
+from typing import Tuple
+
+# Pseudo-code showing the voting process
+def process_vote(name_a: str, name_b: str, preference: int) -> Tuple[str, str]:
     """Process a user vote and return the next name pair."""
-    # Store comparison with preference value
+    # Store comparison in database
     database.record_comparison(name_a, name_b, preference)
-
-    # Update Bayesian model (handles all four preference types)
+    
+    # Update Bayesian model (Bradley-Terry with Laplace approximation)
     model.update_based_on_preference(name_a, name_b, preference)
-
+    
     # Sync ratings from updated model weights
-    ratings = model.compute_ratings()
+    ratings: dict = model.compute_ratings()
     database.update_ratings(ratings)
-
-    # Select new names using active learning
-    new_pair = select_next_names()
+    
+    # Select new names using Thompson sampling
+    new_pair: Tuple[str, str] = select_next_names()
     return new_pair
 ```
 
-### Keyboard Shortcuts
+## Understanding the Four Vote Types
 
-For rapid voting, use these keyboard shortcuts:
+The application learns differently from each vote type:
 
-- **Left Arrow (←)**: Prefer the left name
-- **Right Arrow (→)**: Prefer the right name
-- **Up Arrow (↑)**: Mark as a draw (both equally preferred)
-- **Down Arrow (↓)**: Dislike both names
-- **Space**: Show similarity between current names
+### Prefer Left (-1)
 
-> **Tip**: The system uses **active learning** to select names that will teach
-> it the most about your preferences. Early on, it explores broadly; as it
-> learns, it focuses on names you're likely to have strong opinions about.
+You like the left name more than the right.
 
-## Understanding Preferences
+The model learns: `preference(left) > preference(right)`
 
-### What is Bayesian Preference Learning?
+### Prefer Right (1)
 
-The application doesn't just count votes—it learns a **mathematical model** of
-your preferences. This model understands that names have features (phonetic,
-linguistic, metadata) and that you prefer certain types of names.
+You like the right name more than the left.
 
-#### The Bradley-Terry Model
+The model learns: `preference(right) > preference(left)`
 
-The core mathematical model is the **Bradley-Terry model**, which estimates the
-probability that you'll prefer name A over name B:
+### Draw (0)
+
+You like both names equally (or dislike both equally).
+
+The model learns: `preference(left) == preference(right)`
+
+### Down (2)
+
+You actively dislike both names.
+
+The model learns: `preference(left) < neutral` and `preference(right) < neutral`
+
+!!! warning "Down Votes"
+    **Down** votes exclude names from positive rankings. Use this when neither name appeals to you.
+
+## How the Model Learns
+
+The application does not count votes. It learns a **mathematical model** of your preferences.
+
+### Feature Extraction
+
+Each name becomes a **25-dimensional feature vector**:
+
+| Feature Category | Examples |
+|------------------|----------|
+| **Phonetic** | Double Metaphone codes (how the name sounds) |
+| **Linguistic** | Syllable count, vowel ratio, name length |
+| **Metadata** | Gender, origin region, classification confidence |
+
+### Bradley-Terry Model
+
+The model estimates the probability you prefer name A over name B:
 
 ```
 P(A ≻ B) = σ(w·φ(A) - w·φ(B))
@@ -188,81 +179,74 @@ P(A ≻ B) = σ(w·φ(A) - w·φ(B))
 Where:
 
 - `σ(x)` is the logistic function: `1 / (1 + exp(-x))`
-- `φ(name)` is a **feature vector** representing the name
-- `w` is a **weight vector** learned from your comparisons
+- `φ(name)` is the **feature vector** for a name
+- `w` is the **weight vector** learned from your comparisons
 
-#### Name Features
+### Thompson Sampling
 
-Each name is converted to a 25-dimensional feature vector including:
+The system uses **Thompson sampling** to select name pairs:
 
-1. **Phonetic Features**: Double Metaphone codes (how the name sounds)
-2. **Linguistic Features**: Syllable count, vowel ratio, length
-3. **Metadata Features**: Gender, origin region, classification confidence
+1. **Sample weights** from the current Bayesian posterior: `w̃ ~ N(μ, Σ)`
+2. **Compute utilities** for all names: `u(name) = w̃·φ(name)`
+3. **Select informative pairs** that maximize expected information gain
+4. **Balance exploration and exploitation**
 
-### Active Learning with Thompson Sampling
-
-The system doesn't show random names. It uses **Thompson sampling** to balance:
-
-- **Exploitation**: Show names where it's confident you have a preference
-- **Exploration**: Show names it's uncertain about to learn more
-- **Diversity**: Ensure you see different types of names
-
-```python
-# Pseudo-code: Simplified Thompson sampling
-def select_next_names() -> tuple[str, str]:
-    """Select the next pair of names using Thompson sampling."""
-    # Sample weights from current Bayesian posterior
-    sampled_weights = sample_from_posterior(model)
-
-    # Compute preference scores for all names
-    scores = compute_scores(sampled_weights, all_names)
-
-    # Pick names that maximize information gain
-    return select_informative_pair(scores, model.uncertainty)
-```
-
-> **Technical Detail**: The model uses **Laplace approximation** for efficient
-> Bayesian updates. After each comparison, it updates a Gaussian posterior over
-> the weight vector `w`.
+After **20 comparisons**, the model understands your basic preferences. After **50 comparisons**, it predicts your choices accurately.
 
 ## Similarity Search
 
-### What is Similarity Search?
+Find names similar to one you like.
 
-Sometimes you like a name and want to find similar ones. The similarity search
-tab lets you find names similar to a target using three different methods.
+### Open Similarity Search
 
-### The Three Similarity Methods
+Click the **Similarity Search** tab.
+
+### Enter a Target Name
+
+Type a name in the search box, for example:
+
+```
+Anna
+```
+
+### Select a Method
+
+Choose from three similarity methods:
 
 #### 1. String Similarity (Levenshtein Distance)
 
-- **What it does**: Measures edit distance between names
-- **Good for**: Finding spelling variations
-- **Example**: "Anna" → "Anne", "Anya", "Ana"
+Measures edit distance between names.
+
+Good for: Finding spelling variations
+
+Example: "Anna" → "Anne", "Anya", "Ana"
 
 #### 2. Vector Similarity (LLM Embeddings)
 
-- **What it does**: Uses semantic embeddings to find conceptually similar names
-- **Good for**: Finding names with similar meanings or associations
-- **Example**: "Knight" → "Warrior", "Guard", "Protector"
+Uses **semantic embeddings** for conceptual similarity.
+
+Good for: Finding names with similar meanings
+
+Example: "River" → "Brook", "Lake", "Stream"
 
 #### 3. Phonetic Similarity (Double Metaphone)
 
-- **What it does**: Matches names that sound similar when spoken
-- **Good for**: Finding names with similar pronunciation
-- **Example**: "Smith" → "Smythe", "Schmidt", "Smit"
+Matches names that sound alike.
 
-### Using Similarity Search
+Good for: Finding similar pronunciations
 
-1. **Enter a target name** in the search box
-2. **Select a similarity method** (string, vector, or phonetic)
-3. **Adjust sliders** for number of results and similarity threshold
-4. **Explore results** - click on similar names to see details
+Example: "Smith" → "Smythe", "Schmidt"
+
+### View Results
+
+Adjust the **number of results** and **similarity threshold** sliders.
+
+The application displays similar names with similarity scores.
 
 ```python
 from typing import List
 
-# Example similarity search
+# Example: Find phonetically similar names
 similar: List[str] = find_similar_names(
     target="Anna",
     method="phonetic",
@@ -273,45 +257,51 @@ print(similar)
 # Output: ["Anne", "Anya", "Ana", "Hanna", "Annika", ...]
 ```
 
-### When to Use Each Method
-
-- **Looking for variants**: Use **string similarity** (e.g., "Catherine" vs
-  "Katherine")
-- **Exploring themes**: Use **vector similarity** (e.g., "River" matches
-  "Brook", "Lake")
-- **Matching sound**: Use **phonetic similarity** (e.g., "Sean" vs "Shawn")
-
-> **Tip**: The similarity search is particularly useful when you find a name you
-> like and want to explore alternatives with similar characteristics.
-
 ## Origin Classification
 
-### What is Origin Classification?
+Classify names by nationality and geographic region.
 
-The application predicts name nationalities using the
-`ethnidata` library, then maps countries to geographic regions.
+### Run Classification
 
-### How It Works
-
-1. **Batch Processing**: Names are classified in batches of 100
-2. **Country Prediction**: `ethnidata` predicts the most likely nationality
-3. **Region Mapping**: Countries are mapped to regions (Nordic, European, Asian,
-   etc.)
-4. **Confidence Scoring**: Each prediction includes a probability estimate
-5. **Caching**: Results are stored in the database for future use
-
-### Using Origin Classification
-
-In the sidebar under "Database Management":
+In the sidebar under **Database Management**:
 
 1. Click **Classify Origins**
-2. Watch the progress bar as names are processed
-3. Use the **Origin Filter** to explore names by region
+2. The application processes **100 names at a time**
+3. Watch the progress bar
+
+Or use the CLI for batch processing:
+
+```bash
+# Classify 100 names
+$ uv run name-db process --limit 100
+Processing 100 names...
+Classified: 97 Nordic, 3 European
+Completed in 3.2s
+```
+
+### Geographic Regions
+
+Names map to these regions:
+
+- **Nordic**: Denmark, Sweden, Norway, Finland, Iceland
+- **European**: Germany, France, Italy, Spain, etc.
+- **Asian**: China, Japan, Korea, India, etc.
+- **Middle Eastern**: Arabic, Persian, Turkish names
+- **African**: Names from African countries
+- **American**: English, Spanish, Portuguese names from the Americas
+
+### Filter by Origin
+
+After classification, use the **Origin Filter** in the sidebar:
+
+1. Select one or more regions
+2. The tournament shows only names from those regions
+3. Rankings update to show filtered results
 
 ```python
 from typing import Dict, Union
 
-# Example classification
+# Example classification result
 result: Dict[str, Union[str, float]] = classify_name_origin("Lars")
 print(result)
 # Output:
@@ -322,163 +312,176 @@ print(result)
 # }
 ```
 
-### Geographic Regions
+## Filtering System
 
-Names are mapped to these regions:
+Focus on specific types of names.
 
-- **Nordic**: Denmark, Sweden, Norway, Finland, Iceland
-- **European**: Germany, France, Italy, Spain, etc.
-- **Asian**: China, Japan, Korea, India, etc.
-- **Middle Eastern**: Arabic, Persian, Turkish names
-- **African**: Names from various African countries
-- **American**: English, Spanish, Portuguese names from the Americas
+### Gender Filter
 
-> **Tip**: Origin classification runs in the background. You can start it and
-> continue voting while it processes. Classified names enable the origin filter
-> in the sidebar.
+In the sidebar:
 
-## Advanced Features
-
-### Filtering System
-
-The sidebar includes filters to focus on specific types of names:
-
-#### Gender Filter
-
-- **All**: Show all names regardless of gender
+- **All**: Show all names
 - **Male**: Only masculine names
 - **Female**: Only feminine names
 - **Unisex**: Names used for both genders
 
-#### Origin Filter
+### Origin Filter
 
-- Select one or more geographic regions
-- Empty selection shows all regions
-- Only available after origin classification
+Select one or more geographic regions.
 
-> **Tip**: Filters are persisted between sessions. Your filter settings are
-> saved in the database.
+Empty selection shows all regions.
 
-### Rating Management
+!!! note "Filter Persistence"
+    Filters persist between sessions. Your settings save to the database.
 
-#### Save Ratings
+## CLI Reference
 
-Export your preferences as JSON for backup or analysis:
+The **Typer** CLI provides database management:
 
-```
-Sidebar → Export → Export Ratings as JSON
-```
-
-#### Reset Ratings
-
-Start over with fresh preferences:
-
-```
-Sidebar → Ratings Management → Reset Ratings
-```
-
-**Warning**: This cannot be undone! All your comparison history will be lost.
-
-#### Progress Tracking
-
-The tournament interface shows:
-
-- Total comparisons made
-- Names compared in current session
-- Top 10 ranked names based on current preferences
-
-### Database Management (CLI)
-
-For advanced users, there's a command-line interface:
+### Initialize Database
 
 ```bash
-# Initialize database (schema + sync names)
 $ uv run name-db init
-
-# Classify origins (100 names at a time)
-$ uv run name-db process --limit 100
-
-# Show database statistics
-$ uv run name-db stats
-Total names: 44,127
-Classified origins: 12,450 (28%)
-Comparisons made: 156
-
-# Check model status
-$ uv run name-db model-status
-Model: Trained
-Features: 25 dimensions
-Last update: 2 minutes ago
-
-# Reset the active learning model
-$ uv run name-db model-reset
-Model weights reset to uniform.
-All ratings cleared.
+Database initialized successfully.
+Synced 4,847 names from submodule.
 ```
+
+### Process Origins
+
+```bash
+# Classify all unclassified names
+$ uv run name-db process
+Processing 4,847 names...
+Classified: 4,623 Nordic, 224 European
+Completed in 87.4s
+
+# Classify with custom batch size
+$ uv run name-db process --batch-size 50
+Processing 50 names...
+Completed in 1.8s
+```
+
+### View Statistics
+
+```bash
+$ uv run name-db stats
+Total names: 4,847
+Classified: 4,623 (95.4%)
+Comparisons: 1,247
+```
+
+### Check Model Status
+
+```bash
+$ uv run name-db model-status
+Model trained: Yes
+Training samples: 1,247
+Feature dimensions: 25
+```
+
+### Reset Model
+
+```bash
+$ uv run name-db model-reset
+Model state cleared successfully.
+All ratings reset to default.
+```
+
+## Rating Management
+
+### Export Ratings
+
+Save your preferences as JSON:
+
+1. Open the sidebar
+2. Click **Export Ratings as JSON**
+3. Save the file
+
+### Reset Ratings
+
+Start fresh:
+
+1. Open the sidebar
+2. Click **Reset Ratings**
+3. Confirm the action
+
+!!! warning "Reset is Permanent"
+    Resetting deletes all comparison history. This action cannot be undone.
 
 ## Troubleshooting
 
-### Common Issues and Solutions
+### "No names loaded in the database"
 
-#### "No names loaded in the database"
-
-**Solution**: Click **Sync Names** in the sidebar. If that doesn't work:
-
-```bash
-# Ensure submodule is initialized
-$ git submodule update --init
-
-# Manually sync names
-$ uv run name-db init
-```
-
-#### "Failed to classify origins"
+**Cause**: Names not synced from submodule.
 
 **Solution**:
 
 ```bash
-# Ensure ethnidata is installed
+# Sync via CLI
+$ uv run name-db init
+Database initialized successfully.
+Synced 4,847 names from submodule.
+```
+
+Or click **Sync Names** in the sidebar.
+
+### "Failed to classify origins"
+
+**Cause**: **ethnidata** library not installed or no internet connection.
+
+**Solution**:
+
+```bash
+# Verify ethnidata is installed
 $ uv add ethnidata
 
 # Check internet connection (required for model download)
 # Try with a smaller batch
 $ uv run name-db process --limit 10
+Processing 10 names...
+Completed in 0.8s
 ```
 
-#### "Model not updating"
+### "Model not updating"
 
-**Solution**: The model needs data to learn!
+**Cause**: Not enough comparisons for meaningful learning.
 
-- Make at least **20 comparisons** before expecting meaningful updates
-- Try different types of names (use filters to explore)
+**Solution**:
+
+- Make at least **20 comparisons**
+- Try different name types using filters
 - Reset the model if needed: `uv run name-db model-reset`
 
-#### "Application running slowly"
+### "Application running slowly"
 
 **Solution**:
 
 - Restart the application to clear caches
-- Use filters to reduce the number of active names
-- The first run is slowest (feature extraction cache warms up)
-
-### Getting Help
-
-- Check the [Active Learning System](active_learning.md) for theory details
-- Review the [System Architecture](architecture.md) for technical understanding
-- Look for error details in browser console (F12 → Console) or terminal logs
-- The application logs to `streamlit.log` in the project directory
+- Use filters to reduce active names
+- First run is slowest (feature cache warms up)
 
 ## Next Steps
 
-Now that you understand the basics:
+You now understand:
 
-1. **Explore the Theory**: Read about the
-   [Bayesian preference model](active_learning.md) in detail
-2. **Understand the Architecture**: Learn about the
-   [system design](architecture.md) and components
-3. **Contribute**: Check the development guide for contributing to the project
-4. **Extend**: Consider adding new features or customizing the model for your
-   needs
+1. **Installation and setup**
+2. **Tournament voting** with four preference types
+3. **Bayesian preference learning** and **Thompson sampling**
+4. **Similarity search** with three methods
+5. **Origin classification** and filtering
+6. **CLI management** and troubleshooting
 
-Remember: The more comparisons you make, the better the model understands your
-preferences. Happy naming! 🎉
+### Learn More
+
+- [Active Learning System](active_learning.md) - Deep dive into **Bayesian preference modeling**
+- [System Architecture](architecture.md) - Component design and data flow
+- [Features](features.md) - Complete feature reference
+
+### Practice
+
+1. Make **50 comparisons** to train the model
+2. Use **Similarity Search** to find variants of names you like
+3. Run **Origin Classification** and filter by region
+4. Export your ratings for backup
+
+The more comparisons you make, the better the model understands your preferences.
