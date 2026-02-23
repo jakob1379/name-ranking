@@ -6,6 +6,7 @@ import numpy as np
 import pytest
 
 from st_name_ranking import utils
+from st_name_ranking.types import NamePair
 
 
 class TestPullSubmoduleUpdates:
@@ -305,11 +306,11 @@ class TestSelectCandidateBatch:
 
         # Mock model
         mock_model = MagicMock()
-        # select_top_k_pairs returns list of (idx_a, idx_b, name_a, name_b)
+        # select_top_k_pairs returns list of NamePair
         mock_model.select_top_k_pairs.return_value = [
-            (0, 1, "Anna", "Peter"),
-            (2, 3, "Maria", "John"),
-            (4, 0, "Eva", "Anna"),
+            NamePair(idx_a=0, idx_b=1, name_a="Anna", name_b="Peter"),
+            NamePair(idx_a=2, idx_b=3, name_a="Maria", name_b="John"),
+            NamePair(idx_a=4, idx_b=0, name_a="Eva", name_b="Anna"),
         ]
         mock_get_model.return_value = mock_model
 
@@ -334,7 +335,7 @@ class TestSelectCandidateBatch:
         mock_get_names_features.return_value = mock_features
 
         mock_model = MagicMock()
-        mock_model.select_top_k_pairs.return_value = [(0, 1, "Anna", "Peter")]
+        mock_model.select_top_k_pairs.return_value = [NamePair(idx_a=0, idx_b=1, name_a="Anna", name_b="Peter")]
         mock_get_model.return_value = mock_model
 
         pairs = utils.select_candidate_batch(names, features=None, batch_size=2)
@@ -837,7 +838,11 @@ class TestUpdateRatingsFromModel:
     @patch("st_name_ranking.utils.database.get_connection")
     @patch("st_name_ranking.utils.get_active_learning_model")
     def test_empty_names(
-        self, mock_get_model, mock_get_connection, mock_get_names_features, mock_update_ratings_batch_values
+        self,
+        mock_get_model,
+        mock_get_connection,
+        mock_get_names_features,
+        mock_update_ratings_batch_values,
     ):
         """Test when no names in database."""
         mock_conn = MagicMock()
@@ -860,7 +865,11 @@ class TestUpdateRatingsFromModel:
     @patch("st_name_ranking.utils.database.get_connection")
     @patch("st_name_ranking.utils.get_active_learning_model")
     def test_exception_handling(
-        self, mock_get_model, mock_get_connection, mock_get_names_features, mock_update_ratings_batch_values
+        self,
+        mock_get_model,
+        mock_get_connection,
+        mock_get_names_features,
+        mock_update_ratings_batch_values,
     ):
         """Test exception is caught and logged (no crash)."""
         mock_conn = MagicMock()

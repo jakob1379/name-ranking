@@ -12,6 +12,7 @@ from st_name_ranking.data_loader import initialize_or_load_ratings
 from st_name_ranking.features import FeatureExtractor
 from st_name_ranking.model import BradleyTerryModel, initialize_model_if_needed
 from st_name_ranking.phonetic_similarity import phonetic_similarity
+from st_name_ranking.types import NamePair
 
 logger = logging.getLogger(__name__)
 
@@ -68,8 +69,8 @@ def get_names_features(names: list[str]) -> np.ndarray:
 
     # Get name details from database in batch
     details = database.get_name_details_batch(names)
-    genders = [g for g, _ in details]
-    origins = [o for _, o in details]
+    genders = [d.gender for d in details]
+    origins = [d.origin_region for d in details]
 
     return extractor.batch_extract(names, genders, origins)
 
@@ -246,11 +247,11 @@ def select_candidates(
             sampled_features = get_names_features(sampled)
 
         # Use model's Thompson sampling for pair selection
-        idx_a, idx_b, name_a, name_b = model.select_pair(
+        pair = model.select_pair(
             sampled_features,
             sampled,
         )
-        return name_a, name_b
+        return pair.name_a, pair.name_b
     except Exception as e:
         logger.warning(
             f"Active learning pair selection failed: {e}. Falling back to basic selection.",
@@ -296,7 +297,7 @@ def select_candidate_batch(
             k=batch_size,
         )
         # Convert to list of (name_a, name_b)
-        return [(name_a, name_b) for _, _, name_a, name_b in pairs]
+        return [(pair.name_a, pair.name_b) for pair in pairs]
     except Exception as e:
         logger.warning(
             f"Active learning batch selection failed: {e}. Falling back to single pair selection.",

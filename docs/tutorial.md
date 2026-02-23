@@ -100,7 +100,7 @@ Buttons: ← Prefer Left | Draw | Down | Prefer Right →
 #### The Four Voting Options
 
 1. **← Prefer Left**: You like the left name more than the right name
-2. **Prefer Right →**: You like the right name more than the left name  
+2. **Prefer Right →**: You like the right name more than the left name
 3. **Draw** (🤝): Both names are equally good (or equally acceptable)
 4. **Down** (👎): **Dislike both names** - neither is appealing
 
@@ -115,10 +115,10 @@ When you make a choice:
 
 1. **Record Comparison**: Your preference is stored in the `comparisons` table with one of four values:
    - `-1`: Prefer left name (name_a > name_b)
-   - `1`: Prefer right name (name_b > name_a)  
+   - `1`: Prefer right name (name_b > name_a)
    - `0`: Draw (both equally preferred)
    - `2`: Down (dislike both names)
-   
+
    > **Note**: The database schema automatically migrates to support the "down" preference for existing installations.
 
 2. **Update Model**: The Bradley-Terry Bayesian model updates based on your preference:
@@ -134,14 +134,14 @@ When you make a choice:
 def process_vote(name_a, name_b, preference):
     # Store comparison with preference value
     database.record_comparison(name_a, name_b, preference)
-    
+
     # Update Bayesian model (handles all four preference types)
     model.update_based_on_preference(name_a, name_b, preference)
-    
+
     # Sync ratings from updated model weights
     ratings = model.compute_ratings()
     database.update_ratings(ratings)
-    
+
     # Select new names using active learning
     new_pair = select_next_names()
     return new_pair
@@ -152,7 +152,7 @@ def process_vote(name_a, name_b, preference):
 For rapid voting, use these keyboard shortcuts:
 
 - **Left Arrow (←)**: Prefer the left name
-- **Right Arrow (→)**: Prefer the right name  
+- **Right Arrow (→)**: Prefer the right name
 - **Up Arrow (↑)**: Mark as a draw (both equally preferred)
 - **Down Arrow (↓)**: Dislike both names
 - **Space**: Show similarity between current names

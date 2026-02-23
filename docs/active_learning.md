@@ -140,7 +140,7 @@ def initialize_model(feature_dim: int) -> ModelState:
 After observing preference `y ∈ {-1, 0, 1, 2}` for names A and B:
 
 - `y = -1`: Prefer name A over B
-- `y = 1`: Prefer name B over A  
+- `y = 1`: Prefer name B over A
 - `y = 0`: Draw (both equally preferred)
 - `y = 2`: Down (dislike both names, treated as two comparisons against neutral baseline)
 

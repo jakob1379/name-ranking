@@ -14,12 +14,13 @@ from functools import lru_cache
 import numpy as np
 
 from st_name_ranking.database import get_connection, get_phonetic_codes_batch
+from st_name_ranking.types import NamePair, PhoneticCodes
 
 logger = logging.getLogger(__name__)
 
 
 @lru_cache(maxsize=128)
-def _get_phonetic_codes_cached(names_tuple: tuple[str, ...]) -> dict[str, tuple[str, str]]:
+def _get_phonetic_codes_cached(names_tuple: tuple[str, ...]) -> dict[str, PhoneticCodes]:
     """Cached version of get_phonetic_codes_batch.
 
     Uses tuple for hashability with LRU cache.
@@ -41,8 +42,8 @@ def _group_names_by_phonetic(names: list[str]) -> dict[str, list[int]]:
     # Group by primary code
     clusters: dict[str, list[int]] = {}
     for idx, name in enumerate(names):
-        primary, _ = phonetic_map.get(name, ("", ""))
-        primary = primary or ""  # Handle None/empty
+        codes = phonetic_map.get(name, PhoneticCodes(primary="", secondary=""))
+        primary = codes.primary or ""  # Handle None/empty
         clusters.setdefault(primary, []).append(idx)
 
     return clusters
@@ -305,7 +306,7 @@ class BradleyTerryModel:
         self,
         features: np.ndarray,
         names: list[str],
-    ) -> tuple[int, int, str, str]:
+    ) -> NamePair:
         """Select pair for active learning using Thompson sampling.
 
         Strategy: Sample utilities, then select pair from different phonetic
@@ -317,7 +318,7 @@ class BradleyTerryModel:
             names: List of names corresponding to rows
 
         Returns:
-            (idx_a, idx_b, name_a, name_b)
+            NamePair with idx_a, idx_b, name_a, name_b
 
         """
         n = len(names)
@@ -350,7 +351,7 @@ class BradleyTerryModel:
 
         if len(idx_a) == 0:
             # Fallback: first two names
-            return 0, 1, names[0], names[1]
+            return NamePair(idx_a=0, idx_b=1, name_a=names[0], name_b=names[1])
 
         # Compute acquisition score: uncertainty + diversity bonus
         # Vectorized computation for all candidate pairs
@@ -371,17 +372,17 @@ class BradleyTerryModel:
         i = int(idx_a[best_idx])
         j = int(idx_b[best_idx])
 
-        return i, j, names[i], names[j]
+        return NamePair(idx_a=i, idx_b=j, name_a=names[i], name_b=names[j])
 
     def select_top_k_pairs(
         self,
         features: np.ndarray,
         names: list[str],
         k: int = 3,
-    ) -> list[tuple[int, int, str, str]]:
+    ) -> list[NamePair]:
         """Select top K pairs for active learning using Thompson sampling.
         Prioritizes pairs from different phonetic clusters for diversity.
-        Returns list of (idx_a, idx_b, name_a, name_b) for the top K pairs.
+        Returns list of NamePair for the top K pairs.
         """
         n = len(names)
         if n < 2:
@@ -433,7 +434,7 @@ class BradleyTerryModel:
 
         if len(idx_a) == 0:
             # Fallback: first two names repeated
-            return [(0, 1, names[0], names[1]) for _ in range(k)]
+            return [NamePair(idx_a=0, idx_b=1, name_a=names[0], name_b=names[1]) for _ in range(k)]
 
         # Vectorized computation for all candidate pairs
         diff = features[idx_a] - features[idx_b]  # (m, d)
@@ -456,8 +457,8 @@ class BradleyTerryModel:
             top_indices = top_indices[np.argsort(score[top_indices])[::-1]]
 
         # Deduplicate pairs (by normalized index tuple)
-        pairs_seen = set()
-        result = []
+        pairs_seen: set[tuple[int, int]] = set()
+        result: list[NamePair] = []
         for idx in top_indices:
             i = int(idx_a[idx])
             j = int(idx_b[idx])
@@ -466,7 +467,7 @@ class BradleyTerryModel:
             if pair in pairs_seen:
                 continue
             pairs_seen.add(pair)
-            result.append((i, j, names[i], names[j]))
+            result.append(NamePair(idx_a=i, idx_b=j, name_a=names[i], name_b=names[j]))
             if len(result) >= k:
                 break
 
@@ -483,12 +484,12 @@ class BradleyTerryModel:
             if len(available_pairs) >= needed:
                 # Take the first 'needed' pairs (they're already in deterministic order)
                 for i, j in available_pairs[:needed]:
-                    result.append((i, j, names[i], names[j]))
+                    result.append(NamePair(idx_a=i, idx_b=j, name_a=names[i], name_b=names[j]))
             else:
                 # Not enough unique pairs - fill with (0, 1) duplicates
                 # This only happens when n=2 and k>1
                 while len(result) < k:
-                    result.append((0, 1, names[0], names[1]))
+                    result.append(NamePair(idx_a=0, idx_b=1, name_a=names[0], name_b=names[1]))
 
         return result
 

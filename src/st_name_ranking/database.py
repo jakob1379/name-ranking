@@ -15,9 +15,17 @@ import sqlite3
 import tempfile
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any
 
 from metaphone import doublemetaphone
+
+from st_name_ranking.types import (
+    DatabaseStats,
+    NameDetails,
+    PhoneticCodes,
+    PreferenceStats,
+    SourceVersion,
+    UnclassifiedName,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -626,7 +634,7 @@ def sync_names_with_submodule(submodule_path: Path = Path("godkendtefornavne")):
     return inserted_count
 
 
-def get_latest_submodule_version() -> dict[str, Any] | None:
+def get_latest_submodule_version() -> SourceVersion | None:
     """Get the latest submodule version (commit hash) from source_versions."""
     with get_connection() as conn:
         cursor = conn.execute(
@@ -634,7 +642,7 @@ def get_latest_submodule_version() -> dict[str, Any] | None:
         )
         row = cursor.fetchone()
         if row:
-            return {"commit_hash": row[0]}
+            return SourceVersion(commit_hash=row[0])
         return None
 
 
@@ -648,7 +656,7 @@ def update_submodule_version(commit_hash: str, names_count: int):
         )
 
 
-def get_unclassified_names(limit: int | None = None) -> list[dict[str, Any]]:
+def get_unclassified_names(limit: int | None = None) -> list[UnclassifiedName]:
     """Get names that haven't been classified with origin region."""
     with get_connection() as conn:
         query = """
@@ -660,7 +668,7 @@ def get_unclassified_names(limit: int | None = None) -> list[dict[str, Any]]:
             query += f" LIMIT {limit}"
 
         cursor = conn.execute(query)
-        return [dict(row) for row in cursor.fetchall()]
+        return [UnclassifiedName(id=row[0], name=row[1]) for row in cursor.fetchall()]
 
 
 def update_name_origin(name_id: int, region: str, confidence: float):
@@ -1032,7 +1040,7 @@ def load_user_setting(key: str, default: str = "") -> str:
         return row[0] if row else default
 
 
-def get_stats() -> dict[str, Any]:
+def get_stats() -> DatabaseStats:
     """Get database statistics."""
     with get_connection() as conn:
         total_names = conn.execute("SELECT COUNT(*) FROM names").fetchone()[0]
@@ -1058,13 +1066,13 @@ def get_stats() -> dict[str, Any]:
 
         unclassified_names = total_names - classified_names
 
-        return {
-            "total_names": total_names,
-            "classified_names": classified_names,
-            "unclassified_names": unclassified_names,
-            "rated_names": rated_names,
-            "origin_distribution": origin_dist,
-        }
+        return DatabaseStats(
+            total_names=total_names,
+            classified_names=classified_names,
+            unclassified_names=unclassified_names,
+            rated_names=rated_names,
+            origin_distribution=origin_dist,
+        )
 
 
 def get_comparison_count(name: str) -> int:
@@ -1088,11 +1096,11 @@ def get_comparison_count(name: str) -> int:
         return cursor.fetchone()[0]
 
 
-def get_preference_stats_by_gender() -> dict[str, dict[str, int]]:
+def get_preference_stats_by_gender() -> dict[str, PreferenceStats]:
     """Get preference statistics grouped by gender.
 
     Returns:
-        Dictionary mapping gender -> {'wins': int, 'losses': int, 'draws': int, 'total': int}
+        Dictionary mapping gender -> PreferenceStats
     """
     with get_connection() as conn:
         # CTE to compute outcomes for each name in each comparison
@@ -1130,7 +1138,7 @@ def get_preference_stats_by_gender() -> dict[str, dict[str, int]]:
         rows = cursor.fetchall()
 
         # Initialize result dict
-        result = {}
+        result: dict[str, dict[str, int]] = {}
         key_map = {"win": "wins", "loss": "losses", "draw": "draws"}
         for gender, outcome, count in rows:
             if gender not in result:
@@ -1138,14 +1146,23 @@ def get_preference_stats_by_gender() -> dict[str, dict[str, int]]:
             result[gender][key_map[outcome]] = count
             result[gender]["total"] += count
 
-        return result
+        # Convert to PreferenceStats
+        return {
+            gender: PreferenceStats(
+                wins=data["wins"],
+                losses=data["losses"],
+                draws=data["draws"],
+                total=data["total"],
+            )
+            for gender, data in result.items()
+        }
 
 
-def get_preference_stats_by_origin() -> dict[str, dict[str, int]]:
+def get_preference_stats_by_origin() -> dict[str, PreferenceStats]:
     """Get preference statistics grouped by origin region.
 
     Returns:
-        Dictionary mapping origin region -> {'wins': int, 'losses': int, 'draws': int, 'total': int}
+        Dictionary mapping origin region -> PreferenceStats
     """
     with get_connection() as conn:
         cursor = conn.execute("""
@@ -1184,7 +1201,7 @@ def get_preference_stats_by_origin() -> dict[str, dict[str, int]]:
         """)
         rows = cursor.fetchall()
 
-        result = {}
+        result: dict[str, dict[str, int]] = {}
         key_map = {"win": "wins", "loss": "losses", "draw": "draws"}
         for region, outcome, count in rows:
             if region not in result:
@@ -1192,14 +1209,23 @@ def get_preference_stats_by_origin() -> dict[str, dict[str, int]]:
             result[region][key_map[outcome]] = count
             result[region]["total"] += count
 
-        return result
+        # Convert to PreferenceStats
+        return {
+            region: PreferenceStats(
+                wins=data["wins"],
+                losses=data["losses"],
+                draws=data["draws"],
+                total=data["total"],
+            )
+            for region, data in result.items()
+        }
 
 
-def get_preference_stats_by_phonetic() -> dict[str, dict[str, int]]:
+def get_preference_stats_by_phonetic() -> dict[str, PreferenceStats]:
     """Get preference statistics grouped by phonetic primary code.
 
     Returns:
-        Dictionary mapping phonetic code -> {'wins': int, 'losses': int, 'draws': int, 'total': int}
+        Dictionary mapping phonetic code -> PreferenceStats
     """
     with get_connection() as conn:
         cursor = conn.execute("""
@@ -1238,7 +1264,7 @@ def get_preference_stats_by_phonetic() -> dict[str, dict[str, int]]:
         """)
         rows = cursor.fetchall()
 
-        result = {}
+        result: dict[str, dict[str, int]] = {}
         key_map = {"win": "wins", "loss": "losses", "draw": "draws"}
         for phonetic_code, outcome, count in rows:
             if phonetic_code not in result:
@@ -1246,21 +1272,30 @@ def get_preference_stats_by_phonetic() -> dict[str, dict[str, int]]:
             result[phonetic_code][key_map[outcome]] = count
             result[phonetic_code]["total"] += count
 
-        return result
+        # Convert to PreferenceStats
+        return {
+            phonetic_code: PreferenceStats(
+                wins=data["wins"],
+                losses=data["losses"],
+                draws=data["draws"],
+                total=data["total"],
+            )
+            for phonetic_code, data in result.items()
+        }
 
 
 def get_name_details_batch(
     names: list[str],
-) -> list[tuple[str | None, str | None]]:
+) -> list[NameDetails]:
     """Get gender and origin_region for multiple names in batch.
-    Returns list of (gender, origin_region) tuples.
+    Returns list of NameDetails.
     """
     if not names:
         return []
 
     # Process in chunks to avoid SQL parameter limit
     chunk_size = MAX_SQL_PARAMS
-    result = []
+    result: list[NameDetails] = []
 
     for i in range(0, len(names), chunk_size):
         chunk = names[i : i + chunk_size]
@@ -1275,22 +1310,21 @@ def get_name_details_batch(
             rows = cursor.fetchall()
 
             # Create mapping for fast lookup
-            details_map = {row[0]: (row[1], row[2]) for row in rows}
+            details_map = {row[0]: NameDetails(gender=row[1], origin_region=row[2]) for row in rows}
 
             # Append results for this chunk in order
             for name in chunk:
                 if name in details_map:
-                    gender, origin = details_map[name]
-                    result.append((gender, origin))
+                    result.append(details_map[name])
                 else:
-                    result.append((None, None))
+                    result.append(NameDetails(gender=None, origin_region=None))
 
     return result
 
 
-def get_phonetic_codes_batch(names: list[str]) -> dict[str, tuple[str, str]]:
+def get_phonetic_codes_batch(names: list[str]) -> dict[str, PhoneticCodes]:
     """Get phonetic codes for multiple names in batch.
-    Returns dict mapping name -> (phonetic_primary, phonetic_secondary).
+    Returns dict mapping name -> PhoneticCodes.
     Missing names are omitted from the result.
     """
     if not names:
@@ -1298,7 +1332,7 @@ def get_phonetic_codes_batch(names: list[str]) -> dict[str, tuple[str, str]]:
 
     # Process in chunks to avoid SQL parameter limit
     chunk_size = MAX_SQL_PARAMS
-    result: dict[str, tuple[str, str]] = {}
+    result: dict[str, PhoneticCodes] = {}
 
     for i in range(0, len(names), chunk_size):
         chunk = names[i : i + chunk_size]
@@ -1316,7 +1350,7 @@ def get_phonetic_codes_batch(names: list[str]) -> dict[str, tuple[str, str]]:
                 name = row[0]
                 primary = row[1] or ""
                 secondary = row[2] or ""
-                result[name] = (primary, secondary)
+                result[name] = PhoneticCodes(primary=primary, secondary=secondary)
 
     return result
 

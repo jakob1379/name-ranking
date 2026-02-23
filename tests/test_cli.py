@@ -9,6 +9,7 @@ import pytest
 from typer.testing import CliRunner
 
 from st_name_ranking.cli import app
+from st_name_ranking.types import DatabaseStats
 
 
 @pytest.fixture
@@ -87,13 +88,13 @@ def test_cli_init_basic(mock_db_path, cli_runner):
         mock_init.return_value = None
         mock_sync.return_value = 0  # No new names
         # Mock stats to avoid database queries
-        mock_stats.return_value = {
-            "total_names": 100,
-            "classified_names": 20,
-            "unclassified_names": 80,
-            "rated_names": 100,
-            "origin_distribution": {"International": 80, "European": 20},
-        }
+        mock_stats.return_value = DatabaseStats(
+            total_names=100,
+            classified_names=20,
+            unclassified_names=80,
+            rated_names=100,
+            origin_distribution={"International": 80, "European": 20},
+        )
 
         result = cli_runner.invoke(app, ["init"])
         assert result.exit_code == 0
@@ -119,13 +120,13 @@ def test_cli_init_with_classify(mock_db_path, cli_runner):
         mock_sync.return_value = 0  # No new names
         mock_classify.return_value = 3  # 3 names classified
         # Mock stats to avoid database queries
-        mock_stats.return_value = {
-            "total_names": 100,
-            "classified_names": 20,
-            "unclassified_names": 80,
-            "rated_names": 100,
-            "origin_distribution": {"International": 80, "European": 20},
-        }
+        mock_stats.return_value = DatabaseStats(
+            total_names=100,
+            classified_names=20,
+            unclassified_names=80,
+            rated_names=100,
+            origin_distribution={"International": 80, "European": 20},
+        )
 
         result = cli_runner.invoke(app, ["init", "--classify"])
         assert result.exit_code == 0
@@ -154,13 +155,13 @@ def test_cli_classify(mock_db_path, cli_runner):
         mock_init.return_value = None
         mock_sync_init.return_value = 0
 
-        mock_stats_init.return_value = {
-            "total_names": 100,
-            "classified_names": 20,
-            "unclassified_names": 80,
-            "rated_names": 100,
-            "origin_distribution": {"International": 80, "European": 20},
-        }
+        mock_stats_init.return_value = DatabaseStats(
+            total_names=100,
+            classified_names=20,
+            unclassified_names=80,
+            rated_names=100,
+            origin_distribution={"International": 80, "European": 20},
+        )
 
         # Initialize
         init_result = cli_runner.invoke(app, ["init"])
@@ -192,13 +193,13 @@ def test_cli_classify_with_batch_size(mock_db_path, cli_runner):
         mock_init.return_value = None
         mock_sync_init.return_value = 0
 
-        mock_stats_init.return_value = {
-            "total_names": 100,
-            "classified_names": 20,
-            "unclassified_names": 80,
-            "rated_names": 100,
-            "origin_distribution": {"International": 80, "European": 20},
-        }
+        mock_stats_init.return_value = DatabaseStats(
+            total_names=100,
+            classified_names=20,
+            unclassified_names=80,
+            rated_names=100,
+            origin_distribution={"International": 80, "European": 20},
+        )
         init_result = cli_runner.invoke(app, ["init"])
         assert init_result.exit_code == 0
 
@@ -228,30 +229,25 @@ def test_cli_stats(mock_db_path, cli_runner):
         mock_init.return_value = None
         mock_sync_init.return_value = 0
 
-        mock_stats_init.return_value = {
-            "total_names": 100,
-            "classified_names": 20,
-            "unclassified_names": 80,
-            "rated_names": 100,
-            "origin_distribution": {"International": 80, "European": 20},
-        }
+        mock_stats_init.return_value = DatabaseStats(
+            total_names=100,
+            classified_names=20,
+            unclassified_names=80,
+            rated_names=100,
+            origin_distribution={"International": 80, "European": 20},
+        )
         init_result = cli_runner.invoke(app, ["init"])
         assert init_result.exit_code == 0
 
     # Test stats
     with patch("st_name_ranking.cli.get_stats") as mock_stats:
-        mock_stats.return_value = {
-            "total_names": 100,
-            "total_ratings": 75,
-            "rated_names": 75,
-            "classified_names": 50,
-            "unclassified_names": 50,
-            "avg_rating": 1500.5,
-            "highest_rating": 1800.0,
-            "lowest_rating": 1200.0,
-            "total_matches": 1000,
-            "origin_distribution": {"International": 80, "European": 20},
-        }
+        mock_stats.return_value = DatabaseStats(
+            total_names=100,
+            classified_names=50,
+            unclassified_names=50,
+            rated_names=75,
+            origin_distribution={"International": 80, "European": 20},
+        )
 
         result = cli_runner.invoke(app, ["stats"])
         assert result.exit_code == 0
@@ -266,16 +262,15 @@ def test_cli_stats(mock_db_path, cli_runner):
 
 def test_cli_init_integration(initialized_db, mock_submodule_path, cli_runner):
     """Test CLI init command with real database and mocked submodule."""
-    from st_name_ranking import database
 
     # Mock stats to avoid division by zero
-    mock_stats = {
-        "total_names": 100,
-        "classified_names": 20,
-        "unclassified_names": 80,
-        "rated_names": 75,
-        "origin_distribution": {"International": 80, "European": 20},
-    }
+    mock_stats = DatabaseStats(
+        total_names=100,
+        classified_names=20,
+        unclassified_names=80,
+        rated_names=75,
+        origin_distribution={"International": 80, "European": 20},
+    )
 
     # Ensure DB_PATH is set to our temporary path (already done by initialized_db)
     # Patch sync_names_with_submodule to use our mock submodule path

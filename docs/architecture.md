@@ -56,12 +56,12 @@ graph TB
 - **Ratings table**: Preference scores derived from Bayesian model
 - **Comparisons table**: Historical comparison data with four preference types:
   - `-1`: Prefer name_a over name_b
-  - `1`: Prefer name_b over name_a  
+  - `1`: Prefer name_b over name_a
   - `0`: Draw (both equally preferred)
   - `2`: Down (dislike both names)
-  
+
   > **Note**: Down votes (`2`) are recorded but excluded from preference statistics (win/loss/draw counts) displayed in the UI.
-  
+
 - **Model state**: Active learning model parameters
 - **Automatic schema migration**: Existing databases automatically upgrade to support the "down" preference (`2`)
 - **Region mapping**: Geographic region classifications
@@ -210,13 +210,13 @@ elif user_down:
 def update_preference_and_save(winner, loser):
     # Record comparison in database
     database.record_comparison(winner, loser, preference=-1)
-    
+
     # Update Bayesian model (Bradley-Terry with Laplace approximation)
     model.update_based_on_preference(winner, loser, preference=-1)
-    
+
     # Sync ratings from updated model weights
     _update_ratings_from_model()
-    
+
     # Return updated ratings for UI display
     return database.get_ratings()
 ```

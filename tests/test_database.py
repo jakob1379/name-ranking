@@ -132,7 +132,7 @@ class TestNameOperations:
 
         names = get_unclassified_names()
         assert len(names) == 2
-        name_set = {n["name"] for n in names}
+        name_set = {n.name for n in names}
         assert "Anna" in name_set
         assert "Peter" in name_set
 
@@ -211,7 +211,7 @@ class TestNameOperations:
         # Initially all names are unclassified
         unclassified = get_unclassified_names()
         assert len(unclassified) == 3
-        assert {n["name"] for n in unclassified} == {"Anna", "Peter", "Maria"}
+        assert {n.name for n in unclassified} == {"Anna", "Peter", "Maria"}
 
         # Classify one name - note: update_name_origin expects name_id (int), not name
         # First get the name_id for Anna
@@ -226,7 +226,7 @@ class TestNameOperations:
         # Now only 2 unclassified
         unclassified = get_unclassified_names()
         assert len(unclassified) == 2
-        assert {n["name"] for n in unclassified} == {"Peter", "Maria"}
+        assert {n.name for n in unclassified} == {"Peter", "Maria"}
 
     def test_update_name_origin(self, initialized_db):
         """Test updating name origin classification."""
@@ -399,7 +399,7 @@ class TestSubmoduleOperations:
         # Get updated version
         version = get_latest_submodule_version()
         assert version is not None
-        assert version["commit_hash"] == "abc123"
+        assert version.commit_hash == "abc123"
         # names_count not stored in table
 
     def test_update_submodule_version(self, initialized_db):
@@ -413,15 +413,15 @@ class TestSubmoduleOperations:
         update_submodule_version("abc123", 100)
         version1 = get_latest_submodule_version()
         assert version1 is not None
-        assert version1["commit_hash"] == "abc123"
+        assert version1.commit_hash == "abc123"
 
         # Second update (should add new row)
         update_submodule_version("def456", 150)
         version2 = get_latest_submodule_version()
         assert version2 is not None
-        assert version2["commit_hash"] == "def456"
+        assert version2.commit_hash == "def456"
         # Should be the latest (def456)
-        assert version2["commit_hash"] != version1["commit_hash"]
+        assert version2.commit_hash != version1.commit_hash
 
 
 class TestStatistics:
@@ -433,13 +433,12 @@ class TestStatistics:
 
         stats = get_stats()
 
-        assert stats["total_names"] == 0
-        assert stats["classified_names"] == 0
-        assert stats["unclassified_names"] == 0
-        assert stats["rated_names"] == 0
-        assert "origin_distribution" in stats
-        assert isinstance(stats["origin_distribution"], dict)
-        assert len(stats["origin_distribution"]) == 0
+        assert stats.total_names == 0
+        assert stats.classified_names == 0
+        assert stats.unclassified_names == 0
+        assert stats.rated_names == 0
+        assert stats.origin_distribution == {}
+        assert isinstance(stats.origin_distribution, dict)
 
     def test_get_stats_with_data(self, initialized_db):
         """Test getting statistics with data."""
@@ -477,12 +476,11 @@ class TestStatistics:
         stats = get_stats()
 
         # Verify statistics
-        assert stats["total_names"] == 3
-        assert stats["classified_names"] == 1
-        assert stats["unclassified_names"] == 2
-        assert stats["rated_names"] == 3
-        assert "origin_distribution" in stats
-        origin_dist = stats["origin_distribution"]
+        assert stats.total_names == 3
+        assert stats.classified_names == 1
+        assert stats.unclassified_names == 2
+        assert stats.rated_names == 3
+        origin_dist = stats.origin_distribution
         assert isinstance(origin_dist, dict)
         # Should have 'Nordic' and 'International' (unclassified)
         assert "Nordic" in origin_dist
@@ -565,7 +563,7 @@ class TestSyncOperations:
         version = get_latest_submodule_version()
         assert version is not None
         # names_count not stored, but commit_hash should be set
-        assert "commit_hash" in version
+        assert version.commit_hash is not None
 
     def test_sync_names_empty_submodule(self, tmp_path, initialized_db):
         """Test syncing from empty submodule directory."""
@@ -598,6 +596,7 @@ class TestPhoneticOperations:
     def test_compute_phonetic_codes(self):
         """Test _compute_phonetic_codes function."""
         from unittest.mock import patch
+
         from st_name_ranking.database import _compute_phonetic_codes
 
         # Test with standard name
@@ -633,7 +632,8 @@ class TestPhoneticOperations:
     def test_update_phonetic_codes_with_names(self, initialized_db):
         """Test update_phonetic_codes with names needing updates."""
         from unittest.mock import patch
-        from st_name_ranking.database import update_phonetic_codes, get_connection
+
+        from st_name_ranking.database import get_connection, update_phonetic_codes
 
         # Insert a name without phonetic codes
         with get_connection() as conn:
@@ -659,7 +659,8 @@ class TestPhoneticOperations:
     def test_update_phonetic_codes_with_limit(self, initialized_db):
         """Test update_phonetic_codes with limit parameter."""
         from unittest.mock import patch
-        from st_name_ranking.database import update_phonetic_codes, get_connection
+
+        from st_name_ranking.database import get_connection, update_phonetic_codes
 
         # Insert multiple names
         names = [("Anna", "Female"), ("Peter", "Male"), ("Maria", "Female")]
@@ -679,12 +680,13 @@ class TestPhoneticOperations:
     def test_update_phonetic_codes_already_updated(self, initialized_db):
         """Test update_phonetic_codes when names already have phonetic codes."""
         from unittest.mock import patch
-        from st_name_ranking.database import update_phonetic_codes, get_connection
+
+        from st_name_ranking.database import get_connection, update_phonetic_codes
 
         # Insert a name WITH phonetic codes
         with get_connection() as conn:
             conn.execute(
-                """INSERT INTO names (name, gender, phonetic_primary, phonetic_secondary) 
+                """INSERT INTO names (name, gender, phonetic_primary, phonetic_secondary)
                    VALUES (?, ?, ?, ?)""",
                 ("Anna", "Female", "AN", "AN"),
             )

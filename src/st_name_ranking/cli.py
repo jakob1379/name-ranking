@@ -193,25 +193,32 @@ def stats_command() -> None:
     summary_table.add_column("Metric", style="cyan")
     summary_table.add_column("Value", style="bold")
 
-    summary_table.add_row("Total names", str(stats["total_names"]))
-    summary_table.add_row(
-        "Classified names",
-        f"{stats['classified_names']} ({stats['classified_names'] / stats['total_names'] * 100:.1f}%)",
-    )
-    summary_table.add_row(
-        "Unclassified names",
-        f"{stats['unclassified_names']} ({stats['unclassified_names'] / stats['total_names'] * 100:.1f}%)",
-    )
-    summary_table.add_row(
-        "Rated names",
-        f"{stats['rated_names']} ({stats['rated_names'] / stats['total_names'] * 100:.1f}%)",
-    )
+    total_names = stats.total_names
+    summary_table.add_row("Total names", str(total_names))
+
+    if total_names > 0:
+        summary_table.add_row(
+            "Classified names",
+            f"{stats.classified_names} ({stats.classified_names / total_names * 100:.1f}%)",
+        )
+        summary_table.add_row(
+            "Unclassified names",
+            f"{stats.unclassified_names} ({stats.unclassified_names / total_names * 100:.1f}%)",
+        )
+        summary_table.add_row(
+            "Rated names",
+            f"{stats.rated_names} ({stats.rated_names / total_names * 100:.1f}%)",
+        )
+    else:
+        summary_table.add_row("Classified names", "0 (0.0%)")
+        summary_table.add_row("Unclassified names", "0 (0.0%)")
+        summary_table.add_row("Rated names", "0 (0.0%)")
 
     console.print(summary_table)
     console.print()
 
     # Origin distribution table
-    if stats["origin_distribution"]:
+    if stats.origin_distribution:
         dist_table = Table(
             title="Origin Distribution",
             show_header=True,
@@ -222,11 +229,11 @@ def stats_command() -> None:
         dist_table.add_column("Percentage", justify="right")
 
         for region, count in sorted(
-            stats["origin_distribution"].items(),
+            stats.origin_distribution.items(),
             key=lambda x: x[1],
             reverse=True,
         ):
-            percentage = count / stats["total_names"] * 100
+            percentage = count / stats.total_names * 100
             dist_table.add_row(
                 region,
                 str(count),

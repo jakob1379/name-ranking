@@ -1,7 +1,5 @@
 """UI rendering functions for the name ranking application."""
 
-import contextlib
-import json
 import logging
 from typing import Literal
 
@@ -19,6 +17,7 @@ from st_name_ranking.similarity import (
     get_vector_similarity_scores,
     load_embedding_model,
 )
+from st_name_ranking.types import PreferenceStats
 from st_name_ranking.utils import (
     get_names_features,
     select_candidate_batch,
@@ -67,14 +66,14 @@ def render_preferences_panel() -> None:
     origin_stats = get_preference_stats_by_origin()
     phonetic_stats = get_preference_stats_by_phonetic()
 
-    def create_percentage_dataframe(stats: dict[str, dict[str, int]]) -> pd.DataFrame:
+    def create_percentage_dataframe(stats: dict[str, PreferenceStats]) -> pd.DataFrame:
         """Convert stats dict to DataFrame with percentage columns for visualization."""
         rows = []
         for group, data in stats.items():
-            wins = data["wins"]
-            losses = data["losses"]
-            draws = data["draws"]
-            total = data["total"]
+            wins = data.wins
+            losses = data.losses
+            draws = data.draws
+            total = data.total
 
             # Calculate percentages
             win_pct = wins / total * 100 if total > 0 else 0.0
@@ -192,7 +191,6 @@ def render_tournament(names: list[str]) -> None:
     Shows two names side by side with rating scores.
     User clicks on which name they prefer.
     """
-    import time
 
     logger.debug("Rendering tournament with %d names", len(names))
     st.header("Name Ranking Tournament")

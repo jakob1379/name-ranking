@@ -85,12 +85,15 @@ def classify_name(name: str) -> tuple[str, float] | None:
             return None
 
         logger.debug(
-            f"Classified {name} -> {region} (confidence: {confidence:.2f})",
+            "Classified %s -> %s (confidence: %.2f)",
+            name,
+            region,
+            confidence,
         )
         return region, confidence
 
     except Exception as e:
-        logger.warning(f"Error classifying name '{name}': {e}")
+        logger.warning("Error classifying name '%s': %s", name, e)
         return None
 
 
@@ -119,14 +122,14 @@ def classify_batch(names_batch: list, batch_size: int = 100) -> int:
     if not names_batch:
         return 0
 
-    logger.debug(f"Classifying batch of {len(names_batch)} names")
+    logger.debug("Classifying batch of %d names", len(names_batch))
 
     # Process each name individually (ethnidata doesn't support batch)
     classified_count = 0
 
     for i, name_data in enumerate(names_batch):
-        name_id = name_data["id"]
-        name = name_data["name"]
+        name_id = name_data.id
+        name = name_data.name
 
         result = classify_name(name)
         if result:
@@ -135,9 +138,9 @@ def classify_batch(names_batch: list, batch_size: int = 100) -> int:
             classified_count += 1
 
         if (i + 1) % 10 == 0:
-            logger.debug(f"  Processed {i + 1}/{len(names_batch)} names")
+            logger.debug("  Processed %d/%d names", i + 1, len(names_batch))
 
-    logger.info(f"Batch classified {classified_count}/{len(names_batch)} names")
+    logger.info("Batch classified %d/%d names", classified_count, len(names_batch))
     return classified_count
 
 
@@ -146,8 +149,8 @@ def _classify_individually(names_batch: list) -> int:
     classified_count = 0
 
     for i, name_data in enumerate(names_batch):
-        name_id = name_data["id"]
-        name = name_data["name"]
+        name_id = name_data.id
+        name = name_data.name
 
         result = classify_name(name)
         if result:
@@ -211,12 +214,18 @@ def classify_all_names(
         eta = remaining / rate if rate > 0 else 0
 
         logger.info(
-            f"Batch {i // batch_size + 1}: Classified {batch_classified}/{len(batch)}",
+            "Batch %d: Classified %d/%d",
+            i // batch_size + 1,
+            batch_classified,
+            len(batch),
         )
         logger.info(
-            f"Total: {classified}/{total} ({classified / total * 100:.1f}%)",
+            "Total: %d/%d (%.1f%%)",
+            classified,
+            total,
+            classified / total * 100,
         )
-        logger.debug(f"Rate: {rate:.1f} names/sec, ETA: {eta:.0f} seconds")
+        logger.debug("Rate: %.1f names/sec, ETA: %.0f seconds", rate, eta)
 
     elapsed = time.time() - start_time
     logger.info("✅ Classification complete!")
