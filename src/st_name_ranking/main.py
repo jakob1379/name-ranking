@@ -159,15 +159,16 @@ def main() -> None:
                 )
                 # Don't return - allow user to sync names from database management section
 
-        # Gender Filtering
-        st.subheader("Gender Filter")
+        # Filtering
+        st.subheader("Filtering")
+
+        # Gender selection
         if "gender_filter" not in st.session_state:
             # Random initial gender for demo purposes
             st.session_state.gender_filter = secrets.choice(["Male", "Female"])
 
-        # Use pills for gender selection - modern, tab-like appearance
         gender_option = st.pills(
-            "Filter names by gender:",
+            "Gender:",
             ["All", "Male", "Female"],
             default=st.session_state.gender_filter,
             help=("Select which gender of names to compare. Click or use left/right arrow keys to navigate."),
@@ -183,9 +184,7 @@ def main() -> None:
             # but keep all ratings
             st.rerun()
 
-        # Origin Filtering
-        st.subheader("Origin Filter")
-        # Get available origin regions from database
+        # Origin selection
         database.init_database()
         available_regions = database.get_all_origin_regions()
 
@@ -204,9 +203,8 @@ def main() -> None:
                 # Default: empty list (show all regions)
                 st.session_state.origin_filter = []
 
-        # Multiselect for origin filter
         selected_origins = st.multiselect(
-            "Filter names by origin region:",
+            "Origin regions:",
             options=available_regions,
             default=st.session_state.origin_filter,
             help="Select origin regions. Empty shows all.",
