@@ -95,16 +95,6 @@ def main() -> None:
         # Database Management - Always show even if names not loaded
         st.subheader("Database Management")
 
-        if st.button(
-            "Sync Names",
-            icon="🔄",
-            help="Sync names from submodule to database",
-            use_container_width=True,
-        ):
-            inserted = sync_names_from_submodule()
-            if inserted > 0:
-                st.rerun()
-
         # Database stats
         database.init_database()
         try:
@@ -122,6 +112,16 @@ def main() -> None:
                 st.metric("Names in Database", "0", border=True)
         except sqlite3.Error:
             st.caption("Database stats unavailable")
+
+        if st.button(
+            "Sync Names",
+            icon="🔄",
+            help="Sync names from submodule to database",
+            use_container_width=True,
+        ):
+            inserted = sync_names_from_submodule()
+            if inserted > 0:
+                st.rerun()
 
         st.divider()
 
