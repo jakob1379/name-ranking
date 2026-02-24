@@ -18,7 +18,7 @@ Database initialized successfully.
 Synced 4,847 names from submodule.
 
 # 2. Check model status
-$ uv run name-db model-status
+$ uv run name-db model status
 Model trained: No
 Training samples: 0
 Feature dimensions: 25
@@ -134,11 +134,13 @@ Stores 5 core tables:
 
 ### Command Line Interface (`cli.py`)
 
-- `init`: Initialize database schema and sync names
-- `process`: Run origin classification tasks
-- `stats`: Display database statistics
-- `model-status`: Show active learning model status
-- `model-reset`: Reinitialize active learning model
+- `init`: Initialize database (includes sync + feature extraction)
+- `stats`: Display comprehensive database statistics
+- `features rebuild`: Recompute all cached features
+- `features status`: Show feature cache status
+- `model status`: Show active learning model status
+- `model reset`: Reinitialize active learning model
+- `import`: Import database from file
 
 ## Data Flow
 
@@ -206,6 +208,107 @@ ratings = model.compute_ratings()
 database.update_ratings(ratings)
 ```
 
+## Feature Caching System
+
+The **Feature Caching System** stores pre-computed features for all names in the
+database, enabling fast retrieval during model operations.
+
+### Architecture
+
+```
+┌─────────────────────────────────────────────┐
+│           Feature Cache Flow                │
+├─────────────────────────────────────────────┤
+│                                             │
+│  ┌─────────────┐    ┌─────────────────┐    │
+│  │  init cmd   │───▶│ Create Feature  │    │
+│  │             │    │ Set (version)   │    │
+│  └─────────────┘    └────────┬────────┘    │
+│                              │             │
+│                              ▼             │
+│                     ┌─────────────────┐    │
+│                     │ Batch Extract   │    │
+│                     │ (100 names/batch)│   │
+│                     └────────┬────────┘    │
+│                              │             │
+│                              ▼             │
+│  ┌─────────────┐    ┌─────────────────┐    │
+│  │  Model Use  │◀───│ Store in DB     │    │
+│  │             │    │ name_features   │    │
+│  └─────────────┘    └─────────────────┘    │
+│                                             │
+└─────────────────────────────────────────────┘
+```
+
+### Database Schema
+
+#### name_features Table
+
+```sql
+CREATE TABLE name_features (
+    name_id INTEGER NOT NULL REFERENCES names(id) ON DELETE CASCADE,
+    feature_set_id INTEGER NOT NULL REFERENCES feature_sets(id) ON DELETE CASCADE,
+    features_json TEXT NOT NULL,
+    computed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (name_id, feature_set_id)
+);
+```
+
+#### feature_sets Table
+
+```sql
+CREATE TABLE feature_sets (
+    id INTEGER PRIMARY KEY,
+    version TEXT UNIQUE NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    feature_names_json TEXT NOT NULL,
+    is_active BOOLEAN DEFAULT 0
+);
+```
+
+### Compute-Once Pattern
+
+Features are extracted **once during initialization** and cached for reuse:
+
+```python
+# 1. During initialization - features computed for all names
+$ uv run name-db init
+✓ Database schema created
+✓ Synced 4,847 names from submodule
+✓ Created feature set version: 20250224_120000
+✓ Computed features for 4,847 names
+
+# 2. During model operations - features retrieved from cache
+features = get_cached_features(name_id)  # O(1) lookup
+```
+
+### Feature Set Versioning
+
+Each feature extraction creates a new **version**:
+
+- **Timestamp-based**: `YYYYMMDD_HHMMSS` format
+- **Single active set**: Only one feature set is active at a time
+- **Automatic cleanup**: Old feature sets remain for audit trails
+
+**Rebuilding features** (after feature engineering changes):
+
+```bash
+# Recompute all features with new feature definitions
+$ uv run name-db features rebuild
+✓ Cleared 4,847 cached features
+✓ Created new feature set version: 20250224_130000
+✓ Computed features for 4,847 names
+```
+
+### Storage Characteristics
+
+| Aspect                | Value               |
+| --------------------- | ------------------- |
+| Storage per name      | ~500 bytes (JSON)   |
+| Total for 4,847 names | ~2.4 MB             |
+| Feature dimensions    | 25                  |
+| Extraction time       | ~50ms per 100 names |
+
 ## Deployment Architecture
 
 ### Development Environment
@@ -218,7 +321,7 @@ database.update_ratings(ratings)
 
 - **Database scaling**: SQLite supports single-user scenarios
 - **Model persistence**: Stores state in database
-- **Feature caching**: In-memory cache for performance
+- **Feature caching**: Pre-computed features in `name_features` table
 - **Error resilience**: Graceful degradation on failures
 
 ## Performance Characteristics

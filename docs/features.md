@@ -103,6 +103,91 @@ Each name converts to a feature vector including:
 - **Information gain maximization**: Selects pairs that teach the most
 - **Diversity constraint**: Ensures coverage across feature space
 
+## Pre-computed Features
+
+The application uses a **feature caching system** to store extracted features
+for all names in the database. This eliminates redundant computation during
+model training and inference.
+
+### Feature Categories
+
+| Category       | Features   | Description                                                    |
+| -------------- | ---------- | -------------------------------------------------------------- |
+| **Phonetic**   | 6 features | **Double Metaphone** encoding (position codes, length, vowels) |
+| **Linguistic** | 9 features | Syllable count, vowel/consonant ratios, Danish letters         |
+| **Metadata**   | 9 features | Gender encoding, origin region encoding                        |
+| **Position**   | 1 feature  | First/last letter encoding                                     |
+
+### Feature Extraction Flow
+
+```bash
+# 1. Initialize database - features computed automatically
+$ uv run name-db init
+✓ Database schema created
+✓ Synced 4,847 names from submodule
+✓ Created feature set version: 20250224_120000
+✓ Computed features for 4,847 names
+
+# 2. Check feature cache status
+$ uv run name-db features status
+Names with features: 4,847 (100.0%)
+Feature sets: 1
+Active version: 20250224_120000
+✓ All names have cached features
+```
+
+### Feature Versioning
+
+Features are versioned to support schema evolution:
+
+- **Version format**: `YYYYMMDD_HHMMSS` (timestamp)
+- **Active set**: Only one feature set is marked active
+- **Storage**: Features stored as JSON in `name_features` table
+
+### Adding New Features
+
+To add new features to the extraction pipeline:
+
+1. **Add extraction function** in `features.py`:
+
+```python
+def extract_custom_features(name: str) -> dict[str, float]:
+    """Extract custom features for a name."""
+    return {
+        "custom_feature_1": compute_value_1(name),
+        "custom_feature_2": compute_value_2(name),
+    }
+```
+
+2. **Integrate into pipeline**:
+
+```python
+def extract_all_features(name, gender, origin_region,
+                         include_custom=True):  # Add flag
+    features = {}
+    # ... existing features ...
+    if include_custom:
+        features.update(extract_custom_features(name))
+    return features, feature_names
+```
+
+3. **Rebuild feature cache**:
+
+```bash
+$ uv run name-db rebuild-features
+✓ Cleared 4,847 cached features
+✓ Created new feature set version: 20250224_130000
+✓ Computed features for 4,847 names
+```
+
+### Feature Cache Commands
+
+| Command                    | Purpose                                  |
+| -------------------------- | ---------------------------------------- |
+| `name-db init`             | Initialize database and compute features |
+| `name-db features rebuild` | Recompute all features                   |
+| `name-db features status`  | Show cache statistics                    |
+
 ## Performance Optimizations
 
 - **2-second startup**: No automatic sync on app launch
@@ -118,20 +203,22 @@ Each name converts to a feature vector including:
 The **Typer** CLI provides database management:
 
 ```bash
-# Initialize database
+# Initialize database (computes features by default)
 $ uv run name-db init
-
-# Process origin classification
-$ uv run name-db process [--limit N] [--batch-size N]
 
 # Show statistics
 $ uv run name-db stats
 
-# Check model status
-$ uv run name-db model-status
+# Feature cache management
+$ uv run name-db features rebuild    # Recompute all features
+$ uv run name-db features status     # Show cache status
 
-# Reset active learning model
-$ uv run name-db model-reset
+# Model management
+$ uv run name-db model status        # Check model status
+$ uv run name-db model reset         # Reset active learning model
+
+# Import database
+$ uv run name-db import <file.db>
 ```
 
 ## Keyboard Shortcuts

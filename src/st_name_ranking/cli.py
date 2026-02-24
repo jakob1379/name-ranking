@@ -6,8 +6,11 @@ and statistics.
 """
 
 import datetime as dt
+import json
 import shutil
+import sqlite3
 from pathlib import Path
+from typing import Any
 
 import typer
 from rich.console import Console
@@ -15,7 +18,6 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.table import Table
 
 # Import database functions
-from st_name_ranking.classify_origins import classify_all_names
 from st_name_ranking.database import (
     DB_PATH,
     get_connection,
@@ -23,6 +25,9 @@ from st_name_ranking.database import (
     init_database,
     sync_names_with_submodule,
 )
+
+# Import features for extraction
+from st_name_ranking.features import FeatureExtractor
 
 # Import model functions
 from st_name_ranking.utils import (
@@ -34,6 +39,20 @@ app = typer.Typer(
     add_completion=False,
 )
 console = Console()
+
+# Create subcommand groups
+features_app = typer.Typer(
+    help="Feature cache management commands",
+    name="features",
+)
+model_app = typer.Typer(
+    help="Active learning model management commands",
+    name="model",
+)
+
+# Register subcommand groups
+app.add_typer(features_app)
+app.add_typer(model_app)
 
 # ----------------------------------------------------------------------
 # Helper functions
@@ -63,27 +82,209 @@ def print_info(message: str) -> None:
     console.print(f"[blue]→[/blue] {message}")
 
 
+def print_warning(message: str) -> None:
+    """Print a warning message."""
+    console.print(f"[yellow]⚠[/yellow] {message}")
+
+
+# ----------------------------------------------------------------------
+# Feature System Helpers
+# ----------------------------------------------------------------------
+
+
+def ensure_features_computed() -> bool:
+    """Check if features exist in the database.
+
+    Returns:
+        True if features exist, False otherwise.
+    """
+    try:
+        with get_connection() as conn:
+            cursor = conn.execute("SELECT COUNT(*) FROM name_features LIMIT 1")
+            count = cursor.fetchone()[0]
+            return count > 0
+    except sqlite3.OperationalError:
+        # Table doesn't exist yet
+        return False
+
+
+def get_feature_stats() -> dict[str, Any]:
+    """Get feature system statistics.
+
+    Returns:
+        Dictionary with feature statistics.
+    """
+    with get_connection() as conn:
+        # Check if tables exist
+        cursor = conn.execute("""
+            SELECT name FROM sqlite_master
+            WHERE type='table' AND name IN ('feature_sets', 'name_features')
+        """)
+        existing_tables = {row[0] for row in cursor.fetchall()}
+
+        if "feature_sets" not in existing_tables or "name_features" not in existing_tables:
+            return {
+                "feature_sets_count": 0,
+                "names_with_features": 0,
+                "active_version": None,
+            }
+
+        # Get feature set count
+        cursor = conn.execute("SELECT COUNT(*) FROM feature_sets")
+        feature_sets_count = cursor.fetchone()[0]
+
+        # Get names with features
+        cursor = conn.execute("SELECT COUNT(DISTINCT name_id) FROM name_features")
+        names_with_features = cursor.fetchone()[0]
+
+        # Get active version
+        cursor = conn.execute("""
+            SELECT version FROM feature_sets
+            WHERE is_active = 1
+            ORDER BY created_at DESC
+            LIMIT 1
+        """)
+        row = cursor.fetchone()
+        active_version = row[0] if row else None
+
+        return {
+            "feature_sets_count": feature_sets_count,
+            "names_with_features": names_with_features,
+            "active_version": active_version,
+        }
+
+
+def table_exists(conn: sqlite3.Connection, table_name: str) -> bool:
+    """Check if a table exists in the database.
+
+    Args:
+        conn: Database connection
+        table_name: Name of the table to check
+
+    Returns:
+        True if table exists, False otherwise
+    """
+    cursor = conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table_name,))
+    return cursor.fetchone() is not None
+
+
+def create_feature_set(version: str, feature_names: list[str]) -> int:
+    """Create a new feature set and return its ID.
+
+    Args:
+        version: Feature set version identifier
+        feature_names: List of feature names
+
+    Returns:
+        The ID of the created feature set
+
+    Raises:
+        RuntimeError: If database tables don't exist (init not run)
+    """
+    with get_connection() as conn:
+        # Check if tables exist
+        if not table_exists(conn, "feature_sets"):
+            raise RuntimeError("Database not initialized. Run 'name-db init' first.")
+
+        # Deactivate all existing feature sets
+        conn.execute("UPDATE feature_sets SET is_active = 0")
+
+        # Insert new feature set
+        cursor = conn.execute(
+            """
+            INSERT INTO feature_sets (version, feature_names_json, is_active)
+            VALUES (?, ?, 1)
+            """,
+            (version, json.dumps(feature_names)),
+        )
+        return cursor.lastrowid
+
+
+def extract_and_cache_features(
+    feature_set_id: int,
+    batch_size: int = 100,
+    progress_callback: Any | None = None,
+) -> int:
+    """Extract features for all names and cache them in the database.
+
+    Args:
+        feature_set_id: The ID of the feature set to use
+        batch_size: Number of names to process per batch
+        progress_callback: Optional callback function(current, total)
+
+    Returns:
+        Number of names processed
+    """
+    extractor = FeatureExtractor()
+    feature_names = extractor.get_feature_names()
+
+    with get_connection() as conn:
+        # Get all names with their metadata
+        cursor = conn.execute("""
+            SELECT id, name, gender, origin_region
+            FROM names
+            ORDER BY id
+        """)
+        names_data = cursor.fetchall()
+
+    total = len(names_data)
+    processed = 0
+
+    # Process in batches
+    for i in range(0, total, batch_size):
+        batch = names_data[i : i + batch_size]
+
+        with get_connection() as conn:
+            for name_id, name, gender, origin_region in batch:
+                # Extract features
+                features = extractor.extract(name, gender, origin_region)
+                features_dict = {name: float(value) for name, value in zip(feature_names, features.tolist())}
+
+                # Insert into database
+                conn.execute(
+                    """
+                    INSERT OR REPLACE INTO name_features
+                    (name_id, feature_set_id, features_json, computed_at)
+                    VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+                    """,
+                    (name_id, feature_set_id, json.dumps(features_dict)),
+                )
+
+        processed += len(batch)
+        if progress_callback:
+            progress_callback(processed, total)
+
+    return processed
+
+
+def clear_all_features() -> int:
+    """Clear all cached features from the database.
+
+    Returns:
+        Number of rows deleted
+    """
+    with get_connection() as conn:
+        # Check if table exists first
+        cursor = conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='name_features'")
+        if not cursor.fetchone():
+            return 0
+        cursor = conn.execute("DELETE FROM name_features")
+        return cursor.rowcount
+
+
 # ----------------------------------------------------------------------
 # CLI Commands
 # ----------------------------------------------------------------------
 
 
 @app.command()
-def init(
-    *,
-    classify: bool = typer.Option(
-        False,
-        "--classify",
-        "-c",
-        help="Run initial origin classification after initialization",
-    ),
-) -> None:
+def init() -> None:
     """Initialize the name ranking database.
 
     This command:
     1. Creates the database schema (if not exists)
     2. Syncs names from godkendtefornavne submodule
-    3. Optionally runs initial origin classification
+    3. Computes and caches features for all names
     """
     console.print("[bold blue]Initializing Name Ranking Database[/bold blue]")
     console.print()
@@ -114,95 +315,43 @@ def init(
             print_error(f"Failed to sync names: {e}")
             raise typer.Exit(code=1) from None
 
-    # 3. Optional origin classification
-    if classify:
-        classify_command(limit=None, batch_size=100)
-
-    # Show final statistics
-    stats_command()
-
-
-@app.command()
-def classify(
-    limit: int | None = typer.Option(
-        None,
-        "--limit",
-        "-l",
-        help="Limit number of names to classify (for testing)",
-    ),
-    batch_size: int = typer.Option(
-        100,
-        "--batch-size",
-        "-b",
-        help="Batch size for processing",
-    ),
-) -> None:
-    """Classify name origins (nationality → geographic region).
-
-    Processes unclassified names in batches,
-    predicting their nationality and mapping to geographic regions.
-    """
-    classify_command(limit, batch_size)
-
-
-def classify_command(limit: int | None = None, batch_size: int = 100) -> None:
-    """Internal classification function with rich output."""
-    console.print("[bold blue]Classifying Name Origins[/bold blue]")
+    # 3. Compute and cache features (always done during init)
+    console.print()
+    console.print("[bold blue]Computing Features[/bold blue]")
     console.print()
 
-    # First check if there are names to classify
-    from st_name_ranking.database import get_unclassified_names
+    # Get feature set version based on current time
+    version = dt.datetime.now(dt.UTC).strftime("%Y%m%d_%H%M%S")
 
-    unclassified = get_unclassified_names(limit)
-    if not unclassified:
-        print_info("No unclassified names found.")
-        return
+    # Create feature set
+    extractor = FeatureExtractor()
+    feature_names = extractor.get_feature_names()
+    feature_set_id = create_feature_set(version, feature_names)
+    print_success(f"Created feature set version: {version}")
 
-    total = len(unclassified)
-    if limit and limit < total:
-        total = limit
+    # Extract and cache features
+    with Progress(console=console, transient=True) as progress:
+        task = progress.add_task("Extracting features...", total=None)
 
-    try:
-        with Progress(console=console, transient=True) as progress:
-            task = progress.add_task(
-                "Classifying names...",
-                total=total,
-            )
+        def update_progress(current: int, total: int) -> None:
+            progress.update(task, total=total, completed=current)
 
-            def update_progress(current: int, total: int) -> None:
-                progress.update(task, completed=current)
+        processed = extract_and_cache_features(feature_set_id, batch_size=100, progress_callback=update_progress)
 
-            classified = classify_all_names(limit, batch_size, update_progress)
+    print_success(f"Computed features for {processed} names")
+    print_info(f"Feature dimension: {len(feature_names)}")
 
-        if classified == 0:
-            print_info("No names were classified.")
-        else:
-            print_success(f"Classified {classified} names")
-
-    except ImportError:
-        print_error("ethnidata is not installed.")
-        console.print()
-        console.print("Install it with:")
-        console.print("  [bold]pip install ethnidata[/bold]")
-        console.print()
-        console.print("Or add to pyproject.toml dependencies:")
-        console.print("  dependencies = [")
-        console.print("    ...")
-        console.print('    "ethnidata>=4.1.1",')
-        console.print("    ...")
-        console.print("  ]")
-        raise typer.Exit(code=1) from None
-    except (RuntimeError, ValueError) as e:
-        print_error(f"Classification failed: {e}")
-        raise typer.Exit(code=1) from None
+    # Show final statistics
+    console.print()
+    stats_command()
 
 
 @app.command()
 def stats() -> None:
     """Show database statistics.
 
-    Displays counts of names, classified names, rated names,
-    and origin distribution.
+    Displays counts of names, comparisons, feature cache status,
+    and model status in one comprehensive view.
     """
     stats_command()
 
@@ -213,9 +362,10 @@ def stats_command() -> None:
     console.print()
 
     stats = get_stats()
+    feature_stats = get_feature_stats()
 
     # Create summary table
-    summary_table = Table(title="Summary", show_header=False, box=None)
+    summary_table = Table(title="Database Summary", show_header=False, box=None)
     summary_table.add_column("Metric", style="cyan")
     summary_table.add_column("Value", style="bold")
 
@@ -242,6 +392,39 @@ def stats_command() -> None:
 
     console.print(summary_table)
     console.print()
+
+    # Feature cache status table
+    feature_table = Table(title="Feature Cache", show_header=False, box=None)
+    feature_table.add_column("Metric", style="cyan")
+    feature_table.add_column("Value", style="bold")
+
+    feature_table.add_row(
+        "Names with features",
+        f"{feature_stats['names_with_features']} ({feature_stats['names_with_features'] / max(total_names, 1) * 100:.1f}%)",
+    )
+    feature_table.add_row("Feature sets", str(feature_stats["feature_sets_count"]))
+    feature_table.add_row("Active version", feature_stats["active_version"] or "None")
+
+    console.print(feature_table)
+    console.print()
+
+    # Model status
+    try:
+        model = get_active_learning_model()
+        state = model.state
+
+        model_table = Table(title="Model Status", show_header=False, box=None)
+        model_table.add_column("Metric", style="cyan")
+        model_table.add_column("Value", style="bold")
+
+        model_table.add_row("Feature dimension", str(state.feature_dim))
+        model_table.add_row("Training samples", str(state.training_samples))
+
+        console.print(model_table)
+        console.print()
+    except (RuntimeError, ValueError):
+        print_warning("Model not initialized yet")
+        console.print()
 
     # Origin distribution table
     if stats.origin_distribution:
@@ -271,11 +454,157 @@ def stats_command() -> None:
         print_info("No origin classification data available.")
 
 
-@app.command()
+# ----------------------------------------------------------------------
+# Features Subcommands
+# ----------------------------------------------------------------------
+
+
+@features_app.command("rebuild")
+def features_rebuild(
+    *,
+    force: bool = typer.Option(
+        False,
+        "--force",
+        "-f",
+        help="Skip confirmation prompt",
+    ),
+) -> None:
+    """Recompute all features (useful after feature set update).
+
+    This command:
+    1. Clears existing cached features
+    2. Creates a new feature set version
+    3. Re-extracts features for all names
+    4. Shows progress during extraction
+    """
+    console.print("[bold blue]Rebuilding Feature Cache[/bold blue]")
+    console.print()
+
+    # Check if database is initialized
+    try:
+        with get_connection() as conn:
+            if not table_exists(conn, "names"):
+                print_error("Database not initialized. Run 'name-db init' first.")
+                raise typer.Exit(1)
+    except sqlite3.OperationalError:
+        print_error("Database not initialized. Run 'name-db init' first.")
+        raise typer.Exit(1)
+
+    # Check if features exist
+    feature_stats = get_feature_stats()
+    if feature_stats["names_with_features"] > 0 and not force:
+        confirm = typer.confirm(
+            f"This will clear {feature_stats['names_with_features']} cached features and recompute them. Continue?",
+        )
+        if not confirm:
+            console.print("Rebuild cancelled.")
+            raise typer.Abort()
+
+    # Clear existing features
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        console=console,
+    ) as progress:
+        task = progress.add_task("Clearing existing features...", total=None)
+        deleted = clear_all_features()
+        progress.update(task, completed=True)
+    print_success(f"Cleared {deleted} cached features")
+
+    # Create new feature set
+    version = dt.datetime.now(dt.UTC).strftime("%Y%m%d_%H%M%S")
+    extractor = FeatureExtractor()
+    feature_names = extractor.get_feature_names()
+    feature_set_id = create_feature_set(version, feature_names)
+    print_success(f"Created new feature set version: {version}")
+
+    # Extract and cache features
+    console.print()
+    console.print("[bold blue]Extracting Features[/bold blue]")
+
+    with Progress(console=console, transient=True) as progress:
+        task = progress.add_task("Extracting features...", total=None)
+
+        def update_progress(current: int, total: int) -> None:
+            progress.update(task, total=total, completed=current)
+
+        processed = extract_and_cache_features(feature_set_id, batch_size=100, progress_callback=update_progress)
+
+    print_success(f"Computed features for {processed} names")
+    print_info(f"Feature dimension: {len(feature_names)}")
+    print_info(f"Active feature set: {version}")
+
+
+@features_app.command("status")
+def features_status() -> None:
+    """Show feature cache status."""
+    console.print("[bold blue]Feature Cache Status[/bold blue]")
+    console.print()
+
+    # Check if database is initialized
+    try:
+        with get_connection() as conn:
+            if not table_exists(conn, "names"):
+                print_error("Database not initialized. Run 'name-db init' first.")
+                raise typer.Exit(1)
+    except sqlite3.OperationalError:
+        print_error("Database not initialized. Run 'name-db init' first.")
+        raise typer.Exit(1)
+
+    feature_stats = get_feature_stats()
+    db_stats = get_stats()
+
+    # Create status table
+    status_table = Table(
+        show_header=True,
+        header_style="bold",
+    )
+    status_table.add_column("Metric", style="cyan")
+    status_table.add_column("Value", justify="right")
+
+    status_table.add_row("Total names", str(db_stats.total_names))
+    status_table.add_row("Names with features", str(feature_stats["names_with_features"]))
+    status_table.add_row("Feature sets", str(feature_stats["feature_sets_count"]))
+    status_table.add_row("Active version", feature_stats["active_version"] or "None")
+
+    # Coverage percentage
+    if db_stats.total_names > 0:
+        coverage = feature_stats["names_with_features"] / db_stats.total_names * 100
+        status_table.add_row("Coverage", f"{coverage:.1f}%")
+    else:
+        status_table.add_row("Coverage", "0%")
+
+    console.print(status_table)
+    console.print()
+
+    # Check if features need recomputation
+    if feature_stats["names_with_features"] == 0:
+        print_warning("No features computed. Run: name-db features rebuild")
+    elif feature_stats["names_with_features"] < db_stats.total_names:
+        print_warning(
+            f"Missing features for {db_stats.total_names - feature_stats['names_with_features']} names. "
+            "Run: name-db features rebuild",
+        )
+    else:
+        print_success("All names have cached features")
+
+
+# ----------------------------------------------------------------------
+# Model Subcommands
+# ----------------------------------------------------------------------
+
+
+@model_app.command("status")
 def model_status() -> None:
     """Show active learning model status."""
     console.print("[bold blue]Active Learning Model Status[/bold blue]")
     console.print()
+
+    # Check if features exist
+    if not ensure_features_computed():
+        print_warning("No features computed yet. Some model operations may fail.")
+        print_info("Run 'name-db features rebuild' to compute features.")
+        console.print()
 
     try:
         model = get_active_learning_model()
@@ -308,7 +637,7 @@ def model_status() -> None:
         print_error(f"Failed to get model status: {e}")
 
 
-@app.command()
+@model_app.command("reset")
 def model_reset() -> None:
     """Reset active learning model (reinitialize)."""
     console.print("[bold blue]Resetting Active Learning Model[/bold blue]")
@@ -336,7 +665,12 @@ def model_reset() -> None:
         print_error(f"Failed to reset model: {e}")
 
 
-@app.command()
+# ----------------------------------------------------------------------
+# Import Command
+# ----------------------------------------------------------------------
+
+
+@app.command("import")
 def import_db(
     source: Path = typer.Argument(..., help="Path to the exported database file to import"),
     *,

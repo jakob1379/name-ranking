@@ -14,10 +14,12 @@ $ cd sort-names
 # Install dependencies
 $ uv sync
 
-# Initialize database
+# Initialize database (computes features automatically)
 $ uv run name-db init
-Database initialized successfully.
-Synced 4,847 names from submodule.
+✓ Database schema created
+✓ Synced 4,847 names from submodule
+✓ Created feature set version: 20250224_120000
+✓ Computed features for 4,847 names
 
 # Start the application
 $ uv run streamlit run src/st_name_ranking/main.py
@@ -28,6 +30,24 @@ $ uv run streamlit run src/st_name_ranking/main.py
 ```
 
 The application opens at **http://localhost:8501** in 2 seconds.
+
+### Feature Cache Management
+
+The application **pre-computes features** for all names during initialization:
+
+```bash
+# Rebuild features after feature engineering changes
+$ uv run name-db features rebuild
+✓ Cleared 4,847 cached features
+✓ Created new feature set version: 20250224_130000
+✓ Computed features for 4,847 names
+
+# Check feature cache status
+$ uv run name-db features status
+Names with features: 4,847 (100.0%)
+Feature sets: 1
+Active version: 20250224_120000
+```
 
 ## What You See
 

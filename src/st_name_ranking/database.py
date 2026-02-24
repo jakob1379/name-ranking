@@ -318,6 +318,28 @@ def init_database() -> None:
         # Migrate comparisons table to support preference=2 if needed
         _migrate_comparisons_table_if_needed(conn)
 
+        # Feature sets table for tracking feature schema versions
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS feature_sets (
+                id INTEGER PRIMARY KEY,
+                version TEXT UNIQUE NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                feature_names_json TEXT NOT NULL,
+                is_active BOOLEAN DEFAULT 0
+            )
+        """)
+
+        # Name features table for pre-computed features
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS name_features (
+                name_id INTEGER NOT NULL REFERENCES names(id) ON DELETE CASCADE,
+                feature_set_id INTEGER NOT NULL REFERENCES feature_sets(id) ON DELETE CASCADE,
+                features_json TEXT NOT NULL,
+                computed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (name_id, feature_set_id)
+            )
+        """)
+
         # Ensure phonetic columns exist (migration for existing databases)
         cursor = conn.execute("PRAGMA table_info(names)")
         columns = [row[1] for row in cursor.fetchall()]
@@ -358,6 +380,18 @@ def init_database() -> None:
         )
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_model_state_updated ON model_state(last_updated)",
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_feature_sets_version ON feature_sets(version)",
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_feature_sets_active ON feature_sets(is_active)",
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_name_features_lookup ON name_features(name_id, feature_set_id)",
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_name_features_computed ON name_features(computed_at)",
         )
 
         # Insert default region mapping if empty
@@ -654,6 +688,8 @@ def sync_names_with_submodule(submodule_path: Path = Path("godkendtefornavne")) 
     logger.debug("Filtered %d valid names", len(valid_names))
     # Insert new names
     inserted_count = 0
+    new_name_ids: list[tuple[int, str, str]] = []  # [(name_id, name, gender), ...]
+
     with get_connection() as conn:
         if valid_names:
             before = conn.total_changes
@@ -664,14 +700,90 @@ def sync_names_with_submodule(submodule_path: Path = Path("godkendtefornavne")) 
             inserted_count = conn.total_changes - before
             logger.debug("Bulk insert attempted, %d new rows", inserted_count)
 
+            # Get IDs of newly inserted names for feature computation
+            if inserted_count > 0:
+                # Query for the names we just inserted
+                name_list = [name for name, _, _, _ in valid_names]
+                placeholders = ", ".join(["?"] * len(name_list))
+                cursor = conn.execute(
+                    f"SELECT id, name, gender FROM names WHERE name IN ({placeholders})",
+                    name_list,
+                )
+                new_name_ids = [(row[0], row[1], row[2]) for row in cursor]
+
         # Record this sync
         conn.execute(
             "INSERT INTO source_versions (commit_hash) VALUES (?)",
             (current_commit,),
         )
 
+    # Compute and cache features for newly inserted names
+    if new_name_ids:
+        _compute_features_for_new_names(new_name_ids)
+
     logger.info("Inserted %d new names", inserted_count)
     return inserted_count
+
+
+def _compute_features_for_new_names(
+    name_data: list[tuple[int, str, str]],
+    feature_set_version: str = "v1",
+    batch_size: int = 1000,
+) -> int:
+    """Compute and cache features for newly synced names.
+
+    Args:
+        name_data: List of (name_id, name, gender) tuples
+        feature_set_version: Feature set version to use
+        batch_size: Number of names to process in each batch
+
+    Returns:
+        Number of names processed
+    """
+    from st_name_ranking.features import (  # noqa: PLC0415
+        FeatureCache,
+        extract_all_features,
+    )
+
+    if not name_data:
+        return 0
+
+    # Initialize feature cache
+    cache = FeatureCache(feature_set_version)
+    # Ensure feature set exists with proper feature names
+    _ = cache.feature_names  # Trigger lazy initialization
+
+    computed_count = 0
+    total = len(name_data)
+
+    logger.info("Computing features for %d new names...", total)
+
+    # Process in batches
+    for i in range(0, len(name_data), batch_size):
+        batch = name_data[i : i + batch_size]
+        features_batch: list[tuple[int, dict]] = []
+
+        for name_id, name, gender in batch:
+            # Extract features
+            features, _ = extract_all_features(name, gender, None)
+            features_batch.append((name_id, features))
+
+        # Cache batch
+        if features_batch:
+            cache.set_features_batch(features_batch)
+            computed_count += len(features_batch)
+
+        # Log progress every 10 batches or at end
+        if (i // batch_size + 1) % 10 == 0 or i + batch_size >= total:
+            logger.info(
+                "Feature computation progress: %d/%d (%.1f%%)",
+                computed_count,
+                total,
+                computed_count / total * 100,
+            )
+
+    logger.info("Computed and cached features for %d names", computed_count)
+    return computed_count
 
 
 def get_latest_submodule_version() -> SourceVersion | None:
@@ -1464,6 +1576,333 @@ def import_database(file_bytes: bytes, *, backup: bool = True) -> None:
     init_database._initialized = False  # type: ignore[attr-defined]
 
     logger.info("Database imported successfully")
+
+
+# =============================================================================
+# Feature Cache Operations
+# =============================================================================
+
+
+def get_or_create_feature_set(version: str, feature_names: list[str]) -> int:
+    """Get feature set ID, creating if it doesn't exist.
+
+    Returns:
+        feature_set_id: The ID of the feature set
+    """
+    import json  # noqa: PLC0415
+
+    with get_connection() as conn:
+        # Check if feature set exists
+        cursor = conn.execute(
+            "SELECT id FROM feature_sets WHERE version = ?",
+            (version,),
+        )
+        row = cursor.fetchone()
+        if row:
+            return row[0]
+
+        # Create new feature set
+        cursor = conn.execute(
+            """
+            INSERT INTO feature_sets (version, feature_names_json, is_active)
+            VALUES (?, ?, 1)
+            """,
+            (version, json.dumps(feature_names)),
+        )
+        logger.info("Created feature set version '%s' with %d features", version, len(feature_names))
+        return cursor.lastrowid
+
+
+def get_active_feature_set_version() -> str | None:
+    """Get the currently active feature set version string.
+
+    Returns:
+        Version string or None if no active feature set exists.
+    """
+    with get_connection() as conn:
+        cursor = conn.execute(
+            """
+            SELECT version FROM feature_sets
+            WHERE is_active = 1
+            ORDER BY created_at DESC
+            LIMIT 1
+            """,
+        )
+        row = cursor.fetchone()
+        return row[0] if row else None
+
+
+def get_feature_set_by_version(version: str) -> dict | None:
+    """Get feature set details by version.
+
+    Returns:
+        Dictionary with 'id', 'version', 'feature_names', 'is_active', 'created_at'
+        or None if not found.
+    """
+    import json  # noqa: PLC0415
+
+    with get_connection() as conn:
+        cursor = conn.execute(
+            """
+            SELECT id, version, feature_names_json, is_active, created_at
+            FROM feature_sets
+            WHERE version = ?
+            """,
+            (version,),
+        )
+        row = cursor.fetchone()
+        if not row:
+            return None
+
+        return {
+            "id": row[0],
+            "version": row[1],
+            "feature_names": json.loads(row[2]),
+            "is_active": bool(row[3]),
+            "created_at": row[4],
+        }
+
+
+def set_feature_set_active(version: str) -> None:
+    """Set a feature set as the active one (and deactivate others)."""
+    with get_connection() as conn:
+        # Deactivate all
+        conn.execute("UPDATE feature_sets SET is_active = 0")
+        # Activate specified
+        conn.execute(
+            "UPDATE feature_sets SET is_active = 1 WHERE version = ?",
+            (version,),
+        )
+        logger.info("Set feature set '%s' as active", version)
+
+
+def get_cached_features_batch(
+    name_ids: list[int],
+    feature_set_id: int,
+) -> dict[int, dict]:
+    """Get cached features for multiple names in batch.
+
+    Args:
+        name_ids: List of name IDs to look up
+        feature_set_id: The feature set ID
+
+    Returns:
+        Dictionary mapping name_id -> feature_dict
+    """
+    import json  # noqa: PLC0415
+
+    if not name_ids:
+        return {}
+
+    result = {}
+    # Process in chunks to avoid SQL parameter limit
+    chunk_size = MAX_SQL_PARAMS // 2  # Safe limit for (name_id, feature_set_id) pairs
+
+    with get_connection() as conn:
+        for i in range(0, len(name_ids), chunk_size):
+            chunk = name_ids[i : i + chunk_size]
+            placeholders = ", ".join(["?"] * len(chunk))
+            query = f"""
+                SELECT name_id, features_json
+                FROM name_features
+                WHERE feature_set_id = ? AND name_id IN ({placeholders})
+            """
+            cursor = conn.execute(query, [feature_set_id] + chunk)
+            for row in cursor:
+                try:
+                    features = json.loads(row[1])
+                    result[row[0]] = features
+                except json.JSONDecodeError:
+                    logger.warning("Invalid JSON in name_features for name_id=%s", row[0])
+                    continue
+
+    return result
+
+
+def get_cached_features(name_id: int, feature_set_id: int) -> dict | None:
+    """Get cached features for a single name.
+
+    Args:
+        name_id: The name ID
+        feature_set_id: The feature set ID
+
+    Returns:
+        Feature dictionary or None if not found
+    """
+    import json  # noqa: PLC0415
+
+    with get_connection() as conn:
+        cursor = conn.execute(
+            """
+            SELECT features_json FROM name_features
+            WHERE name_id = ? AND feature_set_id = ?
+            """,
+            (name_id, feature_set_id),
+        )
+        row = cursor.fetchone()
+        if not row:
+            return None
+
+        try:
+            return json.loads(row[0])
+        except json.JSONDecodeError:
+            logger.warning("Invalid JSON in name_features for name_id=%s", name_id)
+            return None
+
+
+def set_cached_features_batch(
+    features_data: list[tuple[int, int, dict]],
+) -> int:
+    """Cache computed features for multiple names in batch.
+
+    Args:
+        features_data: List of (name_id, feature_set_id, features_dict) tuples
+
+    Returns:
+        Number of records inserted/updated
+    """
+    import json  # noqa: PLC0415
+
+    if not features_data:
+        return 0
+
+    inserted = 0
+    # Process in chunks
+    chunk_size = MAX_SQL_PARAMS // 4  # Safe for (name_id, feature_set_id, features_json, computed_at)
+
+    with get_connection() as conn:
+        for i in range(0, len(features_data), chunk_size):
+            chunk = features_data[i : i + chunk_size]
+            # Use INSERT OR REPLACE for upsert
+            conn.executemany(
+                """
+                INSERT OR REPLACE INTO name_features
+                (name_id, feature_set_id, features_json, computed_at)
+                VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+                """,
+                [(name_id, fs_id, json.dumps(features)) for name_id, fs_id, features in chunk],
+            )
+            inserted += len(chunk)
+
+    return inserted
+
+
+def set_cached_features(
+    name_id: int,
+    feature_set_id: int,
+    features: dict,
+) -> None:
+    """Cache computed features for a single name.
+
+    Args:
+        name_id: The name ID
+        feature_set_id: The feature set ID
+        features: Feature dictionary to cache
+    """
+    import json  # noqa: PLC0415
+
+    with get_connection() as conn:
+        conn.execute(
+            """
+            INSERT OR REPLACE INTO name_features
+            (name_id, feature_set_id, features_json, computed_at)
+            VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+            """,
+            (name_id, feature_set_id, json.dumps(features)),
+        )
+
+
+def is_features_computed(name_id: int, feature_set_id: int) -> bool:
+    """Check if features are already computed for a name."""
+    with get_connection() as conn:
+        cursor = conn.execute(
+            """
+            SELECT 1 FROM name_features
+            WHERE name_id = ? AND feature_set_id = ?
+            """,
+            (name_id, feature_set_id),
+        )
+        return cursor.fetchone() is not None
+
+
+def get_names_missing_features(
+    feature_set_id: int,
+    limit: int | None = None,
+) -> list[tuple[int, str]]:
+    """Get names that don't have features computed for the given feature set.
+
+    Args:
+        feature_set_id: The feature set ID
+        limit: Optional limit on number of names to return
+
+    Returns:
+        List of (name_id, name) tuples
+    """
+    query = """
+        SELECT n.id, n.name
+        FROM names n
+        LEFT JOIN name_features nf ON n.id = nf.name_id AND nf.feature_set_id = ?
+        WHERE nf.name_id IS NULL
+        ORDER BY n.id
+    """
+    if limit:
+        query += f" LIMIT {limit}"
+
+    with get_connection() as conn:
+        cursor = conn.execute(query, (feature_set_id,))
+        return [(row[0], row[1]) for row in cursor.fetchall()]
+
+
+def count_missing_features(feature_set_id: int) -> int:
+    """Count how many names are missing features for the given feature set."""
+    with get_connection() as conn:
+        cursor = conn.execute(
+            """
+            SELECT COUNT(*)
+            FROM names n
+            LEFT JOIN name_features nf ON n.id = nf.name_id AND nf.feature_set_id = ?
+            WHERE nf.name_id IS NULL
+            """,
+            (feature_set_id,),
+        )
+        return cursor.fetchone()[0]
+
+
+def get_feature_cache_stats() -> dict:
+    """Get statistics about feature caching.
+
+    Returns:
+        Dictionary with total_names, cached_names, missing_names, and per-feature-set stats.
+    """
+    with get_connection() as conn:
+        total_names = conn.execute("SELECT COUNT(*) FROM names").fetchone()[0]
+
+        # Get stats per feature set
+        cursor = conn.execute("""
+            SELECT fs.version, fs.is_active, COUNT(nf.name_id) as cached_count
+            FROM feature_sets fs
+            LEFT JOIN name_features nf ON fs.id = nf.feature_set_id
+            GROUP BY fs.id
+            ORDER BY fs.created_at DESC
+        """)
+
+        feature_set_stats = []
+        for row in cursor:
+            cached = row[2]
+            feature_set_stats.append(
+                {
+                    "version": row[0],
+                    "is_active": bool(row[1]),
+                    "cached_count": cached,
+                    "missing_count": total_names - cached,
+                    "coverage_pct": (cached / total_names * 100) if total_names > 0 else 0,
+                },
+            )
+
+        return {
+            "total_names": total_names,
+            "feature_sets": feature_set_stats,
+        }
 
 
 if __name__ == "__main__":
