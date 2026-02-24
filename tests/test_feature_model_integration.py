@@ -151,7 +151,7 @@ def test_batch_and_single_extraction_equivalent(initialized_db, test_names_with_
                 (name,),
             )
             row = cursor.fetchone()
-            details.append(row if row else (None, None))
+            details.append(row or (None, None))
 
     genders = [d[0] for d in details]
     origins = [d[1] for d in details]

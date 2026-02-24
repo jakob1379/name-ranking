@@ -1,10 +1,7 @@
 """Integration tests for main.py Streamlit application."""
 
 import json
-from io import StringIO
 from unittest.mock import MagicMock, patch
-
-import pytest
 
 from st_name_ranking import main as main_module
 
@@ -255,7 +252,7 @@ class TestMainIntegration:
         mock_st.pills = MagicMock(return_value="All")
         mock_st.multiselect = MagicMock(return_value=[])
         mock_st.button = MagicMock(
-            side_effect=[False, True] + [False] * 10
+            side_effect=[False, True] + [False] * 10,
         )  # Second button is save ratings, others False
         mock_st.columns = MagicMock(side_effect=lambda n: [MagicMock() for _ in range(n)])
         mock_st.caption = MagicMock()

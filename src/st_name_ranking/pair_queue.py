@@ -4,8 +4,8 @@ Provides a PairQueue class that maintains a queue of preloaded (name_a, name_b) 
 with smart refill capabilities and Streamlit session state integration.
 """
 
-from collections import deque
 import logging
+from collections import deque
 from typing import Final
 
 import numpy as np

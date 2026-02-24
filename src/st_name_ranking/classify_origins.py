@@ -13,6 +13,7 @@ import argparse
 import logging
 import sys
 import time
+from collections.abc import Callable
 from typing import NamedTuple
 
 
@@ -57,11 +58,14 @@ def get_classifier() -> Classifier:
 
     try:
         from ethnidata import EthniData  # noqa: PLC0415
+
+        get_classifier._cache = EthniData()
     except ImportError as err:
         _msg = "ethnidata not installed. Install with: pip install ethnidata"
         raise ImportError(_msg) from err
-
-    get_classifier._cache = EthniData()
+    except (OSError, FileNotFoundError) as err:
+        _msg = f"ethnidata data files missing or broken: {err}"
+        raise ImportError(_msg) from err
     logger.debug("Initialized ethnidata classifier")
     return get_classifier._cache
 
@@ -105,7 +109,7 @@ def classify_name(name: str) -> tuple[str, float] | None:
 
         region, confidence = classifier.classify(name)
 
-    except (ImportError, AttributeError, ValueError, RuntimeError) as e:
+    except (ImportError, AttributeError, ValueError, RuntimeError, OSError) as e:
         logger.warning("Error classifying name '%s': %s", name, e)
         return None
     else:
@@ -209,9 +213,15 @@ def _classify_individually(names_batch: list) -> int:
 def classify_all_names(
     limit: int | None = None,
     batch_size: int = 100,
+    progress_callback: "Callable[[int, int], None] | None" = None,
 ) -> int:
     """Classify all unclassified names.
     Returns total number of names classified.
+
+    Args:
+        limit: Maximum number of names to classify
+        batch_size: Number of names to process per batch
+        progress_callback: Optional callback(current, total) for progress updates
     """
     logger.info("Fetching unclassified names...")
     unclassified = get_unclassified_names(limit)
@@ -234,6 +244,7 @@ def classify_all_names(
 
     start_time = time.time()
     classified = 0
+    processed = 0
 
     # Process in batches
     for i in range(0, total, batch_size):
@@ -246,10 +257,15 @@ def classify_all_names(
 
         batch_classified = classify_batch(batch, batch_size)
         classified += batch_classified
+        processed += len(batch)
+
+        # Call progress callback if provided
+        if progress_callback:
+            progress_callback(processed, total)
 
         elapsed = time.time() - start_time
-        rate = (i + len(batch)) / elapsed if elapsed > 0 else 0
-        remaining = total - (i + len(batch))
+        rate = processed / elapsed if elapsed > 0 else 0
+        remaining = total - processed
         eta = remaining / rate if rate > 0 else 0
 
         logger.info(

@@ -1,7 +1,6 @@
 """Integration tests for Bradley-Terry model with database."""
 
 import numpy as np
-import pytest
 
 
 class TestBradleyTerryModelIntegration:

@@ -92,11 +92,14 @@ def _create_ethnidata_classifier() -> ClassifierFunc | bool:
     """
     try:
         from ethnidata import EthniData  # noqa: PLC0415
+
+        ethnidata = EthniData()
     except ImportError:
         logger.debug("ethnidata not installed")
         return False
-
-    ethnidata = EthniData()
+    except (OSError, FileNotFoundError) as e:
+        logger.warning("ethnidata data files missing or broken: %s", e)
+        return False
 
     def classify_with_ethnidata(name: str) -> tuple[str, float] | None:
         """Classify a single name using ethnidata."""

@@ -28,7 +28,7 @@ MIN_NAMES_FOR_PAIR_SELECTION = 2
 _model_update_lock = threading.Lock()
 
 
-@functools.lru_cache()
+@functools.lru_cache
 def get_thread_executor() -> ThreadPoolExecutor:
     """Shared thread pool for background tasks."""
     return ThreadPoolExecutor(max_workers=2)

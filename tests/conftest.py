@@ -40,8 +40,8 @@ def mock_db_path(temp_db_path):
 @pytest.fixture
 def initialized_db(mock_db_path):
     """Initialize a fresh database with schema."""
-    from st_name_ranking.database import get_connection, init_database
     from st_name_ranking import utils
+    from st_name_ranking.database import get_connection, init_database
 
     # Clear feature extractor cache to prevent stale data between tests
     utils.get_feature_extractor._cache = None
@@ -125,7 +125,7 @@ def mock_submodule_path(tmp_path):
 @pytest.fixture
 def mock_classifier():
     """Mock the ethnidata classifier to avoid missing database file."""
-    from st_name_ranking import origin_classifier, classify_origins
+    from st_name_ranking import classify_origins, origin_classifier
 
     # Clear singleton cache to ensure fresh classifier
     origin_classifier.get_classifier._cache = None

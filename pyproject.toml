@@ -34,8 +34,8 @@ requires-python = ">=3.14,<3.15"
 dependencies = [
   "httpx>=0.28.1",
   "ethnidata>=4.3.1",
-  "unidecode>=1.3.8",
-  "pycountry>=24.6.1",
+  "unidecode>=1.4.0",
+  "pycountry>=26.2.16",
   "numpy>=2.4.2",
   "pandas>=2.3.3",
   "rapidfuzz>=3.14.3",
@@ -83,14 +83,14 @@ line-length = 120 # use whatever number makes you happy
 # Test-specific exemptions are in tests/ruff.toml
 select = ["ALL"]
 ignore = [
-  "D",       # Docstrings (85 remaining - tackle incrementally)
-  "RUF001",  # Ambiguous unicode (intentional for Danish names)
-  "RUF002",  # Ambiguous unicode in docstrings
-  "RUF003",  # Ambiguous unicode in comments
-  "S301",    # Pickle - documented safe (internal data only)
-  "S608",    # SQL - false positives with parameterized queries
-  "S311",    # Random - UI demo only (not security)
-  "ANN401",  # Any type - DataFrame row processing
+  "D", # Docstrings (85 remaining - tackle incrementally)
+  "RUF001", # Ambiguous unicode (intentional for Danish names)
+  "RUF002", # Ambiguous unicode in docstrings
+  "RUF003", # Ambiguous unicode in comments
+  "S301", # Pickle - documented safe (internal data only)
+  "S608", # SQL - false positives with parameterized queries
+  "S311", # Random - UI demo only (not security)
+  "ANN401" # Any type - DataFrame row processing
 ]
 
 [tool.ruff.lint.isort]

@@ -12,6 +12,7 @@ from datetime import datetime
 import streamlit as st
 
 from st_name_ranking import database
+from st_name_ranking.background_queue import get_queue_manager
 from st_name_ranking.data_loader import load_names_by_gender
 from st_name_ranking.database import initialize_ratings
 from st_name_ranking.ui import render_binary_filter, render_similarity, render_tournament
@@ -261,7 +262,7 @@ def main() -> None:
         database.init_database()
         try:
             stats = database.get_stats()
-            total_names = stats["total_names"]
+            total_names = stats.total_names
             if total_names == 0:
                 st.warning("Database is empty. You need to sync names first.")
             else:
@@ -312,6 +313,19 @@ def main() -> None:
             total_time,
             db_init_time,
             query_time,
+        )
+
+    # Initialize QueueManager ONLY when on Tournament tab
+    # This avoids slowing down Name Filter with unnecessary background work
+    if st.session_state.get("active_tab") == "Tournament" and len(filtered_names) >= 2:
+        queue_size = st.session_state.get("tournament_queue_size", 15)
+        get_queue_manager(filtered_names, queue_size)
+        logger.debug("Initialized QueueManager for Tournament tab")
+    else:
+        logger.debug(
+            "Skipping QueueManager init (tab=%s, names=%d)",
+            st.session_state.get("active_tab"),
+            len(filtered_names),
         )
 
     if not filtered_names:

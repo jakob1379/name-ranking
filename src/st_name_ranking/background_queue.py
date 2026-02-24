@@ -155,18 +155,26 @@ class QueueManager:
         Gets the latest model, calculates variances, and fills the queue
         with either model-based or random pairs.
         """
+        import time
+
+        start_time = time.perf_counter()
+        logger.info("🔄 Queue refill started (current_size=%d, target=%d)", self.get_queue_size(), self.target_size)
+
         # Get latest model (might be updating or None)
         try:
             model: BradleyTerryModel | None = get_active_learning_model()
-        except Exception:
-            logger.exception("Failed to get active learning model")
+            logger.info("✅ Model loaded (training_samples=%d)", model.state.training_samples if model else 0)
+        except Exception as e:
+            logger.warning("⚠️ Failed to get active learning model: %s", e)
             model = None
 
         # Get features for all names
         try:
+            logger.info("📊 Extracting features for %d names...", len(self.names))
             features = get_names_features(self.names)
-        except Exception:
-            logger.exception("Failed to get name features")
+            logger.info("✅ Features extracted: %s", features.shape if features is not None else "None")
+        except Exception as e:
+            logger.warning("⚠️ Failed to get name features: %s", e)
             features = None
 
         # Calculate how many pairs we need
@@ -183,6 +191,7 @@ class QueueManager:
         if model is not None and features is not None and model.state.training_samples >= MIN_TRAINING_SAMPLES:
             # Model-based selection with variance calculation
             try:
+                logger.info("🎯 Using model-based selection (training_samples=%d)", model.state.training_samples)
                 # Sample a subset for efficiency (max 50 names)
                 rng = np.random.default_rng()
                 sample_size = min(50, len(self.names))
@@ -202,18 +211,19 @@ class QueueManager:
                     k=needed,
                 )
                 pairs = [(p.name_a, p.name_b) for p in name_pairs]
-                logger.debug("Generated %d model-based pairs", len(pairs))
-            except Exception:
-                logger.exception("Model-based pair selection failed, falling back to random")
+                logger.info("🎯 Generated %d model-based pairs", len(pairs))
+            except Exception as e:
+                logger.warning("⚠️ Model-based pair selection failed: %s", e)
                 pairs = []
 
         # Fallback to random selection if model selection failed or not enough training samples
         if not pairs:
             try:
+                logger.info("🎲 Using random selection (needed=%d)", needed)
                 pairs = select_random_batch(self.names, needed)
-                logger.debug("Generated %d random pairs", len(pairs))
-            except Exception:
-                logger.exception("Random pair selection failed")
+                logger.info("🎲 Generated %d random pairs", len(pairs))
+            except Exception as e:
+                logger.error("❌ Random pair selection failed: %s", e)
                 return
 
         # Add pairs to queue, avoiding duplicates
@@ -230,8 +240,11 @@ class QueueManager:
                     existing_pairs.add(normalized)
                     added += 1
 
+            elapsed = time.perf_counter() - start_time
             if added > 0:
-                logger.debug("Added %d pairs to queue (total: %d)", added, len(self.queue))
+                logger.info("✅ Added %d pairs to queue (total: %d) in %.2fs", added, len(self.queue), elapsed)
+            else:
+                logger.info("⚠️ No new pairs added (all duplicates) in %.2fs", elapsed)
 
     def __del__(self) -> None:
         """Ensure background thread is stopped on garbage collection."""

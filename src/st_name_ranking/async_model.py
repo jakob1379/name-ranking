@@ -17,7 +17,7 @@ import threading
 import time
 from collections import deque
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Final
+from typing import Final
 
 import numpy as np
 import streamlit as st
@@ -26,9 +26,6 @@ from st_name_ranking import database
 from st_name_ranking.model import BradleyTerryModel, initialize_model_if_needed
 from st_name_ranking.types import NamePair
 from st_name_ranking.utils import get_feature_extractor, get_name_features
-
-if TYPE_CHECKING:
-    from collections.abc import Callable
 
 logger = logging.getLogger(__name__)
 

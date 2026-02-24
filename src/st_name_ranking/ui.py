@@ -8,6 +8,8 @@ from typing import Literal
 import pandas as pd
 import streamlit as st
 
+from st_name_ranking.async_model import select_random_pair
+from st_name_ranking.background_queue import get_queue_manager
 from st_name_ranking.database import (
     INITIAL_SCORE,
     get_preference_stats_by_gender,
@@ -22,14 +24,6 @@ from st_name_ranking.similarity import (
     load_embedding_model,
 )
 from st_name_ranking.types import PreferenceStats
-from st_name_ranking.name_queue import (
-    NameQueue,
-    clear_queue_session,
-    get_queue_from_session,
-    save_queue_to_session,
-)
-from st_name_ranking.async_model import select_random_pair
-from st_name_ranking.background_queue import get_queue_manager, stop_queue_manager
 from st_name_ranking.utils import (
     get_names_features,
     record_comparison_instant,
@@ -205,7 +199,19 @@ def render_tournament(names: list[str]) -> None:
     logger.debug("Rendering tournament with %d names", len(names))
     st.header("Name Ranking Tournament")
     st.write(f"Comparing {len(names)} names")
-    st.caption("Tournament mode: click which name you prefer")
+
+    # Get or create background queue manager for instant transitions
+    queue_size = st.session_state.get("tournament_queue_size", 15)
+    manager = get_queue_manager(names, queue_size)
+
+    # Show queue status to indicate background filling progress
+    current_queue_size = manager.get_queue_size()
+    queue_status = (
+        "🟢" if current_queue_size >= queue_size * 0.8 else "🟡" if current_queue_size >= queue_size * 0.5 else "🔴"
+    )
+    st.caption(
+        f"Tournament mode: click which name you prefer | Queue: {current_queue_size}/{queue_size} {queue_status}",
+    )
 
     # Handle empty names list gracefully
     if len(names) < 2:
@@ -222,10 +228,6 @@ def render_tournament(names: list[str]) -> None:
     # Create placeholders for dynamic content
     pair_display_placeholder = st.empty()
     buttons_placeholder = st.empty()
-
-    # Get or create background queue manager for instant transitions
-    queue_size = st.session_state.get("tournament_queue_size", 15)
-    manager = get_queue_manager(names, queue_size)
 
     # Initialize candidates if not set or empty
     if (
@@ -354,25 +356,38 @@ def render_tournament(names: list[str]) -> None:
     # Handle votes with instant async model updates for UI feedback
     vote_handled = False
     next_pair = None
+    vote_type = None
 
     if vote_a_clicked:
         vote_handled = True
+        vote_type = "a"
+        logger.info("🎮 Vote: '%s' preferred over '%s'", st.session_state.candidate_a, st.session_state.candidate_b)
         # 1. Record comparison instantly (async model update in background)
         record_comparison_instant(st.session_state.candidate_a, st.session_state.candidate_b, -1)
         # 2. Get next pair instantly from background queue
         next_pair = manager.get_pair()
         if not next_pair:
             next_pair = select_random_pair(names)
+            logger.info("📦 Next pair (random): %s vs %s", next_pair[0], next_pair[1])
+        else:
+            logger.info("📦 Next pair (queue): %s vs %s", next_pair[0], next_pair[1])
     elif vote_b_clicked:
         vote_handled = True
+        vote_type = "b"
+        logger.info("🎮 Vote: '%s' preferred over '%s'", st.session_state.candidate_b, st.session_state.candidate_a)
         # 1. Record comparison instantly (async model update in background)
         record_comparison_instant(st.session_state.candidate_a, st.session_state.candidate_b, 1)
         # 2. Get next pair instantly from background queue
         next_pair = manager.get_pair()
         if not next_pair:
             next_pair = select_random_pair(names)
+            logger.info("📦 Next pair (random): %s vs %s", next_pair[0], next_pair[1])
+        else:
+            logger.info("📦 Next pair (queue): %s vs %s", next_pair[0], next_pair[1])
     elif draw_clicked:
         vote_handled = True
+        vote_type = "draw"
+        logger.info("🎮 Vote: Draw between '%s' and '%s'", st.session_state.candidate_a, st.session_state.candidate_b)
         st.toast("🤝 you chose a draw!", duration="long")
         # 1. Record comparison instantly (async model update in background)
         record_comparison_instant(st.session_state.candidate_a, st.session_state.candidate_b, 0)
@@ -380,8 +395,13 @@ def render_tournament(names: list[str]) -> None:
         next_pair = manager.get_pair()
         if not next_pair:
             next_pair = select_random_pair(names)
+            logger.info("📦 Next pair (random): %s vs %s", next_pair[0], next_pair[1])
+        else:
+            logger.info("📦 Next pair (queue): %s vs %s", next_pair[0], next_pair[1])
     elif down_clicked:
         vote_handled = True
+        vote_type = "down"
+        logger.info("🎮 Vote: Both '%s' and '%s' disliked", st.session_state.candidate_a, st.session_state.candidate_b)
         st.toast("👎 you disliked both!", duration="long")
         # 1. Record comparison instantly (async model update in background)
         record_comparison_instant(st.session_state.candidate_a, st.session_state.candidate_b, 2)
@@ -389,10 +409,15 @@ def render_tournament(names: list[str]) -> None:
         next_pair = manager.get_pair()
         if not next_pair:
             next_pair = select_random_pair(names)
+            logger.info("📦 Next pair (random): %s vs %s", next_pair[0], next_pair[1])
+        else:
+            logger.info("📦 Next pair (queue): %s vs %s", next_pair[0], next_pair[1])
 
     # Update session state and UI instantly after vote (no rerun needed)
     if vote_handled and next_pair:
+        old_a, old_b = st.session_state.candidate_a, st.session_state.candidate_b
         st.session_state.candidate_a, st.session_state.candidate_b = next_pair
+        logger.info("🔄 Transition: (%s, %s) → (%s, %s)", old_a, old_b, next_pair[0], next_pair[1])
         # Update UI instantly with st.fragment placeholder updates
         update_display(next_pair[0], next_pair[1], st.session_state.ratings)
 
@@ -511,8 +536,12 @@ def render_binary_filter(names: list[str]) -> None:
 
     Users review names one by one, marking them as included or excluded.
     """
-    logger.debug("Rendering binary filter with %d names", len(names))
+    logger.info("🎛️  Filter rendering %d names", len(names))
     start_time = time.perf_counter()
+
+    def log_timing(step_name: str) -> None:
+        elapsed = (time.perf_counter() - start_time) * 1000
+        logger.info("⏱️  %s: %.1fms", step_name, elapsed)
 
     # Clear last button press time (used for performance monitoring)
     if "last_button_press_time" in st.session_state:
@@ -552,20 +581,33 @@ def render_binary_filter(names: list[str]) -> None:
     stats_placeholder = st.empty()
     name_display_placeholder = st.empty()
 
-    # Load inclusion decisions from session state or database
-    if "name_inclusions" not in st.session_state:
+    # Load inclusion decisions from session state or database (cached)
+    cache_key = "name_inclusions_loaded"
+    if cache_key not in st.session_state:
         try:
             inclusions_json = load_user_setting("name_inclusions", "{}")
             st.session_state.name_inclusions = json.loads(inclusions_json)
+            st.session_state[cache_key] = True
+            logger.debug("Loaded %d inclusions from database", len(st.session_state.name_inclusions))
         except json.JSONDecodeError:
             st.session_state.name_inclusions = {}
+            st.session_state[cache_key] = True
 
     inclusions = st.session_state.name_inclusions
-    time_after_inclusions = time.perf_counter()
+    log_timing("After inclusions loaded")
 
     # Detect if names list has changed (e.g., gender/origin filter changed)
-    # Store a hash of the current names list (names are already sorted from database)
-    names_hash = str(hash(tuple(names)))
+    # Use a faster hash: just hash the first, last, and length
+    # This is O(1) instead of O(n) for hashing the full tuple
+    hash_start = time.perf_counter()
+    if len(names) > 0:
+        # Fast hash using first name, last name, and count
+        fast_hash = hash((names[0], names[-1], len(names)))
+    else:
+        fast_hash = hash(0)
+    names_hash = str(fast_hash)
+    hash_time = time.perf_counter()
+
     if "filter_names_hash" not in st.session_state:
         st.session_state.filter_names_hash = names_hash
         st.session_state.filter_index = 0
@@ -583,13 +625,18 @@ def render_binary_filter(names: list[str]) -> None:
         st.session_state.filter_index = 0
 
     # Initialize or update filter counts if names list changed
-    if (
+    counts_start = time.perf_counter()
+    needs_recount = (
         "filter_counts_not_decided" not in st.session_state
         or "filter_counts_included" not in st.session_state
         or "filter_counts_excluded" not in st.session_state
         or st.session_state.get("filter_counts_names_hash") != names_hash
-    ):
-        # Recompute counts from scratch
+    )
+
+    if needs_recount:
+        # Recompute counts from scratch - O(n) operation
+        logger.info("📊 Computing counts for %d names...", len(names))
+        count_loop_start = time.perf_counter()
         not_decided = explicitly_included = explicitly_excluded = 0
         for name in names:
             status = inclusions.get(name)
@@ -599,13 +646,22 @@ def render_binary_filter(names: list[str]) -> None:
                 explicitly_included += 1
             else:  # status is False
                 explicitly_excluded += 1
+        count_loop_time = time.perf_counter() - count_loop_start
 
         st.session_state.filter_counts_not_decided = not_decided
         st.session_state.filter_counts_included = explicitly_included
         st.session_state.filter_counts_excluded = explicitly_excluded
         st.session_state.filter_counts_names_hash = names_hash
 
-    time_after_counts = time.perf_counter()
+        logger.info(
+            "✅ Counts computed: %d not decided, %d included, %d excluded (%.1fms)",
+            not_decided,
+            explicitly_included,
+            explicitly_excluded,
+            count_loop_time * 1000,
+        )
+
+    log_timing("After counts")
 
     # Get current name
     current_idx = st.session_state.filter_index
@@ -651,7 +707,7 @@ def render_binary_filter(names: list[str]) -> None:
 
     # Initial display
     update_display(current_name, current_idx)
-    time_after_name_display = time.perf_counter()
+    log_timing("After display update")
 
     # Decision buttons - simplified to two clear options
     col_exclude, col_include = st.columns(2)
@@ -663,6 +719,8 @@ def render_binary_filter(names: list[str]) -> None:
             type="secondary",
             shortcut="Left",
         ):
+            logger.info("👎 Excluding: %s", current_name)
+            button_click_start = time.perf_counter()
             old_status = inclusions.get(current_name)
             inclusions[current_name] = False
             update_counts(current_name, old_status=old_status, new_status=False)
@@ -673,6 +731,7 @@ def render_binary_filter(names: list[str]) -> None:
             next_idx = st.session_state.filter_index
             if next_idx < len(names):
                 update_display(names[next_idx], next_idx)
+            logger.info("⚡ Exclude handled in %.1fms", (time.perf_counter() - button_click_start) * 1000)
     with col_include:
         if st.button(
             "Include",
@@ -681,6 +740,8 @@ def render_binary_filter(names: list[str]) -> None:
             type="primary",
             shortcut="Right",
         ):
+            logger.info("👍 Including: %s", current_name)
+            button_click_start = time.perf_counter()
             # Include (explicitly mark as included)
             old_status = inclusions.get(current_name)
             inclusions[current_name] = True
@@ -692,6 +753,7 @@ def render_binary_filter(names: list[str]) -> None:
             next_idx = st.session_state.filter_index
             if next_idx < len(names):
                 update_display(names[next_idx], next_idx)
+            logger.info("⚡ Include handled in %.1fms", (time.perf_counter() - button_click_start) * 1000)
 
     # Save decisions periodically (every 50 actions to reduce DB writes)
     if current_idx % 50 == 0:
@@ -737,83 +799,70 @@ def render_binary_filter(names: list[str]) -> None:
 
     # Navigation buttons
     st.divider()
-    col_nav1, col_nav2, col_nav3 = st.columns(3)
-    with col_nav1:
-        if st.button("Previous", disabled=current_idx == 0):
-            st.session_state.filter_index -= 1
-            st.session_state.last_button_press_time = time.perf_counter()
-            # INSTANT UPDATE - no full rerun!
-            prev_idx = st.session_state.filter_index
-            update_display(names[prev_idx], prev_idx)
-    with col_nav2:
-        if st.button("Reset All Decisions", type="secondary"):
-            st.session_state.name_inclusions = {}
-            st.session_state.filter_index = 0
-            # Reset counts
-            st.session_state.filter_counts_not_decided = len(names)
-            st.session_state.filter_counts_included = 0
-            st.session_state.filter_counts_excluded = 0
-            st.session_state.filter_counts_names_hash = names_hash
-            save_user_setting("name_inclusions", "{}")
-            st.session_state.last_button_press_time = time.perf_counter()
-            # Fragment-level refresh for reset
-            st.rerun(scope="fragment")
-    with col_nav3:
-        if st.button("Save & Continue", type="primary"):
-            save_user_setting("name_inclusions", json.dumps(inclusions))
-            st.toast("Decisions saved!", icon="✅")
-            # Switch to tournament tab with included names
-            st.session_state.active_tab = "Tournament"
-            # This needs full rerun to switch tabs
-            st.rerun()
+    if st.button("Reset All Decisions", type="secondary"):
+        st.session_state.name_inclusions = {}
+        st.session_state.filter_index = 0
+        # Reset counts
+        st.session_state.filter_counts_not_decided = len(names)
+        st.session_state.filter_counts_included = 0
+        st.session_state.filter_counts_excluded = 0
+        st.session_state.filter_counts_names_hash = names_hash
+        save_user_setting("name_inclusions", "{}")
+        st.session_state.last_button_press_time = time.perf_counter()
+        # Fragment-level refresh for reset
+        st.rerun(scope="fragment")
 
-    # Show list of excluded names (collapsible)
-    with st.expander("Show excluded names"):
-        excluded_names = [name for name in names if inclusions.get(name) is False]
-        if excluded_names:
-            # Compute sorted list once
-            sorted_excluded = sorted(excluded_names)
-            # Multiselect widget: selected names remain excluded
-            selected = st.multiselect(
-                f"Excluded names ({len(excluded_names)})",
-                sorted_excluded,
-                default=sorted_excluded,
-                help="Uncheck names to include them in the tournament.",
-            )
-            # Find names that were deselected (removed from excluded)
-            selected_set = set(selected)
-            for name in excluded_names:
-                if name not in selected_set:
-                    # Move from excluded to included
-                    old_status = inclusions.get(name)
-                    inclusions[name] = True
-                    update_counts(name, old_status=old_status, new_status=True)
-            # Note: No need to rerun explicitly - widget triggers rerun
-        else:
-            st.write("No names excluded yet.")
+    log_timing("After buttons")
+
+    # Show included names in a multiselect (usually small number, performant)
+    # Get list of included names for the multiselect
+    included_names = [name for name in names if inclusions.get(name) is True]
+    excluded_count = st.session_state.filter_counts_excluded
+
+    st.divider()
+    st.subheader("📋 Your Selections")
+
+    # Only show multiselect if there are included names
+    if included_names:
+        # Sort for consistent display
+        sorted_included = sorted(included_names)
+
+        selected_included = st.multiselect(
+            f"✅ Included names for tournament ({len(sorted_included)})",
+            options=sorted_included,
+            default=sorted_included,
+            help="Uncheck names to move them back to 'not decided'",
+        )
+
+        # Check if any were deselected
+        selected_set = set(selected_included)
+        for name in sorted_included:
+            if name not in selected_set:
+                # User unchecked this name - move to not decided
+                old_status = inclusions.get(name)
+                del inclusions[name]  # Remove from dict = not decided
+                update_counts(name, old_status=old_status, new_status=None)
+                logger.info("🔄 %s moved from included to not decided", name)
+                st.toast(f"{name} moved to not decided", icon="🔄")
+                st.rerun(scope="fragment")
+    else:
+        st.info("No names included yet. Use 'Include' button above to add names.")
+
+    # Show excluded count as info text (not a multiselect for performance)
+    if excluded_count > 0:
+        st.caption(f"❌ Excluded: {excluded_count} names")
+
+    log_timing("At end")
 
     # Performance logging
     end_time = time.perf_counter()
     elapsed_ms = (end_time - start_time) * 1000
 
-    # Calculate section timings if variables exist
-    sections = []
-    if "time_after_inclusions" in locals():
-        inclusions_ms = (time_after_inclusions - start_time) * 1000
-        sections.append(f"inclusions: {inclusions_ms:.1f}ms")
-    if "time_after_counts" in locals():
-        counts_ms = (
-            time_after_counts - (time_after_inclusions if "time_after_inclusions" in locals() else start_time)
-        ) * 1000
-        sections.append(f"counts: {counts_ms:.1f}ms")
-    if "time_after_name_display" in locals():
-        name_display_ms = (
-            time_after_name_display - (time_after_counts if "time_after_counts" in locals() else start_time)
-        ) * 1000
-        sections.append(f"name_display: {name_display_ms:.1f}ms")
-
-    section_str = ", ".join(sections) if sections else "no section timing"
-    logger.debug("render_binary_filter completed in %.1fms (%s)", elapsed_ms, section_str)
+    # Log timing at INFO level if slow, DEBUG otherwise
+    if elapsed_ms > 100:
+        logger.info("🐌 Filter render slow: %.1fms", elapsed_ms)
+    else:
+        logger.info("✅ Filter render fast: %.1fms", elapsed_ms)
 
 
 def render_similarity(names: list[str]) -> None:

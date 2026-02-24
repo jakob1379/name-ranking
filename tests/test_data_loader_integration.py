@@ -1,10 +1,6 @@
 """Integration tests for data_loader module."""
 
-import json
-from pathlib import Path
-from unittest.mock import MagicMock, mock_open, patch
-
-import pytest
+from unittest.mock import MagicMock, patch
 
 from st_name_ranking import data_loader
 

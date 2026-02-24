@@ -5,6 +5,10 @@ Provides commands for database initialization, data processing,
 and statistics.
 """
 
+import datetime as dt
+import shutil
+from pathlib import Path
+
 import typer
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
@@ -13,6 +17,7 @@ from rich.table import Table
 # Import database functions
 from st_name_ranking.classify_origins import classify_all_names
 from st_name_ranking.database import (
+    DB_PATH,
     get_connection,
     get_stats,
     init_database,
@@ -111,14 +116,14 @@ def init(
 
     # 3. Optional origin classification
     if classify:
-        process_command(limit=None, batch_size=100)
+        classify_command(limit=None, batch_size=100)
 
     # Show final statistics
     stats_command()
 
 
 @app.command()
-def process(
+def classify(
     limit: int | None = typer.Option(
         None,
         "--limit",
@@ -132,34 +137,45 @@ def process(
         help="Batch size for processing",
     ),
 ) -> None:
-    """Process data enrichment tasks (origin classification).
+    """Classify name origins (nationality → geographic region).
 
-    This command processes unclassified names in batches,
+    Processes unclassified names in batches,
     predicting their nationality and mapping to geographic regions.
     """
-    process_command(limit, batch_size)
+    classify_command(limit, batch_size)
 
 
-def process_command(limit: int | None = None, batch_size: int = 100) -> None:
+def classify_command(limit: int | None = None, batch_size: int = 100) -> None:
     """Internal classification function with rich output."""
-    console.print("[bold blue]Processing Data Enrichment[/bold blue]")
+    console.print("[bold blue]Classifying Name Origins[/bold blue]")
     console.print()
 
+    # First check if there are names to classify
+    from st_name_ranking.database import get_unclassified_names
+
+    unclassified = get_unclassified_names(limit)
+    if not unclassified:
+        print_info("No unclassified names found.")
+        return
+
+    total = len(unclassified)
+    if limit and limit < total:
+        total = limit
+
     try:
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            console=console,
-        ) as progress:
+        with Progress(console=console, transient=True) as progress:
             task = progress.add_task(
-                "Processing data enrichment...",
-                total=None,
+                "Classifying names...",
+                total=total,
             )
-            classified = classify_all_names(limit, batch_size)
-            progress.update(task, completed=True)
+
+            def update_progress(current: int, total: int) -> None:
+                progress.update(task, completed=current)
+
+            classified = classify_all_names(limit, batch_size, update_progress)
 
         if classified == 0:
-            print_info("No unclassified names found.")
+            print_info("No names were classified.")
         else:
             print_success(f"Classified {classified} names")
 
@@ -318,6 +334,60 @@ def model_reset() -> None:
 
     except (RuntimeError, ValueError) as e:
         print_error(f"Failed to reset model: {e}")
+
+
+@app.command()
+def import_db(
+    source: Path = typer.Argument(..., help="Path to the exported database file to import"),
+    *,
+    force: bool = typer.Option(
+        False,
+        "--force",
+        "-f",
+        help="Skip confirmation prompt",
+    ),
+) -> None:
+    """Import a database from an exported file.
+
+    Backs up the current database and replaces it with the imported one.
+    """
+    console.print("[bold blue]Importing Database[/bold blue]")
+    console.print()
+
+    # Verify source file exists
+    if not source.exists():
+        print_error(f"Source file not found: {source}")
+        raise typer.Exit(code=1)
+
+    # Confirm unless --force
+    if not force:
+        confirm = typer.confirm(
+            f"This will replace your current database with {source.name}. A backup will be created. Continue?",
+        )
+        if not confirm:
+            console.print("Import cancelled.")
+            raise typer.Abort()
+
+    try:
+        # Create backup of current database if it exists
+        if DB_PATH.exists():
+            backup_path = DB_PATH.with_suffix(f".db.backup.{dt.datetime.now().strftime('%Y%m%d_%H%M%S')}")
+            shutil.copy2(DB_PATH, backup_path)
+            print_success(f"Created backup: {backup_path.name}")
+
+        # Copy new database
+        DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, DB_PATH)
+        print_success(f"Imported database from {source.name}")
+        print_info(f"Database location: {DB_PATH}")
+
+        # Show stats
+        console.print()
+        stats_command()
+
+    except (OSError, RuntimeError) as e:
+        print_error(f"Failed to import database: {e}")
+        raise typer.Exit(code=1) from None
 
 
 if __name__ == "__main__":

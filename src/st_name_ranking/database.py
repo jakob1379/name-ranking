@@ -42,14 +42,37 @@ MAX_SQL_PARAMS = 500
 
 
 @contextmanager
-def get_connection() -> Iterator[sqlite3.Connection]:
-    """Context manager for database connections."""
-    conn = sqlite3.connect(DB_PATH)
+def get_connection(timeout: float = 30.0) -> Iterator[sqlite3.Connection]:
+    """Context manager for database connections with atomic transaction support.
+
+    Args:
+        timeout: Maximum time to wait for database locks (seconds)
+
+    Ensures:
+    - Atomic commits (all or nothing)
+    - Automatic rollback on error
+    - Long busy timeout for concurrent access
+    - WAL mode for better concurrent read/write
+    """
+    # Convert timeout to milliseconds for SQLite
+    timeout_ms = int(timeout * 1000)
+    conn = sqlite3.connect(DB_PATH, timeout=timeout)
     conn.row_factory = sqlite3.Row
+
     try:
+        # Enable WAL mode for better concurrent read/write performance
+        conn.execute("PRAGMA journal_mode=WAL")
+        # Set busy timeout to wait for locks (30 seconds)
+        conn.execute(f"PRAGMA busy_timeout={timeout_ms}")
+        # Use DEFERRED transaction (default) - allows reads without write lock
+        # Write lock acquired only when first write occurs
+
         yield conn
+
+        # Commit only if no exception occurred
         conn.commit()
     except Exception:
+        # Rollback on any error to maintain atomicity
         conn.rollback()
         raise
     finally:
@@ -64,11 +87,16 @@ def _compute_phonetic_codes(name: str) -> tuple[str, str]:
     return (primary or "", secondary or "")
 
 
-def update_phonetic_codes(limit: int | None = None) -> int:
+def update_phonetic_codes(limit: int | None = None, conn: sqlite3.Connection | None = None) -> int:
     """Update phonetic codes for names where phonetic_primary is NULL.
     Returns number of names updated.
+
+    Args:
+        limit: Maximum number of names to update
+        conn: Optional existing connection. If provided, uses it; otherwise creates new connection.
     """
-    with get_connection() as conn:
+
+    def _do_update(connection: sqlite3.Connection) -> int:
         # Get names missing phonetic codes
         query = """
             SELECT id, name FROM names
@@ -78,14 +106,14 @@ def update_phonetic_codes(limit: int | None = None) -> int:
         if limit:
             query += f" LIMIT {limit}"
 
-        cursor = conn.execute(query)
+        cursor = connection.execute(query)
         rows = cursor.fetchall()
 
         updated = 0
         for row in rows:
             name_id, name = row
             primary, secondary = _compute_phonetic_codes(name)
-            conn.execute(
+            connection.execute(
                 """
                 UPDATE names
                 SET phonetic_primary = ?, phonetic_secondary = ?
@@ -100,6 +128,12 @@ def update_phonetic_codes(limit: int | None = None) -> int:
         else:
             logger.debug("No names need phonetic code updates")
         return updated
+
+    if conn is None:
+        with get_connection() as new_conn:
+            return _do_update(new_conn)
+    else:
+        return _do_update(conn)
 
 
 # Minimum names required for comparison testing
@@ -295,7 +329,7 @@ def init_database() -> None:
             logger.debug("Added phonetic_secondary column")
 
         # Update phonetic codes for existing names if missing
-        update_phonetic_codes()
+        update_phonetic_codes(conn=conn)
 
         # Create indexes
         conn.execute(
