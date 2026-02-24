@@ -877,9 +877,38 @@ def render_binary_filter(names: list[str]) -> None:
     else:
         st.info("No names included yet. Use 'Include' button above to add names.")
 
-    # Show excluded count as info text (not a multiselect for performance)
+    # Show excluded names in an expander (lazy loaded to avoid performance issues)
     if excluded_count > 0:
-        st.caption(f"❌ Excluded: {excluded_count} names")
+        with st.expander(f"❌ Show Excluded Names ({excluded_count})"):
+            # Get list of excluded names
+            excluded_names = [name for name in names if inclusions.get(name) is False]
+            if excluded_names:
+                # Sort and limit for performance
+                sorted_excluded = sorted(excluded_names)[:100]
+                remaining = len(excluded_names) - 100
+
+                if remaining > 0:
+                    st.caption(f"Showing first 100 of {len(excluded_names)} excluded names")
+
+                # Allow user to un-exclude (move back to undecided)
+                selected_excluded = st.multiselect(
+                    "Uncheck names to include them again",
+                    options=sorted_excluded,
+                    default=sorted_excluded,
+                    help="Uncheck names to move them back to 'not decided'",
+                )
+
+                # Check if any were deselected
+                selected_set = set(selected_excluded)
+                for name in sorted_excluded:
+                    if name not in selected_set:
+                        # User unchecked this name - move to not decided
+                        old_status = inclusions.get(name)
+                        del inclusions[name]  # Remove from dict = not decided
+                        update_counts(name, old_status=old_status, new_status=None)
+                        logger.info("🔄 %s moved from excluded to not decided", name)
+                        st.toast(f"{name} moved to not decided", icon="🔄")
+                        st.rerun(scope="fragment")
 
     log_timing("At end")
 

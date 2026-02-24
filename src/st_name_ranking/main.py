@@ -57,15 +57,15 @@ def show_reset_ratings_dialog() -> None:
             st.rerun()
 
 
-@st.dialog("⚠️ Confirm Reset Decisions", width="small")
+@st.dialog("⚠️ Confirm Reset Exclusions", width="small")
 def show_reset_decisions_dialog() -> None:
-    """Dialog for confirming filter decisions reset."""
+    """Dialog for confirming filter exclusions reset."""
     st.write("This will clear **all** include/exclude decisions.")
     st.write("**This action cannot be undone.**")
 
     col_confirm, col_cancel = st.columns(2)
     with col_confirm:
-        if st.button("Yes, Reset Decisions", type="primary", use_container_width=True):
+        if st.button("Yes, Reset Exclusions", type="primary", use_container_width=True):
             st.session_state.name_inclusions = {}
             st.session_state.filter_index = 0
             # Reset counts
@@ -238,7 +238,7 @@ def main() -> None:
         col1, col2 = st.columns(2)
         with col1:
             if st.button(
-                "Reset\nDecisions",
+                "Reset\nExclusions",
                 type="secondary",
                 help="Clear all include/exclude decisions",
                 use_container_width=True,
