@@ -100,16 +100,7 @@ def main() -> None:
         try:
             stats = database.get_stats()
             total_names = stats.total_names
-            classified_names = stats.classified_names
-            if total_names > 0:
-                pct_classified = classified_names / total_names
-                col1, col2 = st.columns(2)
-                with col1:
-                    st.metric("Names", f"{total_names:,}", border=True)
-                with col2:
-                    st.metric("Classified", f"{pct_classified:.1%}", border=True)
-            else:
-                st.metric("Names in Database", "0", border=True)
+            st.metric("Names in Database", f"{total_names:,}", border=True)
         except sqlite3.Error:
             st.caption("Database stats unavailable")
 
