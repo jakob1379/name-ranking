@@ -106,7 +106,7 @@ def main() -> None:
                 st.metric(
                     "Names in Database",
                     f"{total_names:,}",
-                    help=f"{pct_classified:.1%} classified ({classified_names:,} of {total_names:,})",
+                    f"{pct_classified:.0%} classified",
                     border=True,
                 )
             else:
