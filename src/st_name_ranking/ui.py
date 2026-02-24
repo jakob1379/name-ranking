@@ -195,14 +195,23 @@ def render_tournament(names: list[str]) -> None:
     User clicks on which name they prefer.
     Uses lazy model updates for instant UI feedback.
     """
+    import time
 
-    logger.debug("Rendering tournament with %d names", len(names))
+    start_time = time.perf_counter()
+
+    def log_timing(step: str) -> None:
+        logger.info("⏱️ Tournament [%s]: %.2fms", step, (time.perf_counter() - start_time) * 1000)
+
+    logger.info("🎮 Tournament started with %d names", len(names))
     st.header("Name Ranking Tournament")
     st.write(f"Comparing {len(names)} names")
+
+    log_timing("Before queue manager")
 
     # Get or create background queue manager for instant transitions
     queue_size = st.session_state.get("tournament_queue_size", 15)
     manager = get_queue_manager(names, queue_size)
+    log_timing("After queue manager")
 
     # Show queue status to indicate background filling progress
     current_queue_size = manager.get_queue_size()
@@ -352,12 +361,15 @@ def render_tournament(names: list[str]) -> None:
             help="Mark both names as disliked (Down arrow key)",
         )
 
+    log_timing("After button creation")
+
     # Handle votes with instant async model updates for UI feedback
     vote_handled = False
     next_pair = None
     vote_type = None
 
     if vote_a_clicked:
+        log_timing("Vote A clicked - handling")
         vote_handled = True
         vote_type = "a"
         logger.info("🎮 Vote: '%s' preferred over '%s'", st.session_state.candidate_a, st.session_state.candidate_b)
@@ -422,7 +434,9 @@ def render_tournament(names: list[str]) -> None:
 
     # Render display with current candidates (will reflect any updates above)
     update_display(st.session_state.candidate_a, st.session_state.candidate_b, st.session_state.ratings)
+    log_timing("After display render")
 
+    log_timing("Before statistics expander")
     with st.expander(label="statistics"):
         st.divider()
         st.subheader("Top Rankings")
@@ -527,6 +541,8 @@ def render_tournament(names: list[str]) -> None:
 
         # with col_prefs:
         #     render_preferences_panel()
+
+    log_timing("At end")
 
 
 @st.fragment
