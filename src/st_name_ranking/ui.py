@@ -683,15 +683,27 @@ def render_binary_filter(names: list[str]) -> None:
 
     log_timing("After counts")
 
-    # Get current name
+    # Filter to only undecided names for the progress tracking
+    # This allows users to resume filtering without going through all already-decided names
+    undecided_names = [name for name in names if name not in inclusions]
+
+    # If no undecided names, show completion message
+    if not undecided_names:
+        st.success("✅ All names have been processed! Switch to the Tournament tab to compare your selected names.")
+        return
+
+    # Get current name from undecided list
     current_idx = st.session_state.filter_index
-    current_name = names[current_idx]
+    if current_idx >= len(undecided_names):
+        current_idx = 0
+        st.session_state.filter_index = 0
+    current_name = undecided_names[current_idx]
 
     def update_display(current_name: str, current_idx: int) -> None:
         """Update display instantly without rerun."""
-        # Progress bar
-        progress = current_idx / len(names)
-        progress_placeholder.progress(progress, text=f"Progress: {current_idx + 1} of {len(names)}")
+        # Progress bar - show progress through UNDECIDED names only
+        progress = current_idx / len(undecided_names)
+        progress_placeholder.progress(progress, text=f"Progress: {current_idx + 1} of {len(undecided_names)} remaining")
 
         # Stats
         not_decided = st.session_state.filter_counts_not_decided
@@ -748,9 +760,15 @@ def render_binary_filter(names: list[str]) -> None:
             st.toast(f"Excluded: {current_name}", icon="👎")
             st.session_state.last_button_press_time = time.perf_counter()
             # INSTANT UPDATE - no rerun!
+            # Remove current name from undecided list for instant feedback
+            if current_name in undecided_names:
+                undecided_names.remove(current_name)
             next_idx = st.session_state.filter_index
-            if next_idx < len(names):
-                update_display(names[next_idx], next_idx)
+            if next_idx < len(undecided_names):
+                update_display(undecided_names[next_idx], next_idx)
+            else:
+                # All done!
+                st.success("✅ All names processed! Switch to Tournament tab.")
             logger.info("⚡ Exclude handled in %.1fms", (time.perf_counter() - button_click_start) * 1000)
     with col_include:
         if st.button(
@@ -770,9 +788,15 @@ def render_binary_filter(names: list[str]) -> None:
             st.toast(f"Included: {current_name}", icon="👍")
             st.session_state.last_button_press_time = time.perf_counter()
             # INSTANT UPDATE - no rerun!
+            # Remove current name from undecided list for instant feedback
+            if current_name in undecided_names:
+                undecided_names.remove(current_name)
             next_idx = st.session_state.filter_index
-            if next_idx < len(names):
-                update_display(names[next_idx], next_idx)
+            if next_idx < len(undecided_names):
+                update_display(undecided_names[next_idx], next_idx)
+            else:
+                # All done!
+                st.success("✅ All names processed! Switch to Tournament tab.")
             logger.info("⚡ Include handled in %.1fms", (time.perf_counter() - button_click_start) * 1000)
 
     # Save decisions periodically (every 50 actions to reduce DB writes)
@@ -791,11 +815,11 @@ def render_binary_filter(names: list[str]) -> None:
     # Batch operations
     col_batch1, col_batch2 = st.columns(2)
     with col_batch1:
-        if st.button("Include All Remaining", type="secondary", help="Include all remaining names"):
-            count = len(names) - current_idx
-            for name in names[current_idx:]:
+        if st.button("Include All Remaining", type="secondary", help="Include all remaining undecided names"):
+            count = len(undecided_names) - current_idx
+            for name in undecided_names[current_idx:]:
                 inclusions[name] = True
-            st.session_state.filter_index = len(names)  # Move to end
+            st.session_state.filter_index = 0  # Reset since undecided list will be empty
             # Invalidate counts cache to force recomputation
             if "filter_counts_names_hash" in st.session_state:
                 del st.session_state.filter_counts_names_hash
@@ -804,11 +828,11 @@ def render_binary_filter(names: list[str]) -> None:
             # Fragment-level refresh for batch operations
             st.rerun(scope="fragment")
     with col_batch2:
-        if st.button("Exclude All Remaining", type="secondary", help="Exclude all remaining names"):
-            count = len(names) - current_idx
-            for name in names[current_idx:]:
+        if st.button("Exclude All Remaining", type="secondary", help="Exclude all remaining undecided names"):
+            count = len(undecided_names) - current_idx
+            for name in undecided_names[current_idx:]:
                 inclusions[name] = False
-            st.session_state.filter_index = len(names)
+            st.session_state.filter_index = 0  # Reset since undecided list will be empty
             # Invalidate counts cache to force recomputation
             if "filter_counts_names_hash" in st.session_state:
                 del st.session_state.filter_counts_names_hash
