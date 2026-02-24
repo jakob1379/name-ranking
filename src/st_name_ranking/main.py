@@ -95,30 +95,29 @@ def main() -> None:
         # Database Management - Always show even if names not loaded
         st.subheader("Database Management")
 
-        col_sync, col_stats = st.columns(2)
-        with col_sync:
-            if st.button(
-                "Sync Names",
-                icon="🔄",
-                help="Sync names from submodule to database",
-            ):
-                inserted = sync_names_from_submodule()
-                if inserted > 0:
-                    st.rerun()
+        if st.button(
+            "Sync Names",
+            icon="🔄",
+            help="Sync names from submodule to database",
+            use_container_width=True,
+        ):
+            inserted = sync_names_from_submodule()
+            if inserted > 0:
+                st.rerun()
 
-        with col_stats:
-            database.init_database()
-            try:
-                stats = database.get_stats()
-                total_names = stats.total_names
-                classified_names = stats.classified_names
-                st.caption(f"Total: {total_names} names")
-                if total_names > 0:
-                    st.caption(
-                        f"Classified: {classified_names} ({classified_names / total_names:.0%})",
-                    )
-            except sqlite3.Error:
-                st.caption("Database stats unavailable")
+        # Database stats
+        database.init_database()
+        try:
+            stats = database.get_stats()
+            total_names = stats.total_names
+            classified_names = stats.classified_names
+            st.caption(f"Total: {total_names:,} names")
+            if total_names > 0:
+                st.caption(
+                    f"Classified: {classified_names:,} ({classified_names / total_names:.0%})",
+                )
+        except sqlite3.Error:
+            st.caption("Database stats unavailable")
 
         st.divider()
 
