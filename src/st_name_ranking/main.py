@@ -187,33 +187,38 @@ def main() -> None:
         if "names" in st.session_state and st.session_state.names:
             st.caption(f"Active Dataset: {len(st.session_state.names)} names")
 
+            # Confirmation state for reset
+            if "show_reset_confirm" not in st.session_state:
+                st.session_state.show_reset_confirm = False
+
             if st.button(
                 "Reset Ratings",
                 help=("Reset all ratings to initial values. This action cannot be undone."),
                 type="secondary",
             ):
-                # Open confirmation dialog
-                with st.dialog("Confirm Reset Ratings"):  # type: ignore[attr-defined]
-                    st.markdown("### ⚠️ Reset All Ratings?")
-                    st.write(
-                        "This will reset **all** ratings to their initial values.",
-                    )
-                    st.write("**This action cannot be undone.**")
+                st.session_state.show_reset_confirm = True
+                st.rerun()
 
-                    col_confirm, col_cancel = st.columns(2)
-                    with col_confirm:
-                        if st.button("Yes, Reset Ratings", type="primary"):
-                            st.session_state.ratings = initialize_ratings(
-                                st.session_state.names,
-                            )
-                            st.toast(
-                                "✅ Ratings reset to initial values",
-                                icon="✅",
-                            )
-                            st.rerun()
-                    with col_cancel:
-                        if st.button("Cancel", type="secondary"):
-                            st.rerun()
+            if st.session_state.show_reset_confirm:
+                st.warning("⚠️ Are you sure you want to reset all ratings?")
+                st.write("This will reset **all** ratings to their initial values. **This action cannot be undone.**")
+
+                col_confirm, col_cancel = st.columns(2)
+                with col_confirm:
+                    if st.button("Yes, Reset Ratings", type="primary"):
+                        st.session_state.ratings = initialize_ratings(
+                            st.session_state.names,
+                        )
+                        st.session_state.show_reset_confirm = False
+                        st.toast(
+                            "✅ Ratings reset to initial values",
+                            icon="✅",
+                        )
+                        st.rerun()
+                with col_cancel:
+                    if st.button("Cancel", type="secondary"):
+                        st.session_state.show_reset_confirm = False
+                        st.rerun()
 
             # Export ratings
             st.subheader("Export")
