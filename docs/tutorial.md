@@ -42,7 +42,7 @@ Audited 87 packages in 0.01s
 
 ```bash
 # Create database schema and load names
-$ uv run name-db init
+$ uv run st-name-ranking init
 Database initialized successfully.
 Synced 4,847 names from submodule.
 ```
@@ -52,7 +52,7 @@ The database now contains **4,847 Danish names**.
 ### Step 4: Start the Application
 
 ```bash
-$ uv run streamlit run src/st_name_ranking/main.py
+$ uv run st-name-ranking start
 
   You can now view your Streamlit app in your browser.
 
@@ -63,7 +63,7 @@ $ uv run streamlit run src/st_name_ranking/main.py
 Your browser opens automatically. The application loads in **2 seconds**.
 
 !!! note "No Automatic Sync" The application does not sync names automatically
-on startup. You ran `name-db init` to load names via CLI. You can also click
+on startup. You ran `st-name-ranking init` to load names via CLI. You can also click
 **Sync Names** in the sidebar.
 
 ## First Comparison
@@ -274,7 +274,7 @@ Or use the CLI for batch processing:
 
 ```bash
 # Classify 100 names
-$ uv run name-db process --limit 100
+$ uv run st-name-ranking process --limit 100
 Processing 100 names...
 Classified: 97 Nordic, 3 European
 Completed in 3.2s
@@ -342,30 +342,15 @@ The **Typer** CLI provides database management:
 ### Initialize Database
 
 ```bash
-$ uv run name-db init
+$ uv run st-name-ranking init
 Database initialized successfully.
 Synced 4,847 names from submodule.
-```
-
-### Process Origins
-
-```bash
-# Classify all unclassified names
-$ uv run name-db process
-Processing 4,847 names...
-Classified: 4,623 Nordic, 224 European
-Completed in 87.4s
-
-# Classify with custom batch size
-$ uv run name-db process --batch-size 50
-Processing 50 names...
-Completed in 1.8s
 ```
 
 ### View Statistics
 
 ```bash
-$ uv run name-db stats
+$ uv run st-name-ranking stats
 Total names: 4,847
 Classified: 4,623 (95.4%)
 Comparisons: 1,247
@@ -374,7 +359,7 @@ Comparisons: 1,247
 ### Check Model Status
 
 ```bash
-$ uv run name-db model-status
+$ uv run st-name-ranking model status
 Model trained: Yes
 Training samples: 1,247
 Feature dimensions: 25
@@ -383,7 +368,7 @@ Feature dimensions: 25
 ### Reset Model
 
 ```bash
-$ uv run name-db model-reset
+$ uv run st-name-ranking model reset
 Model state cleared successfully.
 All ratings reset to default.
 ```
@@ -419,7 +404,7 @@ action cannot be undone.
 
 ```bash
 # Sync via CLI
-$ uv run name-db init
+$ uv run st-name-ranking init
 Database initialized successfully.
 Synced 4,847 names from submodule.
 ```
@@ -438,7 +423,7 @@ $ uv add ethnidata
 
 # Check internet connection (required for model download)
 # Try with a smaller batch
-$ uv run name-db process --limit 10
+$ uv run st-name-ranking process --limit 10
 Processing 10 names...
 Completed in 0.8s
 ```
@@ -451,7 +436,7 @@ Completed in 0.8s
 
 - Make at least **20 comparisons**
 - Try different name types using filters
-- Reset the model if needed: `uv run name-db model-reset`
+- Reset the model if needed: `uv run st-name-ranking model reset`
 
 ### "Application running slowly"
 

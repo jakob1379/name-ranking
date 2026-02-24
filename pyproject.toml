@@ -48,7 +48,7 @@ dependencies = [
 ]
 
 [project.scripts]
-name-db = "st_name_ranking.cli:app"
+st-name-ranking = "st_name_ranking.cli:app"
 
 [tool.commitizen]
 name = "cz_conventional_commits"
