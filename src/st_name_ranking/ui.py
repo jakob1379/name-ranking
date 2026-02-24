@@ -443,6 +443,118 @@ def render_tournament(names: list[str]) -> None:
     log_timing("At end")
 
 
+def render_rankings(names: list[str]) -> None:
+    """Render rankings view showing top rated names.
+
+    This is a separate tab to avoid slowing down the tournament UI.
+    Only renders when the Rankings tab is active.
+    """
+    logger.info("🏅 Rendering rankings for %d names", len(names))
+    st.header("Name Rankings")
+    st.write(f"Showing ratings for {len(names)} names")
+
+    if len(names) == 0:
+        st.info("No names to rank. Please include some names in the Name Filter tab first.")
+        return
+
+    # Create names set for filtering
+    names_set = set(names)
+
+    # Get gender-specific name lists if available
+    male_names = []
+    female_names = []
+    if "all_names_data" in st.session_state:
+        gender_data = st.session_state.all_names_data
+        male_names = gender_data.get("Male", [])
+        female_names = gender_data.get("Female", [])
+
+    # Filter ratings to only show current selection
+    filtered_ratings = {name: rating for name, rating in st.session_state.ratings.items() if name in names_set}
+
+    if not filtered_ratings:
+        st.info("No ratings yet. Start comparing names in the Tournament tab to generate rankings.")
+        return
+
+    # Create tabs for different views
+    tab_overall, tab_male, tab_female = st.tabs(["Overall", "Male", "Female"])
+
+    with tab_overall:
+        sorted_ratings = sorted(filtered_ratings.items(), key=lambda x: x[1], reverse=True)
+        df = pd.DataFrame(sorted_ratings, columns=["Name", "Rating"])
+        st.dataframe(
+            df,
+            width="stretch",
+            hide_index=True,
+            column_config={
+                "Rating": st.column_config.NumberColumn(
+                    "Rating",
+                    help="Higher is better",
+                    format="%d",
+                    pinned=True,
+                    width="small",
+                ),
+            },
+        )
+
+    with tab_male:
+        if male_names:
+            male_ratings = {
+                name: rating
+                for name, rating in st.session_state.ratings.items()
+                if name in male_names and name in names_set
+            }
+            if male_ratings:
+                sorted_male = sorted(male_ratings.items(), key=lambda x: x[1], reverse=True)
+                df_male = pd.DataFrame(sorted_male, columns=["Name", "Rating"])
+                st.dataframe(
+                    df_male,
+                    width="stretch",
+                    hide_index=True,
+                    column_config={
+                        "Rating": st.column_config.NumberColumn(
+                            "Rating",
+                            help="Higher is better",
+                            format="%d",
+                            pinned=True,
+                            width="small",
+                        ),
+                    },
+                )
+            else:
+                st.info("No male names rated yet.")
+        else:
+            st.info("No gender data available for male names.")
+
+    with tab_female:
+        if female_names:
+            female_ratings = {
+                name: rating
+                for name, rating in st.session_state.ratings.items()
+                if name in female_names and name in names_set
+            }
+            if female_ratings:
+                sorted_female = sorted(female_ratings.items(), key=lambda x: x[1], reverse=True)
+                df_female = pd.DataFrame(sorted_female, columns=["Name", "Rating"])
+                st.dataframe(
+                    df_female,
+                    width="stretch",
+                    hide_index=True,
+                    column_config={
+                        "Rating": st.column_config.NumberColumn(
+                            "Rating",
+                            help="Higher is better",
+                            format="%d",
+                            pinned=True,
+                            width="small",
+                        ),
+                    },
+                )
+            else:
+                st.info("No female names rated yet.")
+        else:
+            st.info("No gender data available for female names.")
+
+
 @st.fragment
 def render_binary_filter(names: list[str]) -> None:
     """Render binary filter interface for including/excluding names.

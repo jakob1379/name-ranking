@@ -15,7 +15,7 @@ from st_name_ranking import database
 from st_name_ranking.background_queue import get_queue_manager
 from st_name_ranking.data_loader import load_names_by_gender
 from st_name_ranking.database import initialize_ratings
-from st_name_ranking.ui import render_binary_filter, render_similarity, render_tournament
+from st_name_ranking.ui import render_binary_filter, render_rankings, render_similarity, render_tournament
 from st_name_ranking.utils import (
     get_active_learning_model,
     setup_session_state,
@@ -381,7 +381,7 @@ def main() -> None:
         st.session_state.active_tab = "Name Filter"
 
     # Display tab selector as radio buttons in columns for better UX
-    col1, col2, col3 = st.columns(3)
+    col1, col2, col3, col4 = st.columns(4)
     with col1:
         if st.button(
             "📋 Name Filter",
@@ -400,6 +400,14 @@ def main() -> None:
             st.rerun()
     with col3:
         if st.button(
+            "🏅 Rankings",
+            use_container_width=True,
+            type="primary" if st.session_state.active_tab == "Rankings" else "secondary",
+        ):
+            st.session_state.active_tab = "Rankings"
+            st.rerun()
+    with col4:
+        if st.button(
             "🔍 Similarity Search",
             use_container_width=True,
             type="primary" if st.session_state.active_tab == "Similarity Search" else "secondary",
@@ -414,6 +422,8 @@ def main() -> None:
         render_binary_filter(filtered_names)
     elif st.session_state.active_tab == "Tournament":
         render_tournament(filtered_names_included)
+    elif st.session_state.active_tab == "Rankings":
+        render_rankings(filtered_names_included)
     else:  # Similarity Search
         render_similarity(filtered_names_included)
 
