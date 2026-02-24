@@ -62,8 +62,9 @@ $ uv run streamlit run src/st_name_ranking/main.py
 
 Your browser opens automatically. The application loads in **2 seconds**.
 
-!!! note "No Automatic Sync"
-    The application does not sync names automatically on startup. You ran `name-db init` to load names via CLI. You can also click **Sync Names** in the sidebar.
+!!! note "No Automatic Sync" The application does not sync names automatically
+on startup. You ran `name-db init` to load names via CLI. You can also click
+**Sync Names** in the sidebar.
 
 ## First Comparison
 
@@ -86,21 +87,19 @@ Click **← Prefer Left** or press the **left arrow key**.
 
 The application records your preference and displays two new names.
 
-!!! tip "Keyboard Shortcuts"
-    Use arrow keys for speed:
-    - **←** Prefer left
-    - **→** Prefer right
-    - **↑** Draw (equal)
-    - **↓** Dislike both
+!!! tip "Keyboard Shortcuts" Use arrow keys for speed: - **←** Prefer left -
+**→** Prefer right - **↑** Draw (equal) - **↓** Dislike both
 
 ### What Happens Behind the Scenes
 
 When you vote, the system:
 
-1. **Records the comparison** in **SQLite** with your preference (`-1`, `0`, `1`, or `2`)
+1. **Records the comparison** in **SQLite** with your preference (`-1`, `0`,
+   `1`, or `2`)
 2. **Updates the Bayesian model** using **Laplace approximation**
 3. **Syncs ratings** from model weights to preference scores
-4. **Selects new names** using **Thompson sampling** for maximum information gain
+4. **Selects new names** using **Thompson sampling** for maximum information
+   gain
 
 ```python
 from typing import Tuple
@@ -110,14 +109,14 @@ def process_vote(name_a: str, name_b: str, preference: int) -> Tuple[str, str]:
     """Process a user vote and return the next name pair."""
     # Store comparison in database
     database.record_comparison(name_a, name_b, preference)
-    
+
     # Update Bayesian model (Bradley-Terry with Laplace approximation)
     model.update_based_on_preference(name_a, name_b, preference)
-    
+
     # Sync ratings from updated model weights
     ratings: dict = model.compute_ratings()
     database.update_ratings(ratings)
-    
+
     # Select new names using Thompson sampling
     new_pair: Tuple[str, str] = select_next_names()
     return new_pair
@@ -151,22 +150,23 @@ You actively dislike both names.
 
 The model learns: `preference(left) < neutral` and `preference(right) < neutral`
 
-!!! warning "Down Votes"
-    **Down** votes exclude names from positive rankings. Use this when neither name appeals to you.
+!!! warning "Down Votes" **Down** votes exclude names from positive rankings.
+Use this when neither name appeals to you.
 
 ## How the Model Learns
 
-The application does not count votes. It learns a **mathematical model** of your preferences.
+The application does not count votes. It learns a **mathematical model** of your
+preferences.
 
 ### Feature Extraction
 
 Each name becomes a **25-dimensional feature vector**:
 
-| Feature Category | Examples |
-|------------------|----------|
-| **Phonetic** | Double Metaphone codes (how the name sounds) |
-| **Linguistic** | Syllable count, vowel ratio, name length |
-| **Metadata** | Gender, origin region, classification confidence |
+| Feature Category | Examples                                         |
+| ---------------- | ------------------------------------------------ |
+| **Phonetic**     | Double Metaphone codes (how the name sounds)     |
+| **Linguistic**   | Syllable count, vowel ratio, name length         |
+| **Metadata**     | Gender, origin region, classification confidence |
 
 ### Bradley-Terry Model
 
@@ -191,7 +191,8 @@ The system uses **Thompson sampling** to select name pairs:
 3. **Select informative pairs** that maximize expected information gain
 4. **Balance exploration and exploitation**
 
-After **20 comparisons**, the model understands your basic preferences. After **50 comparisons**, it predicts your choices accurately.
+After **20 comparisons**, the model understands your basic preferences. After
+**50 comparisons**, it predicts your choices accurately.
 
 ## Similarity Search
 
@@ -331,8 +332,8 @@ Select one or more geographic regions.
 
 Empty selection shows all regions.
 
-!!! note "Filter Persistence"
-    Filters persist between sessions. Your settings save to the database.
+!!! note "Filter Persistence" Filters persist between sessions. Your settings
+save to the database.
 
 ## CLI Reference
 
@@ -405,8 +406,8 @@ Start fresh:
 2. Click **Reset Ratings**
 3. Confirm the action
 
-!!! warning "Reset is Permanent"
-    Resetting deletes all comparison history. This action cannot be undone.
+!!! warning "Reset is Permanent" Resetting deletes all comparison history. This
+action cannot be undone.
 
 ## Troubleshooting
 
@@ -473,7 +474,8 @@ You now understand:
 
 ### Learn More
 
-- [Active Learning System](active_learning.md) - Deep dive into **Bayesian preference modeling**
+- [Active Learning System](active_learning.md) - Deep dive into **Bayesian
+  preference modeling**
 - [System Architecture](architecture.md) - Component design and data flow
 - [Features](features.md) - Complete feature reference
 
@@ -484,4 +486,5 @@ You now understand:
 3. Run **Origin Classification** and filter by region
 4. Export your ratings for backup
 
-The more comparisons you make, the better the model understands your preferences.
+The more comparisons you make, the better the model understands your
+preferences.

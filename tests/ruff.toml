@@ -8,59 +8,59 @@ line-length = 120
 select = ["ALL"]
 ignore = [
   # Test-specific exemptions
-  "S101",      # Assert in tests is fine
-  "PLR2004",   # Magic value comparisons
-  "ARG001",    # Unused function argument
-  "ARG002",    # Unused method argument
-  "ANN",       # Tests often skip annotations
-  "D",         # Docstrings optional in tests
-  "N806",      # Short variable names
-  "PLC0415",   # Conditional imports in test setup
-  "B904",      # Raise without from inside except
-  "TRY003",    # Long messages in test exceptions
-  "EM101",     # String literals in exceptions
-  "EM102",     # f-strings in exceptions
-  "FBT001",    # Boolean positional arguments
-  "FBT002",    # Boolean default arguments
-  "FBT003",    # Boolean positional values
-  "PLR0912",   # Too many branches
-  "PLR0913",   # Too many arguments
-  "PLR0915",   # Too many statements
-  "C901",      # Function complexity
-  "DTZ005",    # datetime.now() without tz
-  "S603",      # subprocess calls in tests
-  "S607",      # Partial executable path
-  "SIM108",    # if-else vs if expression
-  "SIM102",    # Collapsible if
-  "SIM117",    # Multiple with statements
-  "TRY301",    # Raise within try
-  "PERF401",   # Manual list comprehension
-  "PERF402",   # list.extend vs +=
-  "PERF102",   # Dict iterator style
-  "PTH110",    # os.path.exists vs Path
-  "PTH118",    # os.path.join vs Path
-  "PTH123",    # open() vs Path.open()
-  "BLE001",    # Blind except
-  "RUF001",    # Ambiguous unicode
-  "RUF002",    # Ambiguous unicode in docstrings
-  "RUF003",    # Ambiguous unicode in comments
-  "TD002",     # Missing TODO author
-  "TD003",     # Missing TODO link
-  "FIX002",    # Line contains TODO
-  "ERA001",    # Commented-out code
-  "RSE102",    # Parentheses on raised exception
-  "RET504",    # Unnecessary assignment before return
-  "PLW0603",   # Global statement
-  "B905",      # zip() without strict
-  "B007",      # Unused loop variable
-  "C414",      # Unnecessary double cast
-  "TRY300",    # try-consider-else
-  "TRY400",    # error-instead-of-exception
-  "RUF059",    # unused-unpacked-variable
-  "C405",      # unnecessary-literal-set
-  "NPY002",    # numpy legacy random
-  "SIM103",    # Return condition directly
-  "G004",      # logging-f-string
+  "S101", # Assert in tests is fine
+  "PLR2004", # Magic value comparisons
+  "ARG001", # Unused function argument
+  "ARG002", # Unused method argument
+  "ANN", # Tests often skip annotations
+  "D", # Docstrings optional in tests
+  "N806", # Short variable names
+  "PLC0415", # Conditional imports in test setup
+  "B904", # Raise without from inside except
+  "TRY003", # Long messages in test exceptions
+  "EM101", # String literals in exceptions
+  "EM102", # f-strings in exceptions
+  "FBT001", # Boolean positional arguments
+  "FBT002", # Boolean default arguments
+  "FBT003", # Boolean positional values
+  "PLR0912", # Too many branches
+  "PLR0913", # Too many arguments
+  "PLR0915", # Too many statements
+  "C901", # Function complexity
+  "DTZ005", # datetime.now() without tz
+  "S603", # subprocess calls in tests
+  "S607", # Partial executable path
+  "SIM108", # if-else vs if expression
+  "SIM102", # Collapsible if
+  "SIM117", # Multiple with statements
+  "TRY301", # Raise within try
+  "PERF401", # Manual list comprehension
+  "PERF402", # list.extend vs +=
+  "PERF102", # Dict iterator style
+  "PTH110", # os.path.exists vs Path
+  "PTH118", # os.path.join vs Path
+  "PTH123", # open() vs Path.open()
+  "BLE001", # Blind except
+  "RUF001", # Ambiguous unicode
+  "RUF002", # Ambiguous unicode in docstrings
+  "RUF003", # Ambiguous unicode in comments
+  "TD002", # Missing TODO author
+  "TD003", # Missing TODO link
+  "FIX002", # Line contains TODO
+  "ERA001", # Commented-out code
+  "RSE102", # Parentheses on raised exception
+  "RET504", # Unnecessary assignment before return
+  "PLW0603", # Global statement
+  "B905", # zip() without strict
+  "B007", # Unused loop variable
+  "C414", # Unnecessary double cast
+  "TRY300", # try-consider-else
+  "TRY400", # error-instead-of-exception
+  "RUF059", # unused-unpacked-variable
+  "C405", # unnecessary-literal-set
+  "NPY002", # numpy legacy random
+  "SIM103", # Return condition directly
+  "G004" # logging-f-string
 ]
 
 [lint.isort]

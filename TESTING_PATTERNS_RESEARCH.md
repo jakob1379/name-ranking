@@ -1,13 +1,17 @@
 # Testing Patterns Research Report: Streamlit + SQLite + Bayesian Model
 
-Based on comprehensive research of 2024-2025 best practices, official documentation (pytest, pytest-playwright, hypothesis), and community consensus.
+Based on comprehensive research of 2024-2025 best practices, official
+documentation (pytest, pytest-playwright, hypothesis), and community consensus.
 
 ---
 
 ## 1. pytest Fixtures for SQLite Database Testing
 
 ### Current State Analysis
-Your codebase uses a file-based SQLite database (`data/names.db`). The current fixture creates temp files but could be improved with in-memory testing for speed.
+
+Your codebase uses a file-based SQLite database (`data/names.db`). The current
+fixture creates temp files but could be improved with in-memory testing for
+speed.
 
 ### Pattern A: In-Memory Database (Recommended for Unit Tests)
 
@@ -155,9 +159,12 @@ def db_connection(database_engine):
 
 ### Common Mistakes to Avoid
 
-1. **Don't use the same :memory: database across threads** - SQLite in-memory is not thread-safe across connections
-2. **Don't forget to set row_factory** - Without it, you can't access columns by name
-3. **Don't commit in fixtures** - Let tests control transactions; rollback in cleanup
+1. **Don't use the same :memory: database across threads** - SQLite in-memory is
+   not thread-safe across connections
+2. **Don't forget to set row_factory** - Without it, you can't access columns by
+   name
+3. **Don't commit in fixtures** - Let tests control transactions; rollback in
+   cleanup
 4. **Don't share mutable state** - Each test needs isolated data
 
 ### Configuration Best Practices
@@ -254,7 +261,8 @@ def test_name_comparison_works(page: Page, streamlit_app):
 
 ### Pattern B: Streamlit Testing Framework (Recommended)
 
-Streamlit provides a built-in testing framework that's faster than Playwright for unit-level UI tests:
+Streamlit provides a built-in testing framework that's faster than Playwright
+for unit-level UI tests:
 
 ```python
 # tests/test_streamlit_components.py
@@ -913,11 +921,11 @@ class TestMultiDatabase:
 
 ### Decision Framework
 
-| Test Type | When to Use | When NOT to Use |
-|-----------|-------------|-----------------|
-| **Unit (Mock)** | Pure logic, algorithmic code, data transformations | Testing SQL query correctness, integration between components |
-| **Integration (Real DB)** | Database operations, SQL logic, transaction behavior | Testing unrelated code paths, external APIs |
-| **E2E (Browser)** | Critical user flows, cross-component interactions | Testing error edge cases, exhaustive data scenarios |
+| Test Type                 | When to Use                                          | When NOT to Use                                               |
+| ------------------------- | ---------------------------------------------------- | ------------------------------------------------------------- |
+| **Unit (Mock)**           | Pure logic, algorithmic code, data transformations   | Testing SQL query correctness, integration between components |
+| **Integration (Real DB)** | Database operations, SQL logic, transaction behavior | Testing unrelated code paths, external APIs                   |
+| **E2E (Browser)**         | Critical user flows, cross-component interactions    | Testing error edge cases, exhaustive data scenarios           |
 
 ### Pattern A: Mock Boundaries - Test Database Logic
 
@@ -1263,34 +1271,35 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ['3.10', '3.11', '3.12']
+        python-version: ["3.10", "3.11", "3.12"]
 
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: ${{ matrix.python-version }}
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
 
-    - name: Install dependencies
-      run: |
-        pip install -r requirements.txt
-        pip install -r requirements-test.txt
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install -r requirements-test.txt
 
-    - name: Run unit tests
-      run: pytest tests/unit -xvs --cov --cov-report=xml
+      - name: Run unit tests
+        run: pytest tests/unit -xvs --cov --cov-report=xml
 
-    - name: Run integration tests
-      run: pytest tests/integration -xvs
+      - name: Run integration tests
+        run: pytest tests/integration -xvs
 
-    - name: Run property tests
-      run: pytest tests/properties --hypothesis-profile=ci
+      - name: Run property tests
+        run: pytest tests/properties --hypothesis-profile=ci
 
-    # E2E tests only on main branch
-    - name: Run E2E tests
-      if: github.ref == 'refs/heads/main'
-      run: pytest tests/e2e --run-playwright
+      # E2E tests only on main branch
+      - name: Run E2E tests
+        if: github.ref == 'refs/heads/main'
+        run: pytest tests/e2e --run-playwright
 ```
 
-This architecture provides comprehensive coverage while maintaining fast feedback loops during development.
+This architecture provides comprehensive coverage while maintaining fast
+feedback loops during development.

@@ -2,16 +2,19 @@
 
 **Python Version**: **Python 3.13+**
 
-This guide explains the **Bayesian preference learning** system at the core of the Name Ranking application.
+This guide explains the **Bayesian preference learning** system at the core of
+the Name Ranking application.
 
-For usage instructions, see the [Tutorial](tutorial.md). This document covers theoretical foundations.
+For usage instructions, see the [Tutorial](tutorial.md). This document covers
+theoretical foundations.
 
 ## Overview
 
 The active learning system has 4 components:
 
 1. **Feature Extraction**: Convert names into 25-dimensional feature vectors
-2. **Bradley-Terry Model**: Bayesian preference model with **Laplace approximation**
+2. **Bradley-Terry Model**: Bayesian preference model with **Laplace
+   approximation**
 3. **Thompson Sampling**: Active learning algorithm for pair selection
 4. **Model Persistence**: Store state in **SQLite**
 
@@ -27,12 +30,12 @@ The **Double Metaphone** algorithm converts names to phonetic codes:
 
 Phonetic similarity scores:
 
-| Match Type | Score |
-|------------|-------|
-| Exact match (both primary) | 1.0 |
-| Primary-secondary match | 0.8 |
-| Partial match | 0.5-0.7 |
-| No match | 0.0 |
+| Match Type                 | Score   |
+| -------------------------- | ------- |
+| Exact match (both primary) | 1.0     |
+| Primary-secondary match    | 0.8     |
+| Partial match              | 0.5-0.7 |
+| No match                   | 0.0     |
 
 ### Linguistic Features
 
@@ -175,7 +178,7 @@ def predict_preference_probability(
 ) -> float:
     """
     Predict the probability that name A is preferred over name B.
-    
+
     Returns:
         float: Probability in range [0, 1], where 0.5 indicates equal preference
     """
@@ -217,20 +220,20 @@ print(f"P(A ≻ B) = {prob:.3f}")
 
 ### Computational Complexity
 
-| Operation | Time |
-|-----------|------|
+| Operation          | Time                      |
+| ------------------ | ------------------------- |
 | Feature extraction | 0.5-2ms per name (cached) |
-| Model update | 0.5-2ms per comparison |
-| Thompson sampling | 10-100ms |
-| Rating sync | 80-120ms for 44,000 names |
+| Model update       | 0.5-2ms per comparison    |
+| Thompson sampling  | 10-100ms                  |
+| Rating sync        | 80-120ms for 44,000 names |
 
 ### Memory Usage
 
-| Component | Size |
-|-----------|------|
+| Component     | Size                                     |
+| ------------- | ---------------------------------------- |
 | Feature cache | ~9MB (44k names × 25 features × 8 bytes) |
-| Model state | ~5KB (25 weights + 25×25 covariance) |
-| Training data | All historical comparisons in SQLite |
+| Model state   | ~5KB (25 weights + 25×25 covariance)     |
+| Training data | All historical comparisons in SQLite     |
 
 ## Extending the System
 

@@ -6,7 +6,8 @@ Complete feature list for the Name Ranking application.
 
 Compare names using **active learning** to learn your preferences efficiently.
 
-- **Pair selection via Thompson sampling**: The system selects maximally informative name pairs
+- **Pair selection via Thompson sampling**: The system selects maximally
+  informative name pairs
 - **Four voting options**: Prefer left, prefer right, draw, or dislike both
 - **Real-time Bayesian updates**: Model updates after each comparison
 - **Top 10 rankings**: Current best names based on learned preferences
@@ -43,7 +44,8 @@ Predict name nationalities using **ethnidata**.
 
 - **Optional processing**: Run only when explicitly requested
 - **Batch processing**: Classify 100 names at a time or all at once
-- **Geographic region mapping**: Maps countries to regions (Nordic, European, Asian, etc.)
+- **Geographic region mapping**: Maps countries to regions (Nordic, European,
+  Asian, etc.)
 - **Confidence scoring**: Probability estimates for each prediction
 - **Progress tracking**: Shows classification percentage in UI
 
@@ -82,7 +84,8 @@ Select one or more geographic regions to filter names.
 
 - **Feature-based Bradley-Terry model**: Learns preferences from name features
 - **Laplace approximation**: Efficient Bayesian updates
-- **25-dimensional feature vectors**: Phonetic, linguistic, and metadata features
+- **25-dimensional feature vectors**: Phonetic, linguistic, and metadata
+  features
 - **Covariance matrix**: Models uncertainty in preferences
 
 ### Feature Extraction
@@ -95,7 +98,8 @@ Each name converts to a feature vector including:
 
 ### Thompson Sampling
 
-- **Exploration-exploitation balance**: Learns efficiently with minimal comparisons
+- **Exploration-exploitation balance**: Learns efficiently with minimal
+  comparisons
 - **Information gain maximization**: Selects pairs that teach the most
 - **Diversity constraint**: Ensures coverage across feature space
 
@@ -132,12 +136,12 @@ $ uv run name-db model-reset
 
 ## Keyboard Shortcuts
 
-| Key | Action |
-|-----|--------|
-| **←** | Prefer left name |
-| **→** | Prefer right name |
-| **↑** | Draw (equal preference) |
-| **↓** | Dislike both names |
+| Key       | Action                                |
+| --------- | ------------------------------------- |
+| **←**     | Prefer left name                      |
+| **→**     | Prefer right name                     |
+| **↑**     | Draw (equal preference)               |
+| **↓**     | Dislike both names                    |
 | **Space** | Show similarity between current names |
 
 ## Database Schema
@@ -208,24 +212,25 @@ CREATE TABLE model_state (
 
 ### Performance Characteristics
 
-| Operation | Time |
-|-----------|------|
-| Application startup | 2 seconds |
-| Feature extraction | 1ms per name (cached) |
-| Model update | 1ms per comparison |
-| Thompson sampling | 10-100ms |
-| Rating sync | 100ms for 44,000 names |
+| Operation           | Time                   |
+| ------------------- | ---------------------- |
+| Application startup | 2 seconds              |
+| Feature extraction  | 1ms per name (cached)  |
+| Model update        | 1ms per comparison     |
+| Thompson sampling   | 10-100ms               |
+| Rating sync         | 100ms for 44,000 names |
 
 ### Memory Usage
 
-| Component | Size |
-|-----------|------|
-| Feature cache | ~9MB (44k names × 25 features) |
-| Model state | ~5KB (25 weights + 25×25 covariance) |
-| Name data | ~5-10MB |
+| Component     | Size                                 |
+| ------------- | ------------------------------------ |
+| Feature cache | ~9MB (44k names × 25 features)       |
+| Model state   | ~5KB (25 weights + 25×25 covariance) |
+| Name data     | ~5-10MB                              |
 
 ## See Also
 
 - [Tutorial](tutorial.md) - Step-by-step usage guide
-- [Active Learning System](active_learning.md) - **Bayesian preference modeling** details
+- [Active Learning System](active_learning.md) - **Bayesian preference
+  modeling** details
 - [System Architecture](architecture.md) - Component design and data flow

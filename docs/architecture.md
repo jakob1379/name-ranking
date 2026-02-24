@@ -4,7 +4,8 @@
 
 **Requirements**: **Python 3.13+**
 
-For usage instructions, see the [Tutorial](tutorial.md). This document explains design decisions for developers.
+For usage instructions, see the [Tutorial](tutorial.md). This document explains
+design decisions for developers.
 
 ## Try It Now
 
@@ -152,13 +153,13 @@ name_a, name_b = select_candidates()
 # 2. User votes with one of 4 preferences
 def process_vote(name_a: str, name_b: str, preference: int) -> None:
     # preference: -1 (prefer a), 1 (prefer b), 0 (draw), 2 (down)
-    
+
     # 3. Record comparison in database
     database.record_comparison(name_a, name_b, preference)
-    
+
     # 4. Update Bayesian model
     model.update_based_on_preference(name_a, name_b, preference)
-    
+
     # 5. Sync ratings from model weights
     _update_ratings_from_model()
 ```
@@ -224,28 +225,28 @@ database.update_ratings(ratings)
 
 ### Memory Usage
 
-| Component | Size |
-|-----------|------|
+| Component     | Size                                     |
+| ------------- | ---------------------------------------- |
 | Feature cache | ~9MB (44k names × 25 features × 8 bytes) |
-| Model state | ~5KB (25 weights + 25×25 covariance) |
-| Name data | ~5-10MB |
+| Model state   | ~5KB (25 weights + 25×25 covariance)     |
+| Name data     | ~5-10MB                                  |
 
 ### Computation Time
 
-| Operation | Time |
-|-----------|------|
-| Feature extraction | ~1ms per name (cached) |
-| Model update | ~1ms per comparison |
-| Pair selection | ~10-100ms for Thompson sampling |
-| Rating sync | ~100ms for all 44k names |
+| Operation          | Time                            |
+| ------------------ | ------------------------------- |
+| Feature extraction | ~1ms per name (cached)          |
+| Model update       | ~1ms per comparison             |
+| Pair selection     | ~10-100ms for Thompson sampling |
+| Rating sync        | ~100ms for all 44k names        |
 
 ### Database Operations
 
-| Operation | Time |
-|-----------|------|
-| Comparison recording | <1ms with indexes |
-| Rating updates | ~100ms bulk update |
-| Model persistence | <10ms |
+| Operation            | Time               |
+| -------------------- | ------------------ |
+| Comparison recording | <1ms with indexes  |
+| Rating updates       | ~100ms bulk update |
+| Model persistence    | <10ms              |
 
 ## Security Considerations
 
@@ -318,5 +319,6 @@ database.update_ratings(ratings)
 ## See Also
 
 - [Tutorial](tutorial.md) - Step-by-step usage guide
-- [Active Learning System](active_learning.md) - **Bayesian preference modeling** theory
+- [Active Learning System](active_learning.md) - **Bayesian preference
+  modeling** theory
 - [Features](features.md) - Complete feature list

@@ -1,6 +1,7 @@
 # Name Ranking Application
 
-A **Streamlit** web application for ranking Danish names using **Bayesian preference learning** with **active learning**.
+A **Streamlit** web application for ranking Danish names using **Bayesian
+preference learning** with **active learning**.
 
 ## Try It Now
 
@@ -36,9 +37,11 @@ The application opens at **http://localhost:8501** in 2 seconds.
 
 1. **Compare names**: Two names appear side-by-side
 2. **Vote**: Click **← Prefer Left**, **Draw**, **Down**, or **Prefer Right →**
-3. **Watch rankings**: Top 10 names update in real-time based on your preferences
+3. **Watch rankings**: Top 10 names update in real-time based on your
+   preferences
 
 Use **arrow keys** for speed:
+
 - **←** Prefer left name
 - **→** Prefer right name
 - **↑** Draw (equal preference)
@@ -48,23 +51,28 @@ Use **arrow keys** for speed:
 
 The application uses **Bayesian preference learning** to understand your taste:
 
-1. **Feature extraction**: Converts each name into a 25-dimensional feature vector (**phonetic**, **linguistic**, **metadata**)
+1. **Feature extraction**: Converts each name into a 25-dimensional feature
+   vector (**phonetic**, **linguistic**, **metadata**)
 2. **Bradley-Terry model**: Learns a weight vector representing your preferences
 3. **Thompson sampling**: Selects the most informative name pairs for comparison
 4. **Real-time updates**: Model updates after each vote
 
-After **20 comparisons**, the system understands your preferences well. After **50 comparisons**, it predicts your choices with high accuracy.
+After **20 comparisons**, the system understands your preferences well. After
+**50 comparisons**, it predicts your choices with high accuracy.
 
 ## Documentation
 
 ### Start Here
 
-- **[Tutorial](tutorial.md)** - Complete walkthrough from installation to advanced usage
+- **[Tutorial](tutorial.md)** - Complete walkthrough from installation to
+  advanced usage
 
 ### Learn the System
 
-- **[Active Learning System](active_learning.md)** - **Bayesian preference modeling**, **Thompson sampling**, and feature engineering
-- **[System Architecture](architecture.md)** - Component design, data flow, and implementation details
+- **[Active Learning System](active_learning.md)** - **Bayesian preference
+  modeling**, **Thompson sampling**, and feature engineering
+- **[System Architecture](architecture.md)** - Component design, data flow, and
+  implementation details
 
 ### Reference
 
@@ -102,6 +110,7 @@ All checks passed
 
 ## Acknowledgments
 
-- [**ethnidata**](https://github.com/teyfikoz/ethnidata) for name nationality prediction
+- [**ethnidata**](https://github.com/teyfikoz/ethnidata) for name nationality
+  prediction
 - **Streamlit** for the web application framework
 - The Danish government for the name data

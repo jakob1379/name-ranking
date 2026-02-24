@@ -36,6 +36,7 @@ The application opens at **http://localhost:8501** in 2 seconds.
 3. Top 10 rankings update in real-time
 
 Use **arrow keys** for rapid voting:
+
 - **←** Prefer left
 - **→** Prefer right
 - **↑** Draw
