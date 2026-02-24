@@ -235,16 +235,21 @@ def main() -> None:
         if "names" in st.session_state and st.session_state.names:
             st.caption(f"Active Dataset: {len(st.session_state.names)} names")
 
-        # Custom CSS to ensure equal button widths
+        # Custom CSS to ensure equal button widths and heights
         st.markdown(
             """
             <style>
             .reset-buttons-container button {
                 min-width: 100% !important;
                 width: 100% !important;
+                height: 42px !important;
+                min-height: 42px !important;
+                max-height: 42px !important;
                 white-space: nowrap !important;
                 overflow: hidden !important;
                 text-overflow: ellipsis !important;
+                padding-top: 8px !important;
+                padding-bottom: 8px !important;
             }
             </style>
             """,
