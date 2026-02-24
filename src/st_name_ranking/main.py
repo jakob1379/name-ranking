@@ -235,10 +235,17 @@ def main() -> None:
         if "names" in st.session_state and st.session_state.names:
             st.caption(f"Active Dataset: {len(st.session_state.names)} names")
 
+        # Pad button labels to same length for consistent sizing
+        label_decisions = "Reset Decisions"
+        label_ratings = "Reset Ratings"
+        max_len = max(len(label_decisions), len(label_ratings))
+        label_decisions = f"{label_decisions:<{max_len}}"
+        label_ratings = f"{label_ratings:<{max_len}}"
+
         col1, col2 = st.columns(2)
         with col1:
             if st.button(
-                "Reset Decisions",
+                label_decisions,
                 type="secondary",
                 help="Clear all include/exclude decisions",
                 use_container_width=True,
@@ -247,7 +254,7 @@ def main() -> None:
 
         with col2:
             if st.button(
-                "Reset Ratings",
+                label_ratings,
                 type="secondary",
                 help="Reset all ratings to initial values",
                 use_container_width=True,
