@@ -235,42 +235,18 @@ def main() -> None:
         if "names" in st.session_state and st.session_state.names:
             st.caption(f"Active Dataset: {len(st.session_state.names)} names")
 
-        # Custom CSS to ensure equal button widths and heights
-        st.markdown(
-            """
-            <style>
-            .reset-buttons-container button {
-                min-width: 100% !important;
-                width: 100% !important;
-                height: 42px !important;
-                min-height: 42px !important;
-                max-height: 42px !important;
-                white-space: nowrap !important;
-                overflow: hidden !important;
-                text-overflow: ellipsis !important;
-                padding-top: 8px !important;
-                padding-bottom: 8px !important;
-            }
-            </style>
-            """,
-            unsafe_allow_html=True,
-        )
-
         col1, col2 = st.columns(2)
         with col1:
-            st.markdown('<div class="reset-buttons-container">', unsafe_allow_html=True)
             if st.button(
-                "Reset Decisions",
+                "Reset\nDecisions",
                 type="secondary",
                 help="Clear all include/exclude decisions",
                 use_container_width=True,
                 key="reset_decisions_btn",
             ):
                 show_reset_decisions_dialog()
-            st.markdown("</div>", unsafe_allow_html=True)
 
         with col2:
-            st.markdown('<div class="reset-buttons-container">', unsafe_allow_html=True)
             if st.button(
                 "Reset\nRatings",
                 type="secondary",
@@ -279,7 +255,6 @@ def main() -> None:
                 key="reset_ratings_btn",
             ):
                 show_reset_ratings_dialog()
-            st.markdown("</div>", unsafe_allow_html=True)
 
         # Export
         st.subheader("Export")
