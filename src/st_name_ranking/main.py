@@ -235,31 +235,46 @@ def main() -> None:
         if "names" in st.session_state and st.session_state.names:
             st.caption(f"Active Dataset: {len(st.session_state.names)} names")
 
-        # Pad button labels to same length for consistent sizing
-        label_decisions = "Reset Decisions"
-        label_ratings = "Reset Ratings"
-        max_len = max(len(label_decisions), len(label_ratings))
-        label_decisions = f"{label_decisions:<{max_len}}"
-        label_ratings = f"{label_ratings:<{max_len}}"
+        # Custom CSS to ensure equal button widths
+        st.markdown(
+            """
+            <style>
+            .reset-buttons-container button {
+                min-width: 100% !important;
+                width: 100% !important;
+                white-space: nowrap !important;
+                overflow: hidden !important;
+                text-overflow: ellipsis !important;
+            }
+            </style>
+            """,
+            unsafe_allow_html=True,
+        )
 
         col1, col2 = st.columns(2)
         with col1:
+            st.markdown('<div class="reset-buttons-container">', unsafe_allow_html=True)
             if st.button(
-                label_decisions,
+                "Reset Decisions",
                 type="secondary",
                 help="Clear all include/exclude decisions",
                 use_container_width=True,
+                key="reset_decisions_btn",
             ):
                 show_reset_decisions_dialog()
+            st.markdown("</div>", unsafe_allow_html=True)
 
         with col2:
+            st.markdown('<div class="reset-buttons-container">', unsafe_allow_html=True)
             if st.button(
-                label_ratings,
+                "Reset Ratings",
                 type="secondary",
                 help="Reset all ratings to initial values",
                 use_container_width=True,
+                key="reset_ratings_btn",
             ):
                 show_reset_ratings_dialog()
+            st.markdown("</div>", unsafe_allow_html=True)
 
         # Export
         st.subheader("Export")
