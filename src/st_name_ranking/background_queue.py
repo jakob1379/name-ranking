@@ -285,7 +285,13 @@ def get_queue_manager(
         existing_manager: QueueManager = st.session_state[QUEUE_MANAGER_KEY]
 
         # Check if names and queue_size are the same
-        names_match = set(existing_manager.names) == set(names)
+        # Quick checks first: length and first/last elements
+        names_match = (
+            len(existing_manager.names) == len(names)
+            and len(existing_manager.names) > 0
+            and existing_manager.names[0] == names[0]
+            and existing_manager.names[-1] == names[-1]
+        )
         size_match = existing_manager.target_size == queue_size
 
         if names_match and size_match:

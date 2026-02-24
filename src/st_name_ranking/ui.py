@@ -221,8 +221,7 @@ def render_tournament(names: list[str]) -> None:
             st.info(f"Only one name ('{names[0]}') selected. Please select at least two names to compare.")
         return
 
-    # Precompute features and names set
-    features_matrix = get_names_features(names)
+    # Create names set for filtering
     names_set = set(names)
 
     # Create placeholders for dynamic content
