@@ -57,16 +57,18 @@ def show_reset_ratings_dialog() -> None:
             st.rerun()
 
 
-@st.dialog("⚠️ Confirm Reset Exclusions", width="small")
-def show_reset_decisions_dialog() -> None:
-    """Dialog for confirming filter exclusions reset."""
-    st.write("This will clear **all** include/exclude decisions.")
+@st.dialog("⚠️ Confirm Reset Excluded", width="small")
+def show_reset_excluded_dialog() -> None:
+    """Dialog for confirming excluded names reset."""
+    st.write("This will move all **excluded** names back to 'not decided'.")
     st.write("**This action cannot be undone.**")
 
     col_confirm, col_cancel = st.columns(2)
     with col_confirm:
-        if st.button("Yes, Reset Exclusions", type="primary", use_container_width=True):
-            st.session_state.name_inclusions = {}
+        if st.button("Yes, Reset Excluded", type="primary", use_container_width=True):
+            # Only remove excluded entries (False values), keep included
+            inclusions = st.session_state.get("name_inclusions", {})
+            st.session_state.name_inclusions = {k: v for k, v in inclusions.items() if v is True}
             st.session_state.filter_index = 0
             # Reset counts
             for key in [
@@ -77,8 +79,38 @@ def show_reset_decisions_dialog() -> None:
             ]:
                 if key in st.session_state:
                     del st.session_state[key]
-            database.save_user_setting("name_inclusions", "{}")
-            st.toast("All filter decisions reset", icon="🔄")
+            database.save_user_setting("name_inclusions", json.dumps(st.session_state.name_inclusions))
+            st.toast("Excluded names reset", icon="🔄")
+            st.rerun()
+    with col_cancel:
+        if st.button("Cancel", type="secondary", use_container_width=True):
+            st.rerun()
+
+
+@st.dialog("⚠️ Confirm Reset Included", width="small")
+def show_reset_included_dialog() -> None:
+    """Dialog for confirming included names reset."""
+    st.write("This will move all **included** names back to 'not decided'.")
+    st.write("**This action cannot be undone.**")
+
+    col_confirm, col_cancel = st.columns(2)
+    with col_confirm:
+        if st.button("Yes, Reset Included", type="primary", use_container_width=True):
+            # Only remove included entries (True values), keep excluded
+            inclusions = st.session_state.get("name_inclusions", {})
+            st.session_state.name_inclusions = {k: v for k, v in inclusions.items() if v is False}
+            st.session_state.filter_index = 0
+            # Reset counts
+            for key in [
+                "filter_counts_not_decided",
+                "filter_counts_included",
+                "filter_counts_excluded",
+                "filter_counts_names_hash",
+            ]:
+                if key in st.session_state:
+                    del st.session_state[key]
+            database.save_user_setting("name_inclusions", json.dumps(st.session_state.name_inclusions))
+            st.toast("Included names reset", icon="🔄")
             st.rerun()
     with col_cancel:
         if st.button("Cancel", type="secondary", use_container_width=True):
@@ -238,23 +270,33 @@ def main() -> None:
         col1, col2 = st.columns(2)
         with col1:
             if st.button(
-                "Reset\nExclusions",
+                "Reset\nExcluded",
                 type="secondary",
-                help="Clear all include/exclude decisions",
+                help="Move all excluded names back to 'not decided'",
                 use_container_width=True,
-                key="reset_decisions_btn",
+                key="reset_excluded_btn",
             ):
-                show_reset_decisions_dialog()
+                show_reset_excluded_dialog()
 
         with col2:
             if st.button(
-                "Reset\nRatings",
+                "Reset\nIncluded",
                 type="secondary",
-                help="Reset all ratings to initial values",
+                help="Move all included names back to 'not decided'",
                 use_container_width=True,
-                key="reset_ratings_btn",
+                key="reset_included_btn",
             ):
-                show_reset_ratings_dialog()
+                show_reset_included_dialog()
+
+        # Reset Ratings button (full width, below the two column buttons)
+        if st.button(
+            "Reset Ratings",
+            type="secondary",
+            help="Reset all tournament ratings to initial values",
+            use_container_width=True,
+            key="reset_ratings_btn",
+        ):
+            show_reset_ratings_dialog()
 
         # Export
         st.subheader("Export")
