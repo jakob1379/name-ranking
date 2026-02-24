@@ -26,7 +26,6 @@ from st_name_ranking.similarity import (
 )
 from st_name_ranking.types import PreferenceStats
 from st_name_ranking.utils import (
-    get_names_features,
     record_comparison_instant,
 )
 
@@ -773,6 +772,8 @@ def render_binary_filter(names: list[str]) -> None:
             st.session_state.filter_index += 1
             st.toast(f"Excluded: {current_name}", icon="👎")
             st.session_state.last_button_press_time = time.perf_counter()
+            # Save to database immediately to prevent data loss on reload
+            save_user_setting("name_inclusions", json.dumps(inclusions))
             # INSTANT UPDATE - no rerun!
             # Remove current name from undecided list for instant feedback
             if current_name in undecided_names:
@@ -801,6 +802,8 @@ def render_binary_filter(names: list[str]) -> None:
             st.session_state.filter_index += 1
             st.toast(f"Included: {current_name}", icon="👍")
             st.session_state.last_button_press_time = time.perf_counter()
+            # Save to database immediately to prevent data loss on reload
+            save_user_setting("name_inclusions", json.dumps(inclusions))
             # INSTANT UPDATE - no rerun!
             # Remove current name from undecided list for instant feedback
             if current_name in undecided_names:
@@ -839,6 +842,8 @@ def render_binary_filter(names: list[str]) -> None:
                 del st.session_state.filter_counts_names_hash
             st.toast(f"Included {count} remaining names", icon="✅")
             st.session_state.last_button_press_time = time.perf_counter()
+            # Save to database immediately to prevent data loss on reload
+            save_user_setting("name_inclusions", json.dumps(inclusions))
             # Fragment-level refresh for batch operations
             st.rerun(scope="fragment")
     with col_batch2:
@@ -852,6 +857,8 @@ def render_binary_filter(names: list[str]) -> None:
                 del st.session_state.filter_counts_names_hash
             st.toast(f"Excluded {count} remaining names", icon="✅")
             st.session_state.last_button_press_time = time.perf_counter()
+            # Save to database immediately to prevent data loss on reload
+            save_user_setting("name_inclusions", json.dumps(inclusions))
             # Fragment-level refresh for batch operations
             st.rerun(scope="fragment")
 
@@ -887,6 +894,8 @@ def render_binary_filter(names: list[str]) -> None:
                 update_counts(name, old_status=old_status, new_status=None)
                 logger.info("🔄 %s moved from included to not decided", name)
                 st.toast(f"{name} moved to not decided", icon="🔄")
+                # Save to database immediately to prevent data loss on reload
+                save_user_setting("name_inclusions", json.dumps(inclusions))
                 st.rerun(scope="fragment")
     else:
         st.info("No names included yet. Use 'Include' button above to add names.")
@@ -922,6 +931,8 @@ def render_binary_filter(names: list[str]) -> None:
                         update_counts(name, old_status=old_status, new_status=None)
                         logger.info("🔄 %s moved from excluded to not decided", name)
                         st.toast(f"{name} moved to not decided", icon="🔄")
+                        # Save to database immediately to prevent data loss on reload
+                        save_user_setting("name_inclusions", json.dumps(inclusions))
                         st.rerun(scope="fragment")
 
     log_timing("At end")
