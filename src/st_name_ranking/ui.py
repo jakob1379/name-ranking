@@ -248,12 +248,24 @@ def render_tournament(names: list[str]) -> None:
     st.markdown(
         """
     <style>
-    /* Style for st.metric display */
+    /* Style for st.metric display - ensure full name visibility */
+    div[data-testid="stMetricValue"] {
+        overflow: visible !important;
+        white-space: normal !important;
+        word-wrap: break-word !important;
+        word-break: break-word !important;
+        max-width: 100% !important;
+    }
     div[data-testid="stMetricValue"] p {
-        font-size: 48px !important;
+        font-size: clamp(24px, 5vw, 48px) !important;
         font-weight: bold !important;
         text-align: center !important;
         margin-bottom: 5px !important;
+        overflow: visible !important;
+        white-space: normal !important;
+        word-wrap: break-word !important;
+        word-break: break-word !important;
+        line-height: 1.2 !important;
     }
     div[data-testid="stMetricLabel"] p {
         font-size: 24px !important;
@@ -263,6 +275,8 @@ def render_tournament(names: list[str]) -> None:
     }
     div[data-testid="stMetric"] {
         text-align: center !important;
+        overflow: visible !important;
+        min-width: 200px !important;
     }
     div[data-testid="stMetricDelta"] svg {
         width: 20px !important;
