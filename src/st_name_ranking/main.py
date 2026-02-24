@@ -4,6 +4,7 @@ Refactored version with modular imports.
 
 import json
 import logging
+import os
 import secrets
 import sqlite3
 import time
@@ -180,29 +181,6 @@ def main() -> None:
             )
             st.rerun()
 
-        # Tournament Queue Size Setting
-        st.subheader("Tournament Settings")
-        if "tournament_queue_size" not in st.session_state:
-            st.session_state.tournament_queue_size = 15
-
-        queue_size = st.slider(
-            "Queue size (pairs to preload):",
-            min_value=3,
-            max_value=50,
-            value=st.session_state.tournament_queue_size,
-            help="Number of pairs to preload in tournament. Higher = faster but more memory.",
-        )
-
-        if queue_size != st.session_state.tournament_queue_size:
-            st.session_state.tournament_queue_size = queue_size
-            # Clear the pair queue so it regenerates with new size
-            from st_name_ranking.pair_queue import clear_pair_queue_session
-
-            clear_pair_queue_session()
-            st.toast(f"Queue size set to {queue_size}", icon="⚙️")
-
-        st.divider()
-
         # Ratings management
         st.subheader("Ratings Management")
 
@@ -318,7 +296,8 @@ def main() -> None:
     # Initialize QueueManager ONLY when on Tournament tab
     # This avoids slowing down Name Filter with unnecessary background work
     if st.session_state.get("active_tab") == "Tournament" and len(filtered_names) >= 2:
-        queue_size = st.session_state.get("tournament_queue_size", 15)
+        # Queue size from environment variable (default 15)
+        queue_size = int(os.environ.get("TOURNAMENT_QUEUE_SIZE", "15"))
         get_queue_manager(filtered_names, queue_size)
         logger.debug("Initialized QueueManager for Tournament tab")
     else:

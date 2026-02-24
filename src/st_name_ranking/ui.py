@@ -2,6 +2,7 @@
 
 import json
 import logging
+import os
 import time
 from typing import Literal
 
@@ -209,18 +210,12 @@ def render_tournament(names: list[str]) -> None:
     log_timing("Before queue manager")
 
     # Get or create background queue manager for instant transitions
-    queue_size = st.session_state.get("tournament_queue_size", 15)
+    # Queue size from environment variable (default 15)
+    queue_size = int(os.environ.get("TOURNAMENT_QUEUE_SIZE", "15"))
     manager = get_queue_manager(names, queue_size)
     log_timing("After queue manager")
 
-    # Show queue status to indicate background filling progress
-    current_queue_size = manager.get_queue_size()
-    queue_status = (
-        "🟢" if current_queue_size >= queue_size * 0.8 else "🟡" if current_queue_size >= queue_size * 0.5 else "🔴"
-    )
-    st.caption(
-        f"Tournament mode: click which name you prefer | Queue: {current_queue_size}/{queue_size} {queue_status}",
-    )
+    st.caption("Tournament mode: click which name you prefer")
 
     # Handle empty names list gracefully
     if len(names) < 2:
