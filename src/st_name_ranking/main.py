@@ -41,7 +41,7 @@ if not root_logger.handlers:
 
 
 @st.dialog("⚠️ Confirm Reset Ratings", width="small")
-def show_reset_dialog() -> None:
+def show_reset_ratings_dialog() -> None:
     """Dialog for confirming ratings reset."""
     st.write("This will reset **all** ratings to their initial values.")
     st.write("**This action cannot be undone.**")
@@ -51,6 +51,34 @@ def show_reset_dialog() -> None:
         if st.button("Yes, Reset Ratings", type="primary", use_container_width=True):
             st.session_state.ratings = initialize_ratings(st.session_state.names)
             st.toast("✅ Ratings reset to initial values", icon="✅")
+            st.rerun()
+    with col_cancel:
+        if st.button("Cancel", type="secondary", use_container_width=True):
+            st.rerun()
+
+
+@st.dialog("⚠️ Confirm Reset Decisions", width="small")
+def show_reset_decisions_dialog() -> None:
+    """Dialog for confirming filter decisions reset."""
+    st.write("This will clear **all** include/exclude decisions.")
+    st.write("**This action cannot be undone.**")
+
+    col_confirm, col_cancel = st.columns(2)
+    with col_confirm:
+        if st.button("Yes, Reset Decisions", type="primary", use_container_width=True):
+            st.session_state.name_inclusions = {}
+            st.session_state.filter_index = 0
+            # Reset counts
+            for key in [
+                "filter_counts_not_decided",
+                "filter_counts_included",
+                "filter_counts_excluded",
+                "filter_counts_names_hash",
+            ]:
+                if key in st.session_state:
+                    del st.session_state[key]
+            database.save_user_setting("name_inclusions", "{}")
+            st.toast("All filter decisions reset", icon="🔄")
             st.rerun()
     with col_cancel:
         if st.button("Cancel", type="secondary", use_container_width=True):
@@ -198,56 +226,45 @@ def main() -> None:
             )
             st.rerun()
 
-        # Filter decisions management
-        st.subheader("Filter Decisions")
-        if st.button(
-            "Reset All Decisions",
-            type="secondary",
-            help="Clear all include/exclude decisions and start over",
-        ):
-            st.session_state.name_inclusions = {}
-            st.session_state.filter_index = 0
-            # Reset counts
-            if "filter_counts_not_decided" in st.session_state:
-                del st.session_state.filter_counts_not_decided
-            if "filter_counts_included" in st.session_state:
-                del st.session_state.filter_counts_included
-            if "filter_counts_excluded" in st.session_state:
-                del st.session_state.filter_counts_excluded
-            if "filter_counts_names_hash" in st.session_state:
-                del st.session_state.filter_counts_names_hash
-            database.save_user_setting("name_inclusions", "{}")
-            st.toast("All filter decisions reset", icon="🔄")
-            st.rerun()
-
+        # Danger Zone - destructive actions grouped together
         st.divider()
-
-        # Ratings management
-        st.subheader("Ratings Management")
+        st.subheader("⚠️ Danger Zone")
 
         if "names" in st.session_state and st.session_state.names:
             st.caption(f"Active Dataset: {len(st.session_state.names)} names")
 
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button(
+                "Reset Decisions",
+                type="secondary",
+                help="Clear all include/exclude decisions",
+                use_container_width=True,
+            ):
+                show_reset_decisions_dialog()
+
+        with col2:
             if st.button(
                 "Reset Ratings",
-                help=("Reset all ratings to initial values. This action cannot be undone."),
                 type="secondary",
+                help="Reset all ratings to initial values",
+                use_container_width=True,
             ):
-                show_reset_dialog()
+                show_reset_ratings_dialog()
 
-            # Export ratings
-            st.subheader("Export")
-            if st.button("Export Database"):
-                try:
-                    db_bytes = database.export_database()
-                    st.download_button(
-                        label="Download Database",
-                        data=db_bytes,
-                        file_name=f"name_ranker_{datetime.now().strftime('%Y%m%d_%H%M%S')}.db",
-                        mime="application/x-sqlite3",
-                    )
-                except (OSError, RuntimeError) as e:
-                    st.error(f"Failed to export database: {e}")
+        # Export
+        st.subheader("Export")
+        if st.button("Export Database", use_container_width=True):
+            try:
+                db_bytes = database.export_database()
+                st.download_button(
+                    label="Download Database",
+                    data=db_bytes,
+                    file_name=f"name_ranker_{datetime.now().strftime('%Y%m%d_%H%M%S')}.db",
+                    mime="application/x-sqlite3",
+                )
+            except (OSError, RuntimeError) as e:
+                st.error(f"Failed to export database: {e}")
 
     # Main Content
     if "all_names_data" not in st.session_state:
