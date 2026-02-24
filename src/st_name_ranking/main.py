@@ -272,7 +272,7 @@ def main() -> None:
         with col2:
             st.markdown('<div class="reset-buttons-container">', unsafe_allow_html=True)
             if st.button(
-                "Reset Ratings",
+                "Reset\nRatings",
                 type="secondary",
                 help="Reset all ratings to initial values",
                 use_container_width=True,
