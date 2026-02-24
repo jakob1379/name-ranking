@@ -198,6 +198,30 @@ def main() -> None:
             )
             st.rerun()
 
+        # Filter decisions management
+        st.subheader("Filter Decisions")
+        if st.button(
+            "Reset All Decisions",
+            type="secondary",
+            help="Clear all include/exclude decisions and start over",
+        ):
+            st.session_state.name_inclusions = {}
+            st.session_state.filter_index = 0
+            # Reset counts
+            if "filter_counts_not_decided" in st.session_state:
+                del st.session_state.filter_counts_not_decided
+            if "filter_counts_included" in st.session_state:
+                del st.session_state.filter_counts_included
+            if "filter_counts_excluded" in st.session_state:
+                del st.session_state.filter_counts_excluded
+            if "filter_counts_names_hash" in st.session_state:
+                del st.session_state.filter_counts_names_hash
+            database.save_user_setting("name_inclusions", "{}")
+            st.toast("All filter decisions reset", icon="🔄")
+            st.rerun()
+
+        st.divider()
+
         # Ratings management
         st.subheader("Ratings Management")
 

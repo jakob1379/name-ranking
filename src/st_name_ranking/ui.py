@@ -841,21 +841,6 @@ def render_binary_filter(names: list[str]) -> None:
             # Fragment-level refresh for batch operations
             st.rerun(scope="fragment")
 
-    # Navigation buttons
-    st.divider()
-    if st.button("Reset All Decisions", type="secondary"):
-        st.session_state.name_inclusions = {}
-        st.session_state.filter_index = 0
-        # Reset counts
-        st.session_state.filter_counts_not_decided = len(names)
-        st.session_state.filter_counts_included = 0
-        st.session_state.filter_counts_excluded = 0
-        st.session_state.filter_counts_names_hash = names_hash
-        save_user_setting("name_inclusions", "{}")
-        st.session_state.last_button_press_time = time.perf_counter()
-        # Fragment-level refresh for reset
-        st.rerun(scope="fragment")
-
     log_timing("After buttons")
 
     # Show included names in a multiselect (usually small number, performant)
