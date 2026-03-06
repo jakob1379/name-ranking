@@ -478,7 +478,7 @@ class TestUIIntegration:
             patch("st_name_ranking.ui.select_candidate_batch") as mock_select_batch,
             patch("st_name_ranking.ui.update_preference_and_save"),
             patch("st_name_ranking.ui.update_preference_draw_and_save"),
-            patch("st_name_ranking.ui.render_preferences_panel") as mock_render_prefs,
+            patch("st_name_ranking.ui.render_preferences_panel"),
             patch("st_name_ranking.ui.INITIAL_SCORE", 1500),  # Mock INITIAL_SCORE constant
         ):
             # Setup mocks
@@ -489,8 +489,7 @@ class TestUIIntegration:
             test_names = ["Anna", "Peter", "Maria", "John"]
             ui.render_tournament(test_names)
 
-            # Verify header and caption
-            mock_st.header.assert_called_with("Name Ranking Tournament")
+            # Verify top tournament metadata
             mock_st.write.assert_called_with(f"Comparing {len(test_names)} names")
             mock_st.caption.assert_called()
 
@@ -637,8 +636,7 @@ class TestUIIntegration:
             test_names = ["Anna", "Peter", "Maria", "John"]
             ui.render_tournament(test_names)
 
-            # Verify header and caption
-            mock_st.header.assert_called_with("Name Ranking Tournament")
+            # Verify top tournament metadata
             mock_st.write.assert_called_with(f"Comparing {len(test_names)} names")
 
             # Verify update_preference_and_save was called with correct args

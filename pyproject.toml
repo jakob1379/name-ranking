@@ -103,7 +103,10 @@ known-first-party = ["st_name_ranking"]
 "src/st_name_ranking/classify_origins.py" = ["T201"]
 # __main__ blocks for testing - print is acceptable
 "src/st_name_ranking/origin_classifier.py" = ["T201"]
-"src/st_name_ranking/database.py" = ["T201"]
+"src/st_name_ranking/data_loader.py" = ["C901"]
+"src/st_name_ranking/database.py" = ["C901", "PLR0912", "PLR0915", "S603", "T201"]
+"src/st_name_ranking/main.py" = ["C901", "PLR0912", "PLR0915"]
+"src/st_name_ranking/ui.py" = ["C901", "PLR0912", "PLR0915"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

@@ -8,7 +8,7 @@ import os
 import secrets
 import sqlite3
 import time
-from datetime import datetime
+from datetime import UTC, datetime
 
 import streamlit as st
 
@@ -24,6 +24,7 @@ from st_name_ranking.utils import (
 )
 
 logger = logging.getLogger(__name__)
+MIN_NAMES_FOR_TOURNAMENT = 2
 logger.setLevel(logging.INFO)
 
 # Configure logging - suppress debug noise
@@ -132,17 +133,17 @@ def main() -> None:
         try:
             stats = database.get_stats()
             total_names = stats.total_names
-            classified_names = stats.classified_names
-            if total_names > 0:
-                pct_classified = classified_names / total_names
-                st.metric(
-                    "Names in Database",
-                    f"{total_names:,}",
-                    f"{pct_classified:.0%} classified",
-                    border=True,
-                )
-            else:
-                st.metric("Names in Database", "0", border=True)
+            try:
+                total_comparisons = int(database.get_total_comparisons())
+            except (TypeError, ValueError):
+                total_comparisons = 0
+
+            st.metric(
+                "Names in Database",
+                f"{total_names:,}",
+                f"{total_comparisons:,} comparisons",
+                border=True,
+            )
         except sqlite3.Error:
             st.caption("Database stats unavailable")
 
@@ -306,7 +307,7 @@ def main() -> None:
                 st.download_button(
                     label="Download Database",
                     data=db_bytes,
-                    file_name=f"name_ranker_{datetime.now().strftime('%Y%m%d_%H%M%S')}.db",
+                    file_name=f"name_ranker_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}.db",
                     mime="application/x-sqlite3",
                 )
             except (OSError, RuntimeError) as e:
@@ -378,7 +379,7 @@ def main() -> None:
 
     # Initialize QueueManager ONLY when on Tournament tab
     # This avoids slowing down Name Filter with unnecessary background work
-    if st.session_state.get("active_tab") == "Tournament" and len(filtered_names) >= 2:
+    if st.session_state.get("active_tab") == "Tournament" and len(filtered_names) >= MIN_NAMES_FOR_TOURNAMENT:
         # Queue size from environment variable (default 15)
         queue_size = int(os.environ.get("TOURNAMENT_QUEUE_SIZE", "15"))
         get_queue_manager(filtered_names, queue_size)
@@ -501,7 +502,7 @@ if __name__ == "__main__":
     except (RuntimeError, ValueError, OSError) as e:
         import traceback
 
-        logger.error("Fatal error in main: %s", e)
+        logger.exception("Fatal error in main")
         traceback.print_exc()
         # Try to show error in Streamlit if possible
         import sys

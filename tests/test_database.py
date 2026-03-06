@@ -488,6 +488,31 @@ class TestStatistics:
         assert "International" in origin_dist
         assert origin_dist["International"] == 2
 
+    def test_get_total_comparisons(self, initialized_db):
+        """Test total comparison counter."""
+        from st_name_ranking.database import (
+            get_connection,
+            get_total_comparisons,
+            record_comparison,
+        )
+
+        with get_connection() as conn:
+            conn.executemany(
+                "INSERT OR IGNORE INTO names (name, gender) VALUES (?, ?)",
+                [
+                    ("Anna", "Female"),
+                    ("Peter", "Male"),
+                    ("Maria", "Female"),
+                ],
+            )
+
+        assert get_total_comparisons() == 0
+
+        record_comparison("Anna", "Peter", -1)
+        record_comparison("Anna", "Maria", 0)
+
+        assert get_total_comparisons() == 2
+
 
 class TestSyncOperations:
     """Tests for sync operations with submodule."""
@@ -509,7 +534,6 @@ class TestSyncOperations:
         # Mock subprocess.run to return a fake commit hash
         # Also mock is_valid_name to print and return True
         def mock_is_valid_name(name):
-            print(f"is_valid_name called with: {name}")
             return True
 
         with (
@@ -528,7 +552,6 @@ class TestSyncOperations:
             result = sync_names_with_submodule(
                 submodule_path=mock_submodule_path,
             )
-            print(f"sync result: {result}")
             assert isinstance(result, int)
             # Expect 3 names inserted
             if result != 3:
@@ -538,11 +561,9 @@ class TestSyncOperations:
                 with get_connection() as conn:
                     cursor = conn.cursor()
                     cursor.execute("SELECT * FROM names")
-                    rows = cursor.fetchall()
-                    print(f"names table rows: {rows}")
+                    cursor.fetchall()
                     cursor.execute("SELECT * FROM source_versions")
-                    versions = cursor.fetchall()
-                    print(f"source_versions: {versions}")
+                    cursor.fetchall()
             assert result == 3  # 3 names from JSON file
 
         # Verify names were inserted (get_unclassified_names returns dict with id, name)

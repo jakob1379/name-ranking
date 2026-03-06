@@ -51,6 +51,32 @@ class TestJsonLoading:
         finally:
             os.chdir(original_cwd)
 
+    def test_load_json_strips_name_notes(self, tmp_path, mock_db_path):
+        """Test that note suffixes are stripped during JSON load."""
+        submodule_path = tmp_path / "godkendtefornavne"
+        submodule_path.mkdir()
+        json_file = submodule_path / "allenavne.json"
+
+        test_data = [
+            {"name": "Matteos - variant af godkendt fornavn", "gender": "M"},
+            {"name": "Anna", "gender": "F"},
+        ]
+        json_file.write_text(json.dumps(test_data))
+
+        original_cwd = Path.cwd()
+        try:
+            import os
+
+            os.chdir(tmp_path)
+            result = data_loader.load_submodule_json()
+
+            names = {item["name"] for item in result}
+            assert "Matteos" in names
+            assert "Matteos - variant af godkendt fornavn" not in names
+            assert "Anna" in names
+        finally:
+            os.chdir(original_cwd)
+
     def test_gender_mapping_f_to_female(self, tmp_path, mock_db_path):
         """Test that gender code 'F' maps to 'Female' in database."""
         submodule_path = tmp_path / "godkendtefornavne"
@@ -273,6 +299,39 @@ class TestSubmoduleSync:
             assert len(rows) == 2
             assert tuple(rows[0]) == ("Anna", "Female")
             assert tuple(rows[1]) == ("Peter", "Male")
+
+    def test_sync_strips_name_notes_before_insert(self, tmp_path, initialized_db):
+        """Test that sync stores cleaned base names when notes are present."""
+        submodule_path = tmp_path / "godkendtefornavne"
+        submodule_path.mkdir()
+        json_file = submodule_path / "allenavne.json"
+
+        test_data = [
+            {"name": "Matteos - variant af godkendt fornavn", "gender": "M"},
+            {"name": "Matteos", "gender": "M"},
+        ]
+        json_file.write_text(json.dumps(test_data))
+
+        import subprocess
+
+        subprocess.run(["git", "init"], cwd=submodule_path, check=True, capture_output=True)
+        subprocess.run(
+            ["git", "config", "user.email", "test@test.com"],
+            cwd=submodule_path,
+            check=True,
+            capture_output=True,
+        )
+        subprocess.run(["git", "config", "user.name", "Test"], cwd=submodule_path, check=True, capture_output=True)
+        subprocess.run(["git", "add", "."], cwd=submodule_path, check=True, capture_output=True)
+        subprocess.run(["git", "commit", "-m", "initial"], cwd=submodule_path, check=True, capture_output=True)
+
+        inserted = database.sync_names_with_submodule(submodule_path)
+        assert inserted == 1
+
+        with database.get_connection() as conn:
+            cursor = conn.execute("SELECT name FROM names")
+            names = {row[0] for row in cursor.fetchall()}
+            assert names == {"Matteos"}
 
     def test_sync_gender_mapping_in_database(self, tmp_path, initialized_db):
         """Test that gender codes are properly mapped during sync."""

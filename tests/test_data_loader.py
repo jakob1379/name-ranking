@@ -83,6 +83,19 @@ class TestIsValidName:
         assert data_loader.is_valid_name("Bjørn") is True  # Norwegian letter
 
 
+class TestStripNameNotes:
+    """Tests for strip_name_notes function."""
+
+    def test_strips_variant_notes(self):
+        """Names with notes should keep only the base name."""
+        raw = "Matteos - variant af godkendt fornavn"
+        assert data_loader.strip_name_notes(raw) == "Matteos"
+
+    def test_keeps_plain_name(self):
+        """Plain names should be unchanged except trimming."""
+        assert data_loader.strip_name_notes("  Anna  ") == "Anna"
+
+
 class TestLoadRatings:
     """Tests for load_ratings function."""
 

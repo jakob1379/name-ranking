@@ -188,7 +188,10 @@ if "origin_filter" not in st.session_state:
 if "active_tab" not in st.session_state:
     st.session_state.active_tab = "{tab_name}"
 if "ratings" not in st.session_state:
-    st.session_state.ratings = {{name: 1500.0 for name in ["Anna", "Peter", "Maria", "John", "Emma", "Lars", "Sofia", "Max"]}}
+    st.session_state.ratings = {{
+        name: 1500.0
+        for name in ["Anna", "Peter", "Maria", "John", "Emma", "Lars", "Sofia", "Max"]
+    }}
 if "candidate_a" not in st.session_state:
     st.session_state.candidate_a = ""
 if "candidate_b" not in st.session_state:
@@ -295,9 +298,6 @@ class TestTournamentTab:
         # Should not have errors
         assert not at.exception
 
-        # Should render header
-        assert any("Name Ranking Tournament" in elt.value for elt in at.header)
-
         # Should have buttons for both candidates
         buttons = [b for b in at.button if "Prefer" in str(b.label)]
         assert len(buttons) >= 2, "Should have at least 2 preference buttons"
@@ -354,15 +354,15 @@ class TestTournamentTab:
         metrics = at.metric
         assert len(metrics) >= 2, "Should display at least 2 metrics for candidates"
 
-    def test_statistics_expander_exists(self, test_db_factory, setup_session_state_data):
-        """Test that the statistics expander exists."""
+    def test_statistics_expander_not_rendered(self, test_db_factory, setup_session_state_data):
+        """Tournament should not render statistics expander for performance reasons."""
         db_path = test_db_factory()
         at = run_main_app_with_tab("Tournament", db_path, setup_session_state_data)
         at.run(timeout=30)
 
-        # Check for expander
+        # Statistics panel was intentionally removed from tournament tab
         expanders = [e for e in at.expander if "statistics" in str(e.label).lower()]
-        assert len(expanders) > 0, "Should have a statistics expander"
+        assert len(expanders) == 0, "Tournament tab should not render statistics expander"
 
 
 # =============================================================================
@@ -728,7 +728,7 @@ if st.button("Increment"):
         assert at.session_state.counter == 0
 
         # Click button
-        button = [b for b in at.button if "Increment" in str(b.label)][0]
+        button = next(b for b in at.button if "Increment" in str(b.label))
         button.click()
         at.run(timeout=30)
 
@@ -787,7 +787,7 @@ st.write(f"Cache key: {{st.session_state.filtered_cache_key}}")
         assert at.session_state.filtered_names_cache is not None
 
         # Change the pills value and run again (accessed via button_group in AppTest)
-        pills = [p for p in at.button_group][0]
+        pills = next(iter(at.button_group))
         pills.set_value(["Male"])
         at.run(timeout=30)
 
@@ -831,7 +831,7 @@ st.write(f"Selected: {st.session_state.selected}")
         assert at.session_state.selected == "A"
 
         # Change selection using set_value (accessed via button_group in AppTest)
-        pills = [p for p in at.button_group][0]
+        pills = next(iter(at.button_group))
         pills.set_value(["B"])
         at.run(timeout=30)
 
@@ -866,7 +866,7 @@ st.write(f"Selected: {st.session_state.selected}")
         assert at.session_state.selected == []
 
         # Select items using set_value
-        multiselect = [m for m in at.multiselect][0]
+        multiselect = next(iter(at.multiselect))
         multiselect.set_value(["A", "C"])
         at.run(timeout=30)
 
@@ -900,7 +900,7 @@ st.write(f"Clicked: {st.session_state.clicked}")
         assert at.session_state.clicked is False
 
         # Click button
-        button = [b for b in at.button if "Click Me" in str(b.label)][0]
+        button = next(b for b in at.button if "Click Me" in str(b.label))
         button.click()
         at.run(timeout=30)
 
@@ -924,7 +924,7 @@ st.write(f"Text: {text}")
         at.run(timeout=30)
 
         # Get text input and change value
-        text_input = [t for t in at.text_input][0]
+        text_input = next(iter(at.text_input))
         text_input.set_value("new value")
         at.run(timeout=30)
 

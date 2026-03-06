@@ -31,6 +31,8 @@ from st_name_ranking.utils import (
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
+MIN_NAMES_FOR_COMPARISON = 2
+SLOW_RENDER_THRESHOLD_MS = 100
 
 
 def display_name_with_rating(
@@ -45,14 +47,7 @@ def display_name_with_rating(
     negative if lower).
     """
     # Format delta for display
-    if delta is not None:
-        # Convert numeric delta to string with sign
-        if isinstance(delta, (int, float)):
-            delta_str = f"{delta:+.0f}"
-        else:
-            delta_str = str(delta)
-    else:
-        delta_str = None
+    delta_str = (f"{delta:+.0f}" if isinstance(delta, (int, float)) else str(delta)) if delta is not None else None
 
     # Use st.metric with swapped label/value to get desired visual hierarchy
     # Value will be large (name), label will be smaller (rating)
@@ -195,15 +190,13 @@ def render_tournament(names: list[str]) -> None:
     User clicks on which name they prefer.
     Uses lazy model updates for instant UI feedback.
     """
-    import time
-
     start_time = time.perf_counter()
 
     def log_timing(step: str) -> None:
         logger.info("⏱️ Tournament [%s]: %.2fms", step, (time.perf_counter() - start_time) * 1000)
 
     logger.info("🎮 Tournament started with %d names", len(names))
-    st.header("Name Ranking Tournament")
+
     st.write(f"Comparing {len(names)} names")
 
     log_timing("Before queue manager")
@@ -217,7 +210,7 @@ def render_tournament(names: list[str]) -> None:
     st.caption("Tournament mode: click which name you prefer")
 
     # Handle empty names list gracefully
-    if len(names) < 2:
+    if len(names) < MIN_NAMES_FOR_COMPARISON:
         if len(names) == 0:
             st.info("No names to compare. Please select at least two names.")
         else:
@@ -229,19 +222,22 @@ def render_tournament(names: list[str]) -> None:
 
     # Create placeholders for dynamic content
     pair_display_placeholder = st.empty()
-    buttons_placeholder = st.empty()
+    st.empty()
 
-    # Initialize candidates if not set or empty
+    # Initialize candidates if not set, empty, or no longer in current filtered names
     if (
         "candidate_a" not in st.session_state
         or "candidate_b" not in st.session_state
         or not st.session_state.candidate_a
         or not st.session_state.candidate_b
+        or st.session_state.candidate_a not in names_set
+        or st.session_state.candidate_b not in names_set
+        or st.session_state.candidate_a == st.session_state.candidate_b
     ):
         current_pair = manager.get_pair()
         if not current_pair:
-            # Fallback if queue empty
-            current_pair = (names[0], names[1]) if len(names) > 1 else (names[0], names[0])
+            # Fallback if queue empty (fresh pair on reload/new session)
+            current_pair = select_random_pair(names)
         st.session_state.candidate_a, st.session_state.candidate_b = current_pair
 
     st.markdown(
@@ -374,12 +370,10 @@ def render_tournament(names: list[str]) -> None:
     # Handle votes with instant async model updates for UI feedback
     vote_handled = False
     next_pair = None
-    vote_type = None
 
     if vote_a_clicked:
         log_timing("Vote A clicked - handling")
         vote_handled = True
-        vote_type = "a"
         logger.info("🎮 Vote: '%s' preferred over '%s'", st.session_state.candidate_a, st.session_state.candidate_b)
         # 1. Record comparison instantly (async model update in background)
         record_comparison_instant(st.session_state.candidate_a, st.session_state.candidate_b, -1)
@@ -392,7 +386,6 @@ def render_tournament(names: list[str]) -> None:
             logger.info("📦 Next pair (queue): %s vs %s", next_pair[0], next_pair[1])
     elif vote_b_clicked:
         vote_handled = True
-        vote_type = "b"
         logger.info("🎮 Vote: '%s' preferred over '%s'", st.session_state.candidate_b, st.session_state.candidate_a)
         # 1. Record comparison instantly (async model update in background)
         record_comparison_instant(st.session_state.candidate_a, st.session_state.candidate_b, 1)
@@ -405,7 +398,6 @@ def render_tournament(names: list[str]) -> None:
             logger.info("📦 Next pair (queue): %s vs %s", next_pair[0], next_pair[1])
     elif draw_clicked:
         vote_handled = True
-        vote_type = "draw"
         logger.info("🎮 Vote: Draw between '%s' and '%s'", st.session_state.candidate_a, st.session_state.candidate_b)
         st.toast("🤝 you chose a draw!", duration="long")
         # 1. Record comparison instantly (async model update in background)
@@ -419,7 +411,6 @@ def render_tournament(names: list[str]) -> None:
             logger.info("📦 Next pair (queue): %s vs %s", next_pair[0], next_pair[1])
     elif down_clicked:
         vote_handled = True
-        vote_type = "down"
         logger.info("🎮 Vote: Both '%s' and '%s' disliked", st.session_state.candidate_a, st.session_state.candidate_b)
         st.toast("👎 you disliked both!", duration="long")
         # 1. Record comparison instantly (async model update in background)
@@ -446,7 +437,6 @@ def render_tournament(names: list[str]) -> None:
 
     # NOTE: Statistics expander removed due to 20+ second render time
     # The dataframes and tabs were being processed even when collapsed
-    # TODO: Move rankings to separate tab or load lazily only when expanded
 
     log_timing("At end")
 
@@ -581,10 +571,9 @@ def render_binary_filter(names: list[str]) -> None:
         del st.session_state.last_button_press_time
 
     # Helper function to update counts incrementally
-    def update_counts(name: str, *, old_status: bool | None, new_status: bool) -> None:
+    def update_counts(_name: str, *, old_status: bool | None, new_status: bool | None) -> None:
         """Update filter counts when a name's inclusion status changes."""
         # old_status: None (not decided), True (included), False (excluded)
-        # new_status: True (included) or False (excluded)
 
         # Decrement old category
         if old_status is None:
@@ -595,7 +584,9 @@ def render_binary_filter(names: list[str]) -> None:
             st.session_state.filter_counts_excluded -= 1
 
         # Increment new category
-        if new_status is True:
+        if new_status is None:
+            st.session_state.filter_counts_not_decided += 1
+        elif new_status is True:
             st.session_state.filter_counts_included += 1
         else:  # new_status is False
             st.session_state.filter_counts_excluded += 1
@@ -632,14 +623,8 @@ def render_binary_filter(names: list[str]) -> None:
     # Detect if names list has changed (e.g., gender/origin filter changed)
     # Use a faster hash: just hash the first, last, and length
     # This is O(1) instead of O(n) for hashing the full tuple
-    hash_start = time.perf_counter()
-    if len(names) > 0:
-        # Fast hash using first name, last name, and count
-        fast_hash = hash((names[0], names[-1], len(names)))
-    else:
-        fast_hash = hash(0)
+    fast_hash = hash((names[0], names[-1], len(names))) if len(names) > 0 else hash(0)
     names_hash = str(fast_hash)
-    hash_time = time.perf_counter()
 
     if "filter_names_hash" not in st.session_state:
         st.session_state.filter_names_hash = names_hash
@@ -658,7 +643,6 @@ def render_binary_filter(names: list[str]) -> None:
         st.session_state.filter_index = 0
 
     # Initialize or update filter counts if names list changed
-    counts_start = time.perf_counter()
     needs_recount = (
         "filter_counts_not_decided" not in st.session_state
         or "filter_counts_included" not in st.session_state
@@ -942,7 +926,7 @@ def render_binary_filter(names: list[str]) -> None:
     elapsed_ms = (end_time - start_time) * 1000
 
     # Log timing at INFO level if slow, DEBUG otherwise
-    if elapsed_ms > 100:
+    if elapsed_ms > SLOW_RENDER_THRESHOLD_MS:
         logger.info("🐌 Filter render slow: %.1fms", elapsed_ms)
     else:
         logger.info("✅ Filter render fast: %.1fms", elapsed_ms)

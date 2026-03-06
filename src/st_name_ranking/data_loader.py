@@ -1,9 +1,9 @@
 """Data loading and persistence functions."""
 
 import logging
-import os
 import re
 import sqlite3
+from pathlib import Path
 
 import pandas as pd
 import streamlit as st
@@ -17,6 +17,17 @@ logger = logging.getLogger(__name__)
 MIN_NAME_LENGTH = 2
 MAX_INVALID_NAME_LOG = 5
 LARGE_DATASET_THRESHOLD = 1000
+
+
+def strip_name_notes(name: str) -> str:
+    """Strip note suffixes from raw name strings.
+
+    Example:
+        "Matteos - variant af godkendt fornavn" -> "Matteos"
+    """
+    if not isinstance(name, str):
+        return ""
+    return name.split(" - ", 1)[0].strip()
 
 
 def is_valid_name(name: str) -> bool:
@@ -65,10 +76,7 @@ def is_valid_name(name: str) -> bool:
             return False
 
     # Name should have at least MIN_NAME_LENGTH characters
-    if len(name_lower) < MIN_NAME_LENGTH:
-        return False
-
-    return True
+    return not len(name_lower) < MIN_NAME_LENGTH
 
 
 def load_ratings() -> dict[str, float] | None:
@@ -158,7 +166,7 @@ def load_submodule_json() -> list[dict[str, str]]:
     """Load name-gender pairs from local git submodule JSON file.
     Returns list of dicts with 'name' and 'gender' keys.
     """
-    json_path = os.path.join("godkendtefornavne", "allenavne.json")
+    json_path = Path("godkendtefornavne") / "allenavne.json"
     try:
         # Use pandas to read JSON for better performance and error handling
         df = pd.read_json(json_path, encoding="utf-8")
@@ -177,7 +185,7 @@ def load_submodule_json() -> list[dict[str, str]]:
         invalid_count = 0
 
         for _, row in df.iterrows():
-            name = str(row["name"]).strip()
+            name = strip_name_notes(str(row["name"]))
             gender = str(row["gender"]).strip()
 
             if is_valid_name(name):
@@ -278,18 +286,18 @@ def load_submodule_csv_fallback() -> list[str]:
     """Fallback: Load names from local git submodule CSV files.
     Used when JSON is not available.
     """
-    submodule_path = "godkendtefornavne"
+    submodule_path = Path("godkendtefornavne")
     csv_files = ["drengenavne.csv", "pigenavne.csv", "unisexnavne.csv"]
 
     all_names = []
     invalid_count = 0
     try:
         for csv_file in csv_files:
-            file_path = os.path.join(submodule_path, csv_file)
-            if os.path.exists(file_path):
-                with open(file_path, encoding="utf-8") as f:
+            file_path = submodule_path / csv_file
+            if file_path.exists():
+                with file_path.open(encoding="utf-8") as f:
                     for line in f:
-                        name = line.strip()
+                        name = strip_name_notes(line)
                         if name:  # Skip empty lines
                             if is_valid_name(name):
                                 all_names.append(name)
@@ -320,7 +328,7 @@ def load_submodule_csv_fallback() -> list[str]:
                 icon="ℹ️",
             )
 
-        names = sorted(list(set(all_names)))
+        names = sorted(set(all_names))
         st.toast(
             f"Loaded {len(names)} names from CSV fallback",
             icon="✅",

@@ -33,6 +33,7 @@ logger = logging.getLogger(__name__)
 
 
 DB_PATH = Path("data/names.db")
+_INIT_STATE = {"db_initialized": False, "db_path": None}
 
 # Default rating for new names
 INITIAL_SCORE = 1500.0
@@ -206,13 +207,14 @@ def _migrate_comparisons_table_if_needed(conn: sqlite3.Connection) -> None:
 
 def init_database() -> None:
     """Initialize database schema if it doesn't exist."""
-    if getattr(init_database, "_initialized", False):
+    if _INIT_STATE["db_initialized"] and _INIT_STATE["db_path"] == DB_PATH:
         logger.debug("Database already initialized, skipping initialization")
         return
 
     # Mark as initialized immediately to prevent race conditions
     # If initialization fails, the app won't work anyway, so we don't need to retry
-    init_database._initialized = True  # type: ignore[attr-defined]
+    _INIT_STATE["db_initialized"] = True
+    _INIT_STATE["db_path"] = DB_PATH
 
     # Check if database file exists
     db_exists = DB_PATH.exists()
@@ -412,7 +414,6 @@ def _insert_default_region_mapping(conn: sqlite3.Connection) -> None:
         "Finland",
         "Faroe Islands",
     ]
-    # European (other)
     european = [
         "Germany",
         "France",
@@ -574,21 +575,15 @@ def _insert_default_region_mapping(conn: sqlite3.Connection) -> None:
         "Nauru",
     ]
 
-    mappings = []
-    for country in nordic:
-        mappings.append(("Nordic", country))
-    for country in european:
-        mappings.append(("European", country))
-    for country in middle_eastern:
-        mappings.append(("Middle Eastern", country))
-    for country in asian:
-        mappings.append(("Asian", country))
-    for country in african:
-        mappings.append(("African", country))
-    for country in american:
-        mappings.append(("American", country))
-    for country in oceanian:
-        mappings.append(("Oceanian", country))
+    mappings = [
+        *[("Nordic", country) for country in nordic],
+        *[("European", country) for country in european],
+        *[("Middle Eastern", country) for country in middle_eastern],
+        *[("Asian", country) for country in asian],
+        *[("African", country) for country in african],
+        *[("American", country) for country in american],
+        *[("Oceanian", country) for country in oceanian],
+    ]
 
     conn.executemany(
         "INSERT OR IGNORE INTO region_mapping (region, nationality) VALUES (?, ?)",
@@ -609,8 +604,13 @@ def sync_names_with_submodule(submodule_path: Path = Path("godkendtefornavne")) 
 
     # Get current submodule commit hash
     try:
+        git_executable = shutil.which("git")
+        if not git_executable:
+            msg = "Git executable not found"
+            raise RuntimeError(msg)
+
         result = subprocess.run(
-            ["git", "-C", str(submodule_path), "rev-parse", "HEAD"],
+            [git_executable, "-C", str(submodule_path), "rev-parse", "HEAD"],
             check=False,
             capture_output=True,
             text=True,
@@ -649,11 +649,11 @@ def sync_names_with_submodule(submodule_path: Path = Path("godkendtefornavne")) 
         raise ValueError(_msg)
 
     # Filter valid names
-    from st_name_ranking.data_loader import is_valid_name  # noqa: PLC0415
+    from st_name_ranking.data_loader import is_valid_name, strip_name_notes  # noqa: PLC0415
 
     valid_names = []
     for _, row in df.iterrows():
-        name = str(row["name"]).strip()
+        name = strip_name_notes(str(row["name"]))
         gender_raw = str(row["gender"]).strip()
         # Map gender codes to full names
         gender_map = {
@@ -727,14 +727,14 @@ def sync_names_with_submodule(submodule_path: Path = Path("godkendtefornavne")) 
 
 def _compute_features_for_new_names(
     name_data: list[tuple[int, str, str]],
-    feature_set_version: str = "v1",
+    feature_set_version: str | None = None,
     batch_size: int = 1000,
 ) -> int:
     """Compute and cache features for newly synced names.
 
     Args:
         name_data: List of (name_id, name, gender) tuples
-        feature_set_version: Feature set version to use
+        feature_set_version: Feature set version to use. If None, uses active feature set.
         batch_size: Number of names to process in each batch
 
     Returns:
@@ -746,6 +746,13 @@ def _compute_features_for_new_names(
     )
 
     if not name_data:
+        return 0
+
+    if feature_set_version is None:
+        feature_set_version = get_active_feature_set_version()
+
+    if feature_set_version is None:
+        logger.info("Skipping feature computation: no active feature set")
         return 0
 
     # Initialize feature cache
@@ -798,7 +805,7 @@ def get_latest_submodule_version() -> SourceVersion | None:
         return None
 
 
-def update_submodule_version(commit_hash: str, names_count: int) -> None:
+def update_submodule_version(commit_hash: str, _names_count: int) -> None:
     """Update submodule version (commit hash) and names count."""
     with get_connection() as conn:
         # Insert new record (always add new row)
@@ -943,7 +950,7 @@ def get_names_by_gender() -> dict[str, list[str]]:
         # Convert sets to sorted lists
         result = {}
         for gender, name_set in gender_lists.items():
-            result[gender] = sorted(list(name_set))
+            result[gender] = sorted(name_set)
 
         return result
 
@@ -976,7 +983,7 @@ def get_ratings() -> dict[str, float]:
         return {row[0]: row[1] for row in cursor.fetchall()}
 
 
-def update_rating(name: str, rating: float, matches: int | None = None) -> None:
+def update_rating(name: str, rating: float, _matches: int | None = None) -> None:
     """Update rating for a name, preserving or setting matches count.
 
     Args:
@@ -1216,6 +1223,12 @@ def get_stats() -> DatabaseStats:
             rated_names=rated_names,
             origin_distribution=origin_dist,
         )
+
+
+def get_total_comparisons() -> int:
+    """Get total number of recorded pairwise comparisons."""
+    with get_connection() as conn:
+        return conn.execute("SELECT COUNT(*) FROM comparisons").fetchone()[0]
 
 
 def get_comparison_count(name: str) -> int:
@@ -1525,7 +1538,7 @@ def export_database() -> bytes:
     # SQLite handles concurrent reads fine, but we need to ensure no open write transactions
     # We'll just read the file bytes
     try:
-        with open(DB_PATH, "rb") as f:
+        with DB_PATH.open("rb") as f:
             return f.read()
     except OSError as e:
         _msg = f"Failed to read database file: {e}"
@@ -1560,20 +1573,23 @@ def import_database(file_bytes: bytes, *, backup: bool = True) -> None:
 
     # Create backup of current database if it exists
     if backup and DB_PATH.exists():
-        backup_path = DB_PATH.with_suffix(f".db.backup.{dt.datetime.now().strftime('%Y%m%d_%H%M%S')}")
+        backup_path = DB_PATH.with_suffix(
+            f".db.backup.{dt.datetime.now(dt.UTC).strftime('%Y%m%d_%H%M%S')}",
+        )
         shutil.copy2(DB_PATH, backup_path)
         logger.info("Created backup of current database at %s", backup_path)
 
     # Write new database file
     try:
-        with open(DB_PATH, "wb") as f:
+        with DB_PATH.open("wb") as f:
             f.write(file_bytes)
     except OSError as e:
         _msg = f"Failed to write database file: {e}"
         raise OSError(_msg) from e
 
     # Reset initialization flag to force re-initialization
-    init_database._initialized = False  # type: ignore[attr-defined]
+    _INIT_STATE["db_initialized"] = False
+    _INIT_STATE["db_path"] = None
 
     logger.info("Database imported successfully")
 
@@ -1707,7 +1723,7 @@ def get_cached_features_batch(
                 FROM name_features
                 WHERE feature_set_id = ? AND name_id IN ({placeholders})
             """
-            cursor = conn.execute(query, [feature_set_id] + chunk)
+            cursor = conn.execute(query, [feature_set_id, *chunk])
             for row in cursor:
                 try:
                     features = json.loads(row[1])
