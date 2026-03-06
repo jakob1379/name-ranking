@@ -122,14 +122,14 @@ model training and inference.
 
 ```bash
 # 1. Initialize database - features computed automatically
-$ uv run st-name-ranking init
+$ uv run st-name-ranking db init
 ✓ Database schema created
 ✓ Synced 4,847 names from submodule
 ✓ Created feature set version: 20250224_120000
 ✓ Computed features for 4,847 names
 
 # 2. Check feature cache status
-$ uv run st-name-ranking features status
+$ uv run st-name-ranking db features status
 Names with features: 4,847 (100.0%)
 Feature sets: 1
 Active version: 20250224_120000
@@ -174,7 +174,7 @@ def extract_all_features(name, gender, origin_region,
 3. **Rebuild feature cache**:
 
 ```bash
-$ uv run st-name-ranking features rebuild
+$ uv run st-name-ranking db features rebuild
 ✓ Cleared 4,847 cached features
 ✓ Created new feature set version: 20250224_130000
 ✓ Computed features for 4,847 names
@@ -182,12 +182,12 @@ $ uv run st-name-ranking features rebuild
 
 ### Feature Cache Commands
 
-| Command                           | Purpose                                      |
-| --------------------------------- | -------------------------------------------- |
-| `st-name-ranking init`            | Initialize database and compute features     |
-| `st-name-ranking features rebuild`| Recompute all features                       |
-| `st-name-ranking features status` | Show cache statistics                        |
-| `st-name-ranking start`           | Launch the Streamlit web interface           |
+| Command                               | Purpose                                  |
+| ------------------------------------- | ---------------------------------------- |
+| `st-name-ranking db init`             | Initialize database and compute features |
+| `st-name-ranking db features rebuild` | Recompute all features                   |
+| `st-name-ranking db features status`  | Show cache statistics                    |
+| `st-name-ranking serve`               | Launch the Streamlit web interface       |
 
 ## Performance Optimizations
 
@@ -205,24 +205,24 @@ The **Typer** CLI provides database management:
 
 ```bash
 # Initialize database (computes features by default)
-$ uv run st-name-ranking init
+$ uv run st-name-ranking db init
 
 # Start the Streamlit web interface
-$ uv run st-name-ranking start
+$ uv run st-name-ranking serve
 
 # Show statistics
-$ uv run st-name-ranking stats
+$ uv run st-name-ranking db stats
 
 # Feature cache management
-$ uv run st-name-ranking features rebuild    # Recompute all features
-$ uv run st-name-ranking features status     # Show cache status
+$ uv run st-name-ranking db features rebuild    # Recompute all features
+$ uv run st-name-ranking db features status     # Show cache status
 
 # Model management
-$ uv run st-name-ranking model status        # Check model status
-$ uv run st-name-ranking model reset         # Reset active learning model
+$ uv run st-name-ranking db model status        # Check model status
+$ uv run st-name-ranking db model reset         # Reset active learning model
 
 # Import database
-$ uv run st-name-ranking import <file.db>
+$ uv run st-name-ranking db import <file.db>
 ```
 
 ## Keyboard Shortcuts

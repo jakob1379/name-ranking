@@ -13,18 +13,18 @@ Explore the architecture in 3 steps:
 
 ```bash
 # 1. Initialize the database
-$ uv run st-name-ranking init
+$ uv run st-name-ranking db init
 Database initialized successfully.
 Synced 4,847 names from submodule.
 
 # 2. Check model status
-$ uv run st-name-ranking model status
+$ uv run st-name-ranking db model status
 Model trained: No
 Training samples: 0
 Feature dimensions: 25
 
 # 3. View statistics
-$ uv run st-name-ranking stats
+$ uv run st-name-ranking db stats
 Total names: 4,847
 Classified: 0 (0%)
 Comparisons: 0
@@ -134,14 +134,14 @@ Stores 5 core tables:
 
 ### Command Line Interface (`cli.py`)
 
-- `init`: Initialize database (includes sync + feature extraction)
-- `stats`: Display comprehensive database statistics
-- `start`: Launch the Streamlit web interface
-- `features rebuild`: Recompute all cached features
-- `features status`: Show feature cache status
-- `model status`: Show active learning model status
-- `model reset`: Reinitialize active learning model
-- `import`: Import database from file
+- `db init`: Initialize database (includes sync + feature extraction)
+- `db stats`: Display comprehensive database statistics
+- `serve`: Launch the Streamlit web interface
+- `db features rebuild`: Recompute all cached features
+- `db features status`: Show feature cache status
+- `db model status`: Show active learning model status
+- `db model reset`: Reinitialize active learning model
+- `db import`: Import database from file
 
 ## Data Flow
 
@@ -273,7 +273,7 @@ Features are extracted **once during initialization** and cached for reuse:
 
 ```python
 # 1. During initialization - features computed for all names
-$ uv run st-name-ranking init
+$ uv run st-name-ranking db init
 ✓ Database schema created
 ✓ Synced 4,847 names from submodule
 ✓ Created feature set version: 20250224_120000
@@ -295,7 +295,7 @@ Each feature extraction creates a new **version**:
 
 ```bash
 # Recompute all features with new feature definitions
-$ uv run st-name-ranking features rebuild
+$ uv run st-name-ranking db features rebuild
 ✓ Cleared 4,847 cached features
 ✓ Created new feature set version: 20250224_130000
 ✓ Computed features for 4,847 names

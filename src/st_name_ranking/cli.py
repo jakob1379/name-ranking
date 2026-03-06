@@ -6,13 +6,13 @@ and statistics.
 """
 
 import datetime as dt
+import importlib
 import json
 import shutil
 import sqlite3
-import subprocess
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Annotated, Any
 
 import typer
 from rich.console import Console
@@ -42,6 +42,35 @@ app = typer.Typer(
 )
 console = Console()
 
+DB_NOT_INITIALIZED_ERROR = "Database not initialized. Run 'st-name-ranking db init' first."
+FORCE_DEFAULT = False
+SERVER_HEADLESS_DEFAULT = False
+
+IMPORT_SOURCE_ARG = typer.Argument(
+    help="Path to the exported database file to import",
+)
+SERVE_TARGET_ARG = typer.Argument(
+    help="Path to the Streamlit app",
+)
+FORCE_OPTION = typer.Option(
+    "--force",
+    "-f",
+    help="Skip confirmation prompt",
+)
+SERVER_PORT_OPTION = typer.Option(
+    "--server.port",
+    help="Port for the Streamlit server",
+)
+SERVER_HEADLESS_OPTION = typer.Option(
+    "--server.headless",
+    help="Run without opening browser",
+)
+
+db_app = typer.Typer(
+    help="Database and maintenance commands",
+    name="db",
+)
+
 # Create subcommand groups
 features_app = typer.Typer(
     help="Feature cache management commands",
@@ -53,8 +82,9 @@ model_app = typer.Typer(
 )
 
 # Register subcommand groups
-app.add_typer(features_app)
-app.add_typer(model_app)
+db_app.add_typer(features_app)
+db_app.add_typer(model_app)
+app.add_typer(db_app)
 
 # ----------------------------------------------------------------------
 # Helper functions
@@ -107,6 +137,37 @@ def ensure_features_computed() -> bool:
             return count > 0
     except sqlite3.OperationalError:
         # Table doesn't exist yet
+        return False
+
+
+def has_feature_cache() -> bool:
+    """Check if feature tables exist and contain cached features."""
+    try:
+        with get_connection() as conn:
+            cursor = conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('feature_sets', 'name_features')",
+            )
+            existing_tables = {row[0] for row in cursor.fetchall()}
+
+            if "feature_sets" not in existing_tables or "name_features" not in existing_tables:
+                return False
+
+            cursor = conn.execute("SELECT COUNT(*) FROM name_features LIMIT 1")
+            count = cursor.fetchone()[0]
+            return count > 0
+    except sqlite3.OperationalError:
+        return False
+
+
+def is_database_initialized() -> bool:
+    """Check if the database exists and has the core schema."""
+    if not DB_PATH.exists():
+        return False
+
+    try:
+        with get_connection() as conn:
+            return table_exists(conn, "names")
+    except sqlite3.OperationalError:
         return False
 
 
@@ -186,7 +247,7 @@ def create_feature_set(version: str, feature_names: list[str]) -> int:
     with get_connection() as conn:
         # Check if tables exist
         if not table_exists(conn, "feature_sets"):
-            raise RuntimeError("Database not initialized. Run 'st-name-ranking init' first.")
+            raise RuntimeError(DB_NOT_INITIALIZED_ERROR)
 
         # Deactivate all existing feature sets
         conn.execute("UPDATE feature_sets SET is_active = 0")
@@ -240,7 +301,10 @@ def extract_and_cache_features(
             for name_id, name, gender, origin_region in batch:
                 # Extract features
                 features = extractor.extract(name, gender, origin_region)
-                features_dict = {name: float(value) for name, value in zip(feature_names, features.tolist())}
+                features_dict = {
+                    feature_name: float(value)
+                    for feature_name, value in zip(feature_names, features.tolist(), strict=True)
+                }
 
                 # Insert into database
                 conn.execute(
@@ -279,7 +343,7 @@ def clear_all_features() -> int:
 # ----------------------------------------------------------------------
 
 
-@app.command()
+@db_app.command("init")
 def init() -> None:
     """Initialize the name ranking database.
 
@@ -348,7 +412,7 @@ def init() -> None:
     stats_command()
 
 
-@app.command()
+@db_app.command("stats")
 def stats() -> None:
     """Show database statistics.
 
@@ -395,22 +459,31 @@ def stats_command() -> None:
     console.print(summary_table)
     console.print()
 
+    _print_feature_table(feature_stats, total_names)
+    _print_model_table()
+    _print_origin_distribution(stats)
+
+
+def _print_feature_table(feature_stats: dict[str, Any], total_names: int) -> None:
+    """Print feature cache statistics."""
+
     # Feature cache status table
     feature_table = Table(title="Feature Cache", show_header=False, box=None)
     feature_table.add_column("Metric", style="cyan")
     feature_table.add_column("Value", style="bold")
 
-    feature_table.add_row(
-        "Names with features",
-        f"{feature_stats['names_with_features']} ({feature_stats['names_with_features'] / max(total_names, 1) * 100:.1f}%)",
-    )
+    names_with_features = feature_stats["names_with_features"]
+    feature_coverage = names_with_features / max(total_names, 1) * 100
+    feature_table.add_row("Names with features", f"{names_with_features} ({feature_coverage:.1f}%)")
     feature_table.add_row("Feature sets", str(feature_stats["feature_sets_count"]))
     feature_table.add_row("Active version", feature_stats["active_version"] or "None")
 
     console.print(feature_table)
     console.print()
 
-    # Model status
+
+def _print_model_table() -> None:
+    """Print active learning model status table."""
     try:
         model = get_active_learning_model()
         state = model.state
@@ -428,7 +501,9 @@ def stats_command() -> None:
         print_warning("Model not initialized yet")
         console.print()
 
-    # Origin distribution table
+
+def _print_origin_distribution(stats: Any) -> None:
+    """Print origin distribution statistics."""
     if stats.origin_distribution:
         dist_table = Table(
             title="Origin Distribution",
@@ -464,12 +539,7 @@ def stats_command() -> None:
 @features_app.command("rebuild")
 def features_rebuild(
     *,
-    force: bool = typer.Option(
-        False,
-        "--force",
-        "-f",
-        help="Skip confirmation prompt",
-    ),
+    force: Annotated[bool, FORCE_OPTION] = FORCE_DEFAULT,
 ) -> None:
     """Recompute all features (useful after feature set update).
 
@@ -483,13 +553,8 @@ def features_rebuild(
     console.print()
 
     # Check if database is initialized
-    try:
-        with get_connection() as conn:
-            if not table_exists(conn, "names"):
-                print_error("Database not initialized. Run 'name-db init' first.")
-                raise typer.Exit(1)
-    except sqlite3.OperationalError:
-        print_error("Database not initialized. Run 'name-db init' first.")
+    if not is_database_initialized():
+        print_error("Database not initialized. Run 'st-name-ranking db init' first.")
         raise typer.Exit(1)
 
     # Check if features exist
@@ -500,7 +565,7 @@ def features_rebuild(
         )
         if not confirm:
             console.print("Rebuild cancelled.")
-            raise typer.Abort()
+            raise typer.Abort
 
     # Clear existing features
     with Progress(
@@ -547,11 +612,11 @@ def features_status() -> None:
     try:
         with get_connection() as conn:
             if not table_exists(conn, "names"):
-                print_error("Database not initialized. Run 'st-name-ranking init' first.")
+                print_error("Database not initialized. Run 'st-name-ranking db init' first.")
                 raise typer.Exit(1)
-    except sqlite3.OperationalError:
-        print_error("Database not initialized. Run 'st-name-ranking init' first.")
-        raise typer.Exit(1)
+    except sqlite3.OperationalError as err:
+        print_error("Database not initialized. Run 'st-name-ranking db init' first.")
+        raise typer.Exit(1) from err
 
     feature_stats = get_feature_stats()
     db_stats = get_stats()
@@ -581,11 +646,11 @@ def features_status() -> None:
 
     # Check if features need recomputation
     if feature_stats["names_with_features"] == 0:
-        print_warning("No features computed. Run: st-name-ranking features rebuild")
+        print_warning("No features computed. Run: st-name-ranking db features rebuild")
     elif feature_stats["names_with_features"] < db_stats.total_names:
         print_warning(
             f"Missing features for {db_stats.total_names - feature_stats['names_with_features']} names. "
-            "Run: st-name-ranking features rebuild",
+            "Run: st-name-ranking db features rebuild",
         )
     else:
         print_success("All names have cached features")
@@ -605,7 +670,7 @@ def model_status() -> None:
     # Check if features exist
     if not ensure_features_computed():
         print_warning("No features computed yet. Some model operations may fail.")
-        print_info("Run 'st-name-ranking features rebuild' to compute features.")
+        print_info("Run 'st-name-ranking db features rebuild' to compute features.")
         console.print()
 
     try:
@@ -650,7 +715,7 @@ def model_reset() -> None:
     )
     if not confirm:
         console.print("Model reset cancelled.")
-        raise typer.Abort()
+        raise typer.Abort
 
     try:
         # Delete model state from database
@@ -667,21 +732,62 @@ def model_reset() -> None:
         print_error(f"Failed to reset model: {e}")
 
 
+def _run_serve_preflight_checks() -> None:
+    """Validate db and feature prerequisites for serve command."""
+    if not is_database_initialized():
+        print_warning("Database not initialized yet.")
+        run_init = typer.confirm("Run 'st-name-ranking db init' now?", default=True)
+        if not run_init:
+            print_info("Exiting. Run 'st-name-ranking db init' and try again.")
+            raise typer.Exit(code=1)
+
+        init()
+        if not is_database_initialized():
+            print_error("Database is still not initialized. Run 'st-name-ranking db init' first.")
+            raise typer.Exit(code=1)
+
+    if not has_feature_cache():
+        print_warning("Features not computed yet.")
+        rebuild = typer.confirm("Run 'st-name-ranking db features rebuild' now?", default=True)
+        if not rebuild:
+            print_info("Exiting. Run 'st-name-ranking db features rebuild' and try again.")
+            raise typer.Exit(code=1)
+
+        features_rebuild(force=True)
+        if not has_feature_cache():
+            print_error("Features are still unavailable. Run 'st-name-ranking db features rebuild' first.")
+            raise typer.Exit(code=1)
+
+
+def _run_streamlit(cmd: list[str]) -> None:
+    """Run streamlit CLI with provided arguments."""
+    original_argv = sys.argv.copy()
+    try:
+        streamlit_cli = importlib.import_module("streamlit.web.cli")
+        sys.argv = cmd
+        streamlit_cli.main()
+    except SystemExit as err:
+        if err.code in (None, 0):
+            raise typer.Exit(code=0) from err
+        print_error(f"Streamlit failed to start (exit code: {err.code})")
+        raise typer.Exit(code=1) from err
+    except KeyboardInterrupt as err:
+        console.print("\n[bold blue]Streamlit stopped[/bold blue]")
+        raise typer.Exit(code=0) from err
+    finally:
+        sys.argv = original_argv
+
+
 # ----------------------------------------------------------------------
 # Import Command
 # ----------------------------------------------------------------------
 
 
-@app.command("import")
+@db_app.command("import")
 def import_db(
-    source: Path = typer.Argument(..., help="Path to the exported database file to import"),
+    source: Annotated[Path, IMPORT_SOURCE_ARG],
     *,
-    force: bool = typer.Option(
-        False,
-        "--force",
-        "-f",
-        help="Skip confirmation prompt",
-    ),
+    force: Annotated[bool, FORCE_OPTION] = FORCE_DEFAULT,
 ) -> None:
     """Import a database from an exported file.
 
@@ -702,12 +808,13 @@ def import_db(
         )
         if not confirm:
             console.print("Import cancelled.")
-            raise typer.Abort()
+            raise typer.Abort
 
     try:
         # Create backup of current database if it exists
         if DB_PATH.exists():
-            backup_path = DB_PATH.with_suffix(f".db.backup.{dt.datetime.now().strftime('%Y%m%d_%H%M%S')}")
+            backup_timestamp = dt.datetime.now(dt.UTC).strftime("%Y%m%d_%H%M%S")
+            backup_path = DB_PATH.with_suffix(f".db.backup.{backup_timestamp}")
             shutil.copy2(DB_PATH, backup_path)
             print_success(f"Created backup: {backup_path.name}")
 
@@ -726,70 +833,29 @@ def import_db(
         raise typer.Exit(code=1) from None
 
 
-@app.command()
-def start(
-    target: Path = typer.Argument("src/st_name_ranking/main.py", help="Path to the Streamlit app"),
-    server_port: int = typer.Option(8501, "--server.port", help="Port for the Streamlit server"),
-    server_headless: bool = typer.Option(False, "--server.headless", help="Run without opening browser"),
+@app.command("serve")
+def serve(
+    target: Annotated[Path, SERVE_TARGET_ARG] = Path("src/st_name_ranking/main.py"),
+    *,
+    server_port: Annotated[int, SERVER_PORT_OPTION] = 8501,
+    server_headless: Annotated[bool, SERVER_HEADLESS_OPTION] = SERVER_HEADLESS_DEFAULT,
 ) -> None:
-    """Start the Streamlit web interface.
+    """Serve the Streamlit web interface.
 
     This command launches the name ranking Streamlit application.
-    Run 'st-name-ranking init' first if you haven't initialized the database.
+    Run 'st-name-ranking db init' first if you haven't initialized the database.
     """
-    # Pre-flight checks
-    if not DB_PATH.exists():
-        print_error("Database not initialized. Run 'st-name-ranking init' first.")
-        raise typer.Exit(code=1)
-
-    # Check if feature tables exist
-    try:
-        with get_connection() as conn:
-            cursor = conn.execute(
-                "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('feature_sets', 'name_features')"
-            )
-            existing_tables = {row[0] for row in cursor.fetchall()}
-
-            if "feature_sets" not in existing_tables or "name_features" not in existing_tables:
-                print_error("Features not computed. Run 'st-name-ranking features rebuild' first.")
-                raise typer.Exit(code=1)
-
-            # Check if features have been computed for at least some names
-            cursor = conn.execute("SELECT COUNT(*) FROM name_features LIMIT 1")
-            count = cursor.fetchone()[0]
-            if count == 0:
-                print_error("Features not computed. Run 'st-name-ranking features rebuild' first.")
-                raise typer.Exit(code=1)
-    except sqlite3.OperationalError:
-        print_error("Features not computed. Run 'st-name-ranking features rebuild' first.")
-        raise typer.Exit(code=1)
+    _run_serve_preflight_checks()
 
     print_success("Pre-flight checks passed")
     print_info(f"Starting Streamlit on port {server_port}")
 
-    # Build the command
-    cmd = [
-        sys.executable,
-        "-m",
-        "streamlit.web.cli",
-        "run",
-        str(target),
-        "--server.port",
-        str(server_port),
-    ]
+    cmd = ["streamlit", "run", str(target), "--server.port", str(server_port)]
 
     if server_headless:
         cmd.extend(["--server.headless", "true"])
 
-    # Launch streamlit
-    try:
-        subprocess.run(cmd, check=True)
-    except subprocess.CalledProcessError as e:
-        print_error(f"Streamlit failed to start: {e}")
-        raise typer.Exit(code=1) from None
-    except KeyboardInterrupt:
-        console.print("\n[bold blue]Streamlit stopped[/bold blue]")
-        raise typer.Exit(code=0)
+    _run_streamlit(cmd)
 
 
 if __name__ == "__main__":

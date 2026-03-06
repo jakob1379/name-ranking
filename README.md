@@ -15,14 +15,14 @@ $ cd sort-names
 $ uv sync
 
 # Initialize database (computes features automatically)
-$ uv run st-name-ranking init
+$ uv run st-name-ranking db init
 ✓ Database schema created
 ✓ Synced 4,847 names from submodule
 ✓ Created feature set version: 20250224_120000
 ✓ Computed features for 4,847 names
 
 # Start the application
-$ uv run st-name-ranking start
+$ uv run st-name-ranking serve
 
   You can now view your Streamlit app in your browser.
 
@@ -37,13 +37,13 @@ The application **pre-computes features** for all names during initialization:
 
 ```bash
 # Rebuild features after feature engineering changes
-$ uv run st-name-ranking features rebuild
+$ uv run st-name-ranking db features rebuild
 ✓ Cleared 4,847 cached features
 ✓ Created new feature set version: 20250224_130000
 ✓ Computed features for 4,847 names
 
 # Check feature cache status
-$ uv run st-name-ranking features status
+$ uv run st-name-ranking db features status
 Names with features: 4,847 (100.0%)
 Feature sets: 1
 Active version: 20250224_120000
