@@ -6,7 +6,7 @@ import os
 import time
 from typing import Literal
 
-import pandas as pd
+import polars as pl
 import streamlit as st
 
 from st_name_ranking.async_model import select_random_pair
@@ -63,7 +63,7 @@ def render_preferences_panel() -> None:
     origin_stats = get_preference_stats_by_origin()
     phonetic_stats = get_preference_stats_by_phonetic()
 
-    def create_percentage_dataframe(stats: dict[str, PreferenceStats]) -> pd.DataFrame:
+    def create_percentage_dataframe(stats: dict[str, PreferenceStats]) -> pl.DataFrame:
         """Convert stats dict to DataFrame with percentage columns for visualization."""
         rows = []
         for group, data in stats.items():
@@ -91,19 +91,18 @@ def render_preferences_panel() -> None:
                     "win_rate_pct": win_rate,
                 },
             )
-        return pd.DataFrame(rows)
+        return pl.DataFrame(rows)
 
-    def create_stacked_bar_chart(df: pd.DataFrame, title: str) -> None:
+    def create_stacked_bar_chart(df: pl.DataFrame, title: str) -> None:
         """Create stacked bar chart showing win/loss/draw percentages."""
-        if df.empty:
+        if df.is_empty():
             return
 
         # Create percentage columns for stacked bar chart
-        # Select relevant columns before setting index to avoid type issues
-        chart_df = df[["Group", "win_pct", "loss_pct", "draw_pct"]].set_index("Group")
+        chart_df = df.select(["Group", "win_pct", "loss_pct", "draw_pct"])
 
         # Sort by win percentage (descending)
-        chart_df = chart_df.sort_values("win_pct", ascending=False)
+        chart_df = chart_df.sort("win_pct", descending=True)
 
         # Create stacked bar chart
         st.subheader(title, divider="gray")
@@ -111,19 +110,15 @@ def render_preferences_panel() -> None:
         # Display chart with custom colors
         st.bar_chart(
             chart_df,
+            x="Group",
+            y=["win_pct", "loss_pct", "draw_pct"],
             height=400,
             width="stretch",
             color=["#2E7D32", "#C62828", "#FF9800"],  # Green for wins, red for losses, orange for draws
         )
 
         # Add data table below chart
-        display_df = df.copy()
-        display_df = display_df.sort_values("win_pct", ascending=False)
-
-        # Format percentage columns for display (add % symbol)
-        for col in ["win_pct", "loss_pct", "draw_pct", "win_rate_pct"]:
-            if col in display_df.columns:
-                display_df[col] = display_df[col].apply(lambda x: f"{x:.1f}%")
+        display_df = df.sort("win_pct", descending=True)
 
         # Show detailed table
         with st.expander(f"Detailed {title} Statistics", expanded=False):
@@ -137,12 +132,13 @@ def render_preferences_panel() -> None:
                     "Losses": st.column_config.NumberColumn("Losses", width="small"),
                     "Draws": st.column_config.NumberColumn("Draws", width="small"),
                     "Total": st.column_config.NumberColumn("Total", width="small"),
-                    "win_pct": st.column_config.TextColumn("Win %", width="small"),
-                    "loss_pct": st.column_config.TextColumn("Loss %", width="small"),
-                    "draw_pct": st.column_config.TextColumn("Draw %", width="small"),
-                    "win_rate_pct": st.column_config.TextColumn(
+                    "win_pct": st.column_config.NumberColumn("Win %", format="%.1f%%", width="small"),
+                    "loss_pct": st.column_config.NumberColumn("Loss %", format="%.1f%%", width="small"),
+                    "draw_pct": st.column_config.NumberColumn("Draw %", format="%.1f%%", width="small"),
+                    "win_rate_pct": st.column_config.NumberColumn(
                         "Win Rate %",
                         help="Wins / (Wins + Losses)",
+                        format="%.1f%%",
                         width="small",
                     ),
                 },
@@ -152,9 +148,10 @@ def render_preferences_panel() -> None:
         st.caption("🎯 **Legend**: 🟢 Wins | 🔴 Losses | 🟠 Draws")
 
         # Add key insight based on data
-        if not df.empty:
-            best_group = df.loc[df["win_pct"].idxmax()]
-            worst_group = df.loc[df["win_pct"].idxmin()]
+        if not df.is_empty():
+            sorted_by_win_rate = df.sort("win_pct", descending=True)
+            best_group = sorted_by_win_rate.row(0, named=True)
+            worst_group = sorted_by_win_rate.row(sorted_by_win_rate.height - 1, named=True)
             st.info(
                 f"**Insight**: {best_group['Group']} has the highest win rate ({best_group['win_pct']:.1f}%), "
                 f"while {worst_group['Group']} has the lowest ({worst_group['win_pct']:.1f}%).",
@@ -478,7 +475,7 @@ def render_rankings(names: list[str]) -> None:
 
     with tab_overall:
         sorted_ratings = sorted(filtered_ratings.items(), key=lambda x: x[1], reverse=True)
-        df = pd.DataFrame(sorted_ratings, columns=["Name", "Rating"])
+        df = pl.DataFrame(sorted_ratings, schema=["Name", "Rating"], orient="row")
         st.dataframe(
             df,
             width="stretch",
@@ -503,7 +500,7 @@ def render_rankings(names: list[str]) -> None:
             }
             if male_ratings:
                 sorted_male = sorted(male_ratings.items(), key=lambda x: x[1], reverse=True)
-                df_male = pd.DataFrame(sorted_male, columns=["Name", "Rating"])
+                df_male = pl.DataFrame(sorted_male, schema=["Name", "Rating"], orient="row")
                 st.dataframe(
                     df_male,
                     width="stretch",
@@ -532,7 +529,7 @@ def render_rankings(names: list[str]) -> None:
             }
             if female_ratings:
                 sorted_female = sorted(female_ratings.items(), key=lambda x: x[1], reverse=True)
-                df_female = pd.DataFrame(sorted_female, columns=["Name", "Rating"])
+                df_female = pl.DataFrame(sorted_female, schema=["Name", "Rating"], orient="row")
                 st.dataframe(
                     df_female,
                     width="stretch",
@@ -951,7 +948,7 @@ def render_similarity(names: list[str]) -> None:
         if search_type == "String (Levenshtein)":
             results = get_string_similarity_scores(query, names, limit=10)
             st.dataframe(
-                pd.DataFrame(results, columns=["Name", "Similarity Score"]),
+                pl.DataFrame(results, schema=["Name", "Similarity Score"], orient="row"),
                 width="stretch",
                 hide_index=True,
             )
@@ -968,7 +965,7 @@ def render_similarity(names: list[str]) -> None:
                 )
 
             st.dataframe(
-                pd.DataFrame(results, columns=["Name", "Cosine Similarity"]),
+                pl.DataFrame(results, schema=["Name", "Cosine Similarity"], orient="row"),
                 width="stretch",
                 hide_index=True,
             )

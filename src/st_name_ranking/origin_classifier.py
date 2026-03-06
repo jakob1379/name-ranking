@@ -15,7 +15,11 @@ import logging
 import re
 import unicodedata
 from collections.abc import Callable
-from typing import Any, NamedTuple, Optional
+from typing import Any, NamedTuple
+
+from metaphone import doublemetaphone
+
+from st_name_ranking.database import get_connection
 
 
 class OriginResult(NamedTuple):
@@ -24,10 +28,6 @@ class OriginResult(NamedTuple):
     region: str
     confidence: float
 
-
-from metaphone import doublemetaphone
-
-from st_name_ranking.database import get_connection
 
 logger = logging.getLogger(__name__)
 
@@ -195,8 +195,7 @@ def normalize_name(name: str) -> str:
     - Remove extra whitespace
     """
     name = unicodedata.normalize("NFKD", name).strip().lower()
-    name = re.sub(r"\s+", " ", name)
-    return name
+    return re.sub(r"\s+", " ", name)
 
 
 def rule_based_nordic_detection(name: str) -> tuple[str | None, float]:
@@ -269,12 +268,7 @@ def phonetic_similarity_classification(
     best_confidence = 0.0
     best_score = 0.0
 
-    for ref_name, (
-        ref_region,
-        ref_conf,
-        ref_primary,
-        ref_secondary,
-    ) in reference_names.items():
+    for ref_region, ref_conf, ref_primary, ref_secondary in reference_names.values():
         # Compute phonetic similarity score using precomputed codes
         score = 0.0
         if primary == ref_primary:
@@ -306,102 +300,99 @@ def phonetic_similarity_classification(
     return None, 0.0
 
 
-def get_ethnicolr_classifier() -> Optional["EthnicolrClassifier"]:
+ETHNICOLR_CATEGORY_COLS = [
+    "Asian,GreaterEastAsian,EastAsian",
+    "Asian,GreaterEastAsian,Japanese",
+    "Asian,IndianSubContinent",
+    "GreaterAfrican,Africans",
+    "GreaterAfrican,Muslim",
+    "GreaterEuropean,British",
+    "GreaterEuropean,EastEuropean",
+    "GreaterEuropean,Jewish",
+    "GreaterEuropean,WestEuropean,French",
+    "GreaterEuropean,WestEuropean,Germanic",
+    "GreaterEuropean,WestEuropean,Hispanic",
+    "GreaterEuropean,WestEuropean,Italian",
+    "GreaterEuropean,WestEuropean,Nordic",
+]
+
+ETHNICOLR_REGION_MAPPING = {
+    "GreaterEuropean,WestEuropean,Nordic": ("Nordic", 0.9),
+    "GreaterEuropean,WestEuropean,Germanic": ("European", 0.8),
+    "GreaterEuropean,WestEuropean,French": ("European", 0.8),
+    "GreaterEuropean,WestEuropean,Italian": ("European", 0.8),
+    "GreaterEuropean,WestEuropean,Hispanic": ("European", 0.7),
+    "GreaterEuropean,British": ("European", 0.8),
+    "GreaterEuropean,EastEuropean": ("European", 0.8),
+    "GreaterEuropean,Jewish": ("International", 0.5),
+    "Asian,GreaterEastAsian,EastAsian": ("Asian", 0.9),
+    "Asian,GreaterEastAsian,Japanese": ("Asian", 0.9),
+    "Asian,IndianSubContinent": ("Asian", 0.9),
+    "GreaterAfrican,Africans": ("African", 0.9),
+    "GreaterAfrican,Muslim": ("Middle Eastern", 0.8),
+}
+
+
+def _map_ethnicolr_to_region(row: dict[str, Any]) -> tuple[str | None, float]:
+    """Map ethnicolr's 13 categories to our 8 regions."""
+    best_cat = None
+    best_prob = 0.0
+
+    for cat in ETHNICOLR_CATEGORY_COLS:
+        prob = row.get(f"{cat}_mean", 0.0)
+        if prob > best_prob:
+            best_prob = prob
+            best_cat = cat
+
+    if not best_cat:
+        return None, 0.0
+
+    region, multiplier = ETHNICOLR_REGION_MAPPING.get(best_cat, (None, 0.5))
+    confidence = best_prob * multiplier
+    return region, confidence
+
+
+class EthnicolrClassifier:
+    """Thin wrapper around ethnicolr predictions."""
+
+    def __init__(self, predictor: Callable[..., Any]) -> None:
+        self._predictor = predictor
+
+    def classify_batch(
+        self,
+        names: list[str],
+    ) -> list[tuple[str | None, float]]:
+        """Classify batch of names using ethnicolr's Wikipedia model."""
+        if not names:
+            return []
+
+        import pandas as pd  # noqa: PLC0415
+
+        df = pd.DataFrame({"last": names})
+
+        try:
+            result_df = self._predictor(df, "last", conf_int=1.0)
+
+            classifications = []
+            for _, row in result_df.iterrows():
+                region, confidence = _map_ethnicolr_to_region(row)
+                classifications.append((region, confidence))
+        except (ImportError, AttributeError, ValueError, RuntimeError) as e:
+            logger.warning("ethnicolr classification failed: %s", e)
+            return [(None, 0.0)] * len(names)
+        else:
+            return classifications
+
+
+def get_ethnicolr_classifier() -> EthnicolrClassifier | None:
     """Lazy loader for ethnicolr classifier."""
     try:
-        import pandas as pd  # noqa: PLC0415
         from ethnicolr import pred_wiki_ln  # noqa: PLC0415
-
-        class EthnicolrClassifier:
-            def __init__(self) -> None:
-                self._model_loaded = False
-
-            def classify_batch(
-                self,
-                names: list[str],
-            ) -> list[tuple[str | None, float]]:
-                """Classify batch of names using ethnicolr's Wikipedia model.
-                Returns list of (region, confidence) tuples.
-                """
-                if not names:
-                    return []
-
-                # Create DataFrame with names
-                df = pd.DataFrame({"last": names})
-
-                try:
-                    # Run prediction (last‑name only model)
-                    result_df = pred_wiki_ln(df, "last", conf_int=1.0)
-
-                    # Map ethnicolr categories to our regions
-                    classifications = []
-                    for _, row in result_df.iterrows():
-                        region, confidence = _map_ethnicolr_to_region(row)
-                        classifications.append((region, confidence))
-                except (ImportError, AttributeError, ValueError, RuntimeError) as e:
-                    logger.warning("ethnicolr classification failed: %s", e)
-                    return [(None, 0.0)] * len(names)
-                else:
-                    return classifications
-
-        def _map_ethnicolr_to_region(row: Any) -> tuple[str | None, float]:
-            """Map ethnicolr's 13 categories to our 8 regions."""
-            # Find category with highest probability
-            category_cols = [
-                "Asian,GreaterEastAsian,EastAsian",
-                "Asian,GreaterEastAsian,Japanese",
-                "Asian,IndianSubContinent",
-                "GreaterAfrican,Africans",
-                "GreaterAfrican,Muslim",
-                "GreaterEuropean,British",
-                "GreaterEuropean,EastEuropean",
-                "GreaterEuropean,Jewish",
-                "GreaterEuropean,WestEuropean,French",
-                "GreaterEuropean,WestEuropean,Germanic",
-                "GreaterEuropean,WestEuropean,Hispanic",
-                "GreaterEuropean,WestEuropean,Italian",
-                "GreaterEuropean,WestEuropean,Nordic",
-            ]
-
-            best_cat = None
-            best_prob = 0.0
-
-            for cat in category_cols:
-                prob = row.get(f"{cat}_mean", 0.0)
-                if prob > best_prob:
-                    best_prob = prob
-                    best_cat = cat
-
-            if not best_cat:
-                return None, 0.0
-
-            # Map category to region with confidence multiplier
-            mapping = {
-                "GreaterEuropean,WestEuropean,Nordic": ("Nordic", 0.9),
-                "GreaterEuropean,WestEuropean,Germanic": ("European", 0.8),
-                "GreaterEuropean,WestEuropean,French": ("European", 0.8),
-                "GreaterEuropean,WestEuropean,Italian": ("European", 0.8),
-                "GreaterEuropean,WestEuropean,Hispanic": ("European", 0.7),
-                "GreaterEuropean,British": ("European", 0.8),
-                "GreaterEuropean,EastEuropean": ("European", 0.8),
-                "GreaterEuropean,Jewish": ("International", 0.5),
-                "Asian,GreaterEastAsian,EastAsian": ("Asian", 0.9),
-                "Asian,GreaterEastAsian,Japanese": ("Asian", 0.9),
-                "Asian,IndianSubContinent": ("Asian", 0.9),
-                "GreaterAfrican,Africans": ("African", 0.9),
-                "GreaterAfrican,Muslim": ("Middle Eastern", 0.8),
-            }
-
-            region, multiplier = mapping.get(best_cat, (None, 0.5))
-            confidence = best_prob * multiplier
-
-            return region, confidence
-
-        return EthnicolrClassifier()
-
     except ImportError:
         logger.debug("ethnicolr not installed")
         return None
+    else:
+        return EthnicolrClassifier(pred_wiki_ln)
 
 
 class OriginClassifier:
@@ -435,10 +426,56 @@ class OriginClassifier:
         self.ethnicolr = get_ethnicolr_classifier()
         self.ethnidata = ethnidata_classifier  # Can be None, False, or classifier instance
 
+    def _classify_with_phonetic(self, name: str) -> tuple[str | None, float]:
+        """Classify using phonetic similarity if reference data exists."""
+        if not self.reference_names:
+            return None, 0.0
+
+        return phonetic_similarity_classification(name, self.reference_names)
+
+    def _classify_with_ethnicolr(self, name: str) -> tuple[str | None, float]:
+        """Classify using ethnicolr model if available."""
+        if not self.ethnicolr:
+            return None, 0.0
+
+        try:
+            results = self.ethnicolr.classify_batch([name])
+            if results:
+                return results[0]
+        except (ImportError, AttributeError, ValueError, IndexError) as e:
+            logger.debug(
+                "ethnicolr classification failed for '%s': %s",
+                name,
+                e,
+            )
+
+        return None, 0.0
+
+    def _classify_with_ethnidata(self, name: str) -> tuple[str | None, float]:
+        """Classify using ethnidata model if available."""
+        if self.ethnidata is None:
+            self.ethnidata = _create_ethnidata_classifier()
+
+        if not callable(self.ethnidata):
+            return None, 0.0
+
+        try:
+            result = self.ethnidata(name)
+            if result and isinstance(result, tuple):
+                return result
+        except (ImportError, AttributeError, ValueError) as e:
+            logger.debug(
+                "ethnidata classification failed for '%s': %s",
+                name,
+                e,
+            )
+
+        return None, 0.0
+
     def classify(
         self,
         name: str,
-        gender: str | None = None,
+        _gender: str | None = None,
     ) -> tuple[str, float]:
         """Classify a single name.
 
@@ -453,46 +490,19 @@ class OriginClassifier:
             return region, confidence
 
         # 2. Phonetic similarity (if we have reference names)
-        if self.reference_names:
-            region, confidence = phonetic_similarity_classification(
-                name,
-                self.reference_names,
-            )
-            if region and confidence >= MEDIUM_CONFIDENCE_THRESHOLD:
-                return region, confidence
+        region, confidence = self._classify_with_phonetic(name)
+        if region and confidence >= MEDIUM_CONFIDENCE_THRESHOLD:
+            return region, confidence
 
         # 3. ethnicolr (if installed)
-        if self.ethnicolr:
-            try:
-                results = self.ethnicolr.classify_batch([name])
-                if results:  # Check if results is not empty
-                    region, confidence = results[0]
-                    if region and confidence >= LOW_CONFIDENCE_THRESHOLD:
-                        return region, confidence
-            except (ImportError, AttributeError, ValueError, IndexError) as e:
-                logger.debug(
-                    "ethnicolr classification failed for '%s': %s",
-                    name,
-                    e,
-                )
+        region, confidence = self._classify_with_ethnicolr(name)
+        if region and confidence >= LOW_CONFIDENCE_THRESHOLD:
+            return region, confidence
 
-        # 4. ethnidata (if installed) - lazy load
-        if self.ethnidata is None:
-            self.ethnidata = _create_ethnidata_classifier()
-
-        if callable(self.ethnidata):
-            try:
-                result = self.ethnidata(name)  # call the classifier callable
-                if result and isinstance(result, tuple):
-                    region, confidence = result
-                    if confidence >= MIN_ETHNIDATA_CONFIDENCE:
-                        return region, confidence
-            except (ImportError, AttributeError, ValueError) as e:
-                logger.debug(
-                    "ethnidata classification failed for '%s': %s",
-                    name,
-                    e,
-                )
+        # 4. ethnidata (if installed)
+        region, confidence = self._classify_with_ethnidata(name)
+        if region and confidence >= MIN_ETHNIDATA_CONFIDENCE:
+            return region, confidence
 
         # 5. Fallback: International with low confidence
         return "International", 0.1
@@ -523,7 +533,7 @@ class OriginClassifier:
             chunk_genders = gender_list[i : i + chunk_size]
 
             chunk_results = []
-            for name, gender in zip(chunk_names, chunk_genders):
+            for name, gender in zip(chunk_names, chunk_genders, strict=False):
                 region, confidence = self.classify(name, gender)
                 chunk_results.append((region, confidence))
 
@@ -538,13 +548,17 @@ class OriginClassifier:
         return _create_ethnidata_classifier()
 
 
+_CLASSIFIER_CACHE: dict[str, OriginClassifier] = {}
+
+
 def get_classifier(
     reference_names: dict[str, tuple[str, float, str, str]] | None = None,
 ) -> OriginClassifier:
     """Get singleton classifier instance."""
-    if not hasattr(get_classifier, "_cache") or get_classifier._cache is None:
-        get_classifier._cache = OriginClassifier(reference_names)
-    return get_classifier._cache
+    cache_key = "default"
+    if cache_key not in _CLASSIFIER_CACHE:
+        _CLASSIFIER_CACHE[cache_key] = OriginClassifier(reference_names)
+    return _CLASSIFIER_CACHE[cache_key]
 
 
 if __name__ == "__main__":

@@ -5,7 +5,7 @@ import re
 import sqlite3
 from pathlib import Path
 
-import pandas as pd
+import polars as pl
 import streamlit as st
 
 from st_name_ranking import database
@@ -168,8 +168,7 @@ def load_submodule_json() -> list[dict[str, str]]:
     """
     json_path = Path("godkendtefornavne") / "allenavne.json"
     try:
-        # Use pandas to read JSON for better performance and error handling
-        df = pd.read_json(json_path, encoding="utf-8")
+        df = pl.read_json(json_path)
 
         # Ensure we have the expected columns
         if not all(col in df.columns for col in ["name", "gender"]):
@@ -184,9 +183,9 @@ def load_submodule_json() -> list[dict[str, str]]:
         valid_items = []
         invalid_count = 0
 
-        for _, row in df.iterrows():
-            name = strip_name_notes(str(row["name"]))
-            gender = str(row["gender"]).strip()
+        for row in df.iter_rows(named=True):
+            name = strip_name_notes(str(row.get("name", "")))
+            gender = str(row.get("gender", "")).strip()
 
             if is_valid_name(name):
                 valid_items.append({"name": name, "gender": gender})
@@ -208,7 +207,7 @@ def load_submodule_json() -> list[dict[str, str]]:
             f"Loaded {len(valid_items)} name-gender pairs from JSON",
             icon="✅",
         )
-    except (FileNotFoundError, ValueError, RuntimeError) as e:
+    except (FileNotFoundError, ValueError, RuntimeError, pl.exceptions.PolarsError) as e:
         st.toast(
             f"Failed to load submodule JSON: {e}",
             icon="❌",

@@ -633,13 +633,13 @@ def sync_names_with_submodule(submodule_path: Path = Path("godkendtefornavne")) 
             return 0  # Already synced
 
     # Load JSON data
-    import pandas as pd  # noqa: PLC0415
+    import polars as pl  # noqa: PLC0415
 
-    df = pd.read_json(json_path, encoding="utf-8")
-    logger.info("Loaded %d rows from JSON", len(df))
+    df = pl.read_json(json_path)
+    logger.info("Loaded %d rows from JSON", df.height)
 
     # Handle empty JSON
-    if df.empty:
+    if df.is_empty():
         logger.debug("Empty JSON, nothing to sync")
         return 0
 
@@ -652,9 +652,9 @@ def sync_names_with_submodule(submodule_path: Path = Path("godkendtefornavne")) 
     from st_name_ranking.data_loader import is_valid_name, strip_name_notes  # noqa: PLC0415
 
     valid_names = []
-    for _, row in df.iterrows():
-        name = strip_name_notes(str(row["name"]))
-        gender_raw = str(row["gender"]).strip()
+    for row in df.iter_rows(named=True):
+        name = strip_name_notes(str(row.get("name", "")))
+        gender_raw = str(row.get("gender", "")).strip()
         # Map gender codes to full names
         gender_map = {
             "F": "Female",

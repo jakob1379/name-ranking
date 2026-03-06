@@ -223,7 +223,7 @@ class TestInitializeOrLoadRatings:
         assert ratings["Maria"] == 1500.0  # New name gets default
 
 
-# TODO: Fix load_submodule_json tests - mocking pandas DataFrame is complex
+# TODO: Fix load_submodule_json tests - mocking polars DataFrame is complex
 # class TestLoadSubmoduleJson:
 #     """Tests for load_submodule_json function."""
 #     pass
