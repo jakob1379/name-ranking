@@ -29,3 +29,16 @@ def test_db_group_contains_database_commands() -> None:
     assert "import" in result.output
     assert "features" in result.output
     assert "model" in result.output
+
+
+def test_no_command_shows_help_and_error() -> None:
+    """No-arg CLI should print help and missing command error."""
+    runner = CliRunner()
+    result = runner.invoke(app, [])
+
+    assert result.exit_code == 2
+    assert "Name Ranking Database Management CLI" in result.output
+    assert "serve" in result.output
+    assert "db" in result.output
+    assert "Missing command." in result.output
+    assert result.output.count("Usage:") == 1

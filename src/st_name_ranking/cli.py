@@ -16,6 +16,7 @@ from typing import Annotated, Any
 
 import typer
 from rich.console import Console
+from rich.panel import Panel
 from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.table import Table
 
@@ -41,6 +42,15 @@ app = typer.Typer(
     add_completion=False,
 )
 console = Console()
+
+
+@app.callback(invoke_without_command=True)
+def root_callback(ctx: typer.Context) -> None:
+    if ctx.invoked_subcommand is None:
+        typer.echo(ctx.get_help())
+        console.print(Panel("Missing command.", title="Error", border_style="red"))
+        raise typer.Exit(code=2)
+
 
 DB_NOT_INITIALIZED_ERROR = "Database not initialized. Run 'st-name-ranking db init' first."
 FORCE_DEFAULT = False
