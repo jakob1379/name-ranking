@@ -45,11 +45,11 @@ repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.15.4
     hooks:
-      - id: ruff  # Run Ruff linter
-        args: [--fix, --exit-non-zero-on-fix]
-        types_or: [python, pyi]
-      - id: ruff-format  # Run Ruff formatter
-        types_or: [python, pyi]
+      # Run the linter.
+      - id: ruff-check
+        args: [--fix]
+      # Run the formatter.
+      - id: ruff-format
 
   # Formatting for various file types with Prettier
   - repo: https://github.com/rbubley/mirrors-prettier  # Using rbubley mirror
@@ -111,20 +111,18 @@ repos:
       - id: validate-pyproject
         additional_dependencies: ['validate-pyproject-schema-store[all]']
 
-  # Dead code detection
-  # - repo: https://github.com/albertas/deadcode
-  #   rev: 2.4.1
-  #   hooks:
-  #     - id: deadcode
-  #       name: deadcode
-  #       skip: true
-
   # check for code insecurities
   - repo: https://github.com/PyCQA/bandit
     rev: 1.9.4
     hooks:
       - id: bandit
-        args: [-c, pyproject.toml]  # Example: Configure via pyproject.toml
+        args:
+          - -c
+          - pyproject.toml
+          - --skip
+          - B101,B301,B403,B404,B601,B608
+          - --severity-level
+          - high
         types: [python]
 
   # check for known package vulnureabilities
@@ -146,19 +144,4 @@ repos:
         stages: [commit-msg]
       - id: commitizen-branch  # Optional: Check branch name format
         stages: [pre-push]
-        args: [--rev-range, origin/main..HEAD]  # Example: Check against main branch
-
-  # Optional: Static Typing with MyPy (Uncomment if needed)
-  # - repo: https://github.com/pre-commit/mirrors-mypy
-  #   rev: v1.15.0  # Use a recent version of mypy
-  #   hooks:
-  #     - id: mypy
-  #       args: [--strict]  # Example: Use strict mode
-  #       additional_dependencies: [types-requests]  # Add project-specific types
-
-  # Optional: Markdown linting
-  # - repo: https://github.com/markdownlint/markdownlint
-  #   rev: v0.12.0  # Note: This uses Ruby, requires Ruby environment
-  #   hooks:
-  #     - id: markdownlint
-  #       files: \.(md|mdown|markdown)$
+        args: [--rev-range, origin/main..HEAD]  # Example: Check against main

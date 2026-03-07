@@ -1,10 +1,8 @@
-"""
-Pytest fixtures for st_name_ranking tests.
-"""
+"""Pytest fixtures for st_name_ranking tests."""
 
 import tempfile
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -30,19 +28,23 @@ def mock_db_path(temp_db_path):
     # Patch the DB_PATH
     database.DB_PATH = temp_db_path
     # Reset initialization flag
-    database._initialized = False
+    database.init_database._initialized = False
 
     yield temp_db_path
 
     # Restore original path
     database.DB_PATH = original_path
-    database._initialized = False
+    database.init_database._initialized = False
 
 
 @pytest.fixture
 def initialized_db(mock_db_path):
     """Initialize a fresh database with schema."""
+    from st_name_ranking import utils
     from st_name_ranking.database import get_connection, init_database
+
+    # Clear feature extractor cache to prevent stale data between tests
+    utils.get_feature_extractor._cache = None
 
     init_database()
 
@@ -122,25 +124,77 @@ def mock_submodule_path(tmp_path):
 
 @pytest.fixture
 def mock_classifier():
-    """Mock the ethnidata classifier to avoid PyTorch issues."""
-    with patch("st_name_ranking.classify_origins.get_classifier") as mock_get:
-        mock_classifier = mock_get.return_value
-        mock_classifier.predict_nationality.return_value = {
-            "country_name": "Denmark",
-            "confidence": 0.85,
-            "country": "DK",
-            "region": "Europe",
-        }
-        yield mock_classifier
+    """Mock the ethnidata classifier to avoid missing database file."""
+    from st_name_ranking import classify_origins, origin_classifier
+
+    # Clear singleton cache to ensure fresh classifier
+    origin_classifier.get_classifier._cache = None
+    classify_origins.get_classifier._cache = None
+
+    # The classifier expects a callable that returns (region, confidence) tuple
+    mock_instance = MagicMock(return_value=("European", 0.85))
+    with patch(
+        "st_name_ranking.origin_classifier._create_ethnidata_classifier",
+        return_value=mock_instance,
+    ):
+        yield mock_instance
 
 
-@pytest.fixture(autouse=True)
-def cleanup_db_state():
-    """Clean up database state before each test."""
-    from st_name_ranking import database
+# -----------------------------------------------------------------------------
 
-    # Reset initialization flag before each test
-    database._initialized = False
-    yield
-    # Reset after test
-    database._initialized = False
+# Integration test configuration
+# -----------------------------------------------------------------------------
+
+
+def pytest_addoption(parser):
+    """Add command-line options for integration tests."""
+    parser.addoption(
+        "--run-integration",
+        action="store_true",
+        default=False,
+        help="Run integration tests (requires running application)",
+    )
+    parser.addoption(
+        "--run-playwright",
+        action="store_true",
+        default=False,
+        help="Run Playwright tests (requires browser installation)",
+    )
+    parser.addoption(
+        "--app-url",
+        default="http://localhost:8501",
+        help="URL of running Streamlit application for integration tests",
+    )
+
+
+def pytest_configure(config):
+    """Register custom markers."""
+    config.addinivalue_line(
+        "markers",
+        "integration: mark test as integration test (requires running application)",
+    )
+    config.addinivalue_line(
+        "markers",
+        "playwright: mark test as Playwright test (requires browser)",
+    )
+
+
+def pytest_collection_modifyitems(config, items):
+    """Skip integration and Playwright tests unless explicitly requested."""
+    skip_integration = pytest.mark.skip(reason="Need --run-integration option to run")
+    skip_playwright = pytest.mark.skip(reason="Need --run-playwright option to run")
+
+    for item in items:
+        # Skip integration tests unless --run-integration is set
+        if "integration" in item.keywords and not config.getoption("--run-integration"):
+            item.add_marker(skip_integration)
+
+        # Skip playwright tests unless --run-playwright is set
+        if "playwright" in item.keywords and not config.getoption("--run-playwright"):
+            item.add_marker(skip_playwright)
+
+
+@pytest.fixture
+def app_url(request):
+    """Get the application URL from command line option."""
+    return request.config.getoption("--app-url")

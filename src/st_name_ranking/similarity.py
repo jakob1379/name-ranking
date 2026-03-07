@@ -1,23 +1,23 @@
-"""
-Similarity functions for name matching.
-"""
+"""Similarity functions for name matching."""
 
 import logging
-from typing import List, Tuple
 
 import numpy as np
 from rapidfuzz import fuzz, process
 from sentence_transformers import SentenceTransformer
 
+from st_name_ranking.types import SimilarityScore
+
 logger = logging.getLogger(__name__)
 
 
 def get_string_similarity_scores(
-    target: str, candidates: List[str], limit: int = 10
-) -> List[Tuple[str, float]]:
-    """
-    Uses RapidFuzz (Levenshtein) to find similar names.
-    Returns list of (name, score).
+    target: str,
+    candidates: list[str],
+    limit: int = 10,
+) -> list[SimilarityScore]:
+    """Uses RapidFuzz (Levenshtein) to find similar names.
+    Returns list of SimilarityScore.
     """
     logger.debug(
         "String similarity search: target='%s', candidates=%d, limit=%d",
@@ -30,9 +30,12 @@ def get_string_similarity_scores(
 
     # process.extract returns (match, score, index)
     results = process.extract(
-        target, candidates, scorer=fuzz.ratio, limit=limit
+        target,
+        candidates,
+        scorer=fuzz.ratio,
+        limit=limit,
     )
-    return [(item[0], item[1]) for item in results]
+    return [SimilarityScore(name=item[0], score=float(item[1])) for item in results]
 
 
 def load_embedding_model() -> SentenceTransformer:
@@ -43,12 +46,11 @@ def load_embedding_model() -> SentenceTransformer:
 def get_vector_similarity_scores(
     model: SentenceTransformer,
     target: str,
-    candidates: List[str],
+    candidates: list[str],
     limit: int = 10,
-) -> List[Tuple[str, float]]:
-    """
-    Uses LLM embeddings to find semantic similarity.
-    Returns list of (name, score).
+) -> list[SimilarityScore]:
+    """Uses LLM embeddings to find semantic similarity.
+    Returns list of SimilarityScore.
     """
     logger.debug(
         "Vector similarity search: target='%s', candidates=%d, limit=%d",
@@ -70,4 +72,4 @@ def get_vector_similarity_scores(
     # Get indices of top scores
     top_indices = np.argsort(scores)[::-1][:limit]
 
-    return [(candidates[i], float(scores[i])) for i in top_indices]
+    return [SimilarityScore(name=candidates[i], score=float(scores[i])) for i in top_indices]

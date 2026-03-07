@@ -1,6 +1,4 @@
-"""
-CLI integration tests for the Name Ranking application.
-"""
+"""CLI integration tests for the Name Ranking application."""
 
 import json
 import tempfile
@@ -11,6 +9,7 @@ import pytest
 from typer.testing import CliRunner
 
 from st_name_ranking.cli import app
+from st_name_ranking.types import DatabaseStats
 
 
 @pytest.fixture
@@ -28,9 +27,6 @@ def temp_db_path():
     # Clean up
     if db_path.exists():
         db_path.unlink()
-
-
-
 
 
 @pytest.fixture
@@ -92,13 +88,13 @@ def test_cli_init_basic(mock_db_path, cli_runner):
         mock_init.return_value = None
         mock_sync.return_value = 0  # No new names
         # Mock stats to avoid database queries
-        mock_stats.return_value = {
-            "total_names": 100,
-            "classified_names": 20,
-            "unclassified_names": 80,
-            "rated_names": 100,
-            "origin_distribution": {"International": 80, "European": 20},
-        }
+        mock_stats.return_value = DatabaseStats(
+            total_names=100,
+            classified_names=20,
+            unclassified_names=80,
+            rated_names=100,
+            origin_distribution={"International": 80, "European": 20},
+        )
 
         result = cli_runner.invoke(app, ["init"])
         assert result.exit_code == 0
@@ -124,13 +120,13 @@ def test_cli_init_with_classify(mock_db_path, cli_runner):
         mock_sync.return_value = 0  # No new names
         mock_classify.return_value = 3  # 3 names classified
         # Mock stats to avoid database queries
-        mock_stats.return_value = {
-            "total_names": 100,
-            "classified_names": 20,
-            "unclassified_names": 80,
-            "rated_names": 100,
-            "origin_distribution": {"International": 80, "European": 20},
-        }
+        mock_stats.return_value = DatabaseStats(
+            total_names=100,
+            classified_names=20,
+            unclassified_names=80,
+            rated_names=100,
+            origin_distribution={"International": 80, "European": 20},
+        )
 
         result = cli_runner.invoke(app, ["init", "--classify"])
         assert result.exit_code == 0
@@ -146,36 +142,26 @@ def test_cli_init_with_classify(mock_db_path, cli_runner):
         mock_stats.assert_called_once()
 
 
-
-
-
-
-
-
-
-
-
 def test_cli_classify(mock_db_path, cli_runner):
     """Test classify command."""
     # First initialize the database and insert some names
     with (
         patch("st_name_ranking.cli.init_database") as mock_init,
         patch(
-            "st_name_ranking.cli.sync_names_with_submodule"
+            "st_name_ranking.cli.sync_names_with_submodule",
         ) as mock_sync_init,
-
         patch("st_name_ranking.cli.get_stats") as mock_stats_init,
     ):
         mock_init.return_value = None
         mock_sync_init.return_value = 0
 
-        mock_stats_init.return_value = {
-            "total_names": 100,
-            "classified_names": 20,
-            "unclassified_names": 80,
-            "rated_names": 100,
-            "origin_distribution": {"International": 80, "European": 20},
-        }
+        mock_stats_init.return_value = DatabaseStats(
+            total_names=100,
+            classified_names=20,
+            unclassified_names=80,
+            rated_names=100,
+            origin_distribution={"International": 80, "European": 20},
+        )
 
         # Initialize
         init_result = cli_runner.invoke(app, ["init"])
@@ -200,21 +186,20 @@ def test_cli_classify_with_batch_size(mock_db_path, cli_runner):
     with (
         patch("st_name_ranking.cli.init_database") as mock_init,
         patch(
-            "st_name_ranking.cli.sync_names_with_submodule"
+            "st_name_ranking.cli.sync_names_with_submodule",
         ) as mock_sync_init,
-
         patch("st_name_ranking.cli.get_stats") as mock_stats_init,
     ):
         mock_init.return_value = None
         mock_sync_init.return_value = 0
 
-        mock_stats_init.return_value = {
-            "total_names": 100,
-            "classified_names": 20,
-            "unclassified_names": 80,
-            "rated_names": 100,
-            "origin_distribution": {"International": 80, "European": 20},
-        }
+        mock_stats_init.return_value = DatabaseStats(
+            total_names=100,
+            classified_names=20,
+            unclassified_names=80,
+            rated_names=100,
+            origin_distribution={"International": 80, "European": 20},
+        )
         init_result = cli_runner.invoke(app, ["init"])
         assert init_result.exit_code == 0
 
@@ -237,38 +222,32 @@ def test_cli_stats(mock_db_path, cli_runner):
     with (
         patch("st_name_ranking.cli.init_database") as mock_init,
         patch(
-            "st_name_ranking.cli.sync_names_with_submodule"
+            "st_name_ranking.cli.sync_names_with_submodule",
         ) as mock_sync_init,
-
         patch("st_name_ranking.cli.get_stats") as mock_stats_init,
     ):
         mock_init.return_value = None
         mock_sync_init.return_value = 0
 
-        mock_stats_init.return_value = {
-            "total_names": 100,
-            "classified_names": 20,
-            "unclassified_names": 80,
-            "rated_names": 100,
-            "origin_distribution": {"International": 80, "European": 20},
-        }
+        mock_stats_init.return_value = DatabaseStats(
+            total_names=100,
+            classified_names=20,
+            unclassified_names=80,
+            rated_names=100,
+            origin_distribution={"International": 80, "European": 20},
+        )
         init_result = cli_runner.invoke(app, ["init"])
         assert init_result.exit_code == 0
 
     # Test stats
     with patch("st_name_ranking.cli.get_stats") as mock_stats:
-        mock_stats.return_value = {
-            "total_names": 100,
-            "total_ratings": 75,
-            "rated_names": 75,
-            "classified_names": 50,
-            "unclassified_names": 50,
-            "avg_rating": 1500.5,
-            "highest_rating": 1800.0,
-            "lowest_rating": 1200.0,
-            "total_matches": 1000,
-            "origin_distribution": {"International": 80, "European": 20},
-        }
+        mock_stats.return_value = DatabaseStats(
+            total_names=100,
+            classified_names=50,
+            unclassified_names=50,
+            rated_names=75,
+            origin_distribution={"International": 80, "European": 20},
+        )
 
         result = cli_runner.invoke(app, ["stats"])
         assert result.exit_code == 0
@@ -281,7 +260,49 @@ def test_cli_stats(mock_db_path, cli_runner):
         mock_stats.assert_called_once()
 
 
+def test_cli_init_integration(initialized_db, mock_submodule_path, cli_runner):
+    """Test CLI init command with real database and mocked submodule."""
 
+    # Mock stats to avoid division by zero
+    mock_stats = DatabaseStats(
+        total_names=100,
+        classified_names=20,
+        unclassified_names=80,
+        rated_names=75,
+        origin_distribution={"International": 80, "European": 20},
+    )
+
+    # Ensure DB_PATH is set to our temporary path (already done by initialized_db)
+    # Patch sync_names_with_submodule to use our mock submodule path
+    with (
+        patch("st_name_ranking.cli.sync_names_with_submodule") as mock_sync,
+        patch("st_name_ranking.cli.classify_all_names") as mock_classify,
+        patch("st_name_ranking.cli.get_stats", return_value=mock_stats) as mock_get_stats,
+    ):
+        mock_sync.return_value = 3  # Simulate 3 names synced
+        mock_classify.return_value = 0  # No classification
+
+        result = cli_runner.invoke(app, ["init"])
+        assert result.exit_code == 0
+        assert "Initializing Name Ranking Database" in result.output
+        assert "Database schema created" in result.output
+        assert "Synced 3 new names from submodule" in result.output
+
+        # Verify sync was called with default path
+        mock_sync.assert_called_once()
+        mock_get_stats.assert_called_once()
+
+    # Additional test: init with --classify flag
+    with (
+        patch("st_name_ranking.cli.sync_names_with_submodule") as mock_sync,
+        patch("st_name_ranking.cli.classify_all_names") as mock_classify,
+        patch("st_name_ranking.cli.get_stats", return_value=mock_stats) as mock_get_stats,
+    ):
+        mock_sync.return_value = 3
+        mock_classify.return_value = 2
+        result = cli_runner.invoke(app, ["init", "--classify"])
+        assert result.exit_code == 0
+        assert "Classified 2 names" in result.output
 
 
 if __name__ == "__main__":

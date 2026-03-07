@@ -1,7 +1,6 @@
-"""
-Tests for st_name_ranking.data_loader module.
-"""
+"""Tests for st_name_ranking.data_loader module."""
 
+import sqlite3
 from unittest.mock import patch
 
 import pytest
@@ -21,7 +20,7 @@ class TestIsValidName:
     def test_invalid_empty_or_none(self):
         """Test empty or None names return False."""
         assert data_loader.is_valid_name("") is False
-        assert data_loader.is_valid_name(None) is False
+        assert data_loader.is_valid_name(None) is False  # type: ignore[arg-type]
         assert data_loader.is_valid_name(" ") is False
         assert data_loader.is_valid_name("  ") is False
 
@@ -84,6 +83,19 @@ class TestIsValidName:
         assert data_loader.is_valid_name("Bjørn") is True  # Norwegian letter
 
 
+class TestStripNameNotes:
+    """Tests for strip_name_notes function."""
+
+    def test_strips_variant_notes(self):
+        """Names with notes should keep only the base name."""
+        raw = "Matteos - variant af godkendt fornavn"
+        assert data_loader.strip_name_notes(raw) == "Matteos"
+
+    def test_keeps_plain_name(self):
+        """Plain names should be unchanged except trimming."""
+        assert data_loader.strip_name_notes("  Anna  ") == "Anna"
+
+
 class TestLoadRatings:
     """Tests for load_ratings function."""
 
@@ -116,7 +128,7 @@ class TestLoadRatings:
     @patch("st_name_ranking.data_loader.database.init_database")
     def test_load_ratings_database_error(self, mock_init):
         """Test load_ratings handles database errors."""
-        mock_init.side_effect = Exception("Database error")
+        mock_init.side_effect = sqlite3.Error("Database error")
         ratings = data_loader.load_ratings()
         assert ratings is None
 
@@ -169,6 +181,7 @@ class TestSaveRatings:
 
         # Verify ratings
         ratings = data_loader.load_ratings()
+        assert ratings is not None
         assert ratings["Anna"] == 1700.0
         assert ratings["Peter"] == 1550.0
 
@@ -185,7 +198,7 @@ class TestInitializeOrLoadRatings:
         assert len(ratings) == 3
         for name in names:
             assert name in ratings
-            assert ratings[name] == 1500.0  # Default Elo rating
+            assert ratings[name] == 1500.0  # Default preference score
 
     def test_load_existing_ratings(self, initialized_db):
         """Test loading existing ratings without reinitializing."""
@@ -210,7 +223,7 @@ class TestInitializeOrLoadRatings:
         assert ratings["Maria"] == 1500.0  # New name gets default
 
 
-# TODO: Fix load_submodule_json tests - mocking pandas DataFrame is complex
+# TODO: Fix load_submodule_json tests - mocking polars DataFrame is complex
 # class TestLoadSubmoduleJson:
 #     """Tests for load_submodule_json function."""
 #     pass
