@@ -12,11 +12,11 @@ Get the application running in **3 steps**:
 $ git clone --recurse-submodules https://github.com/yourusername/sort-names.git
 $ cd sort-names
 
-# Install dependencies (requires Python 3.13+)
+# Install dependencies (requires Python >=3.12,<3.14)
 $ uv sync
 
 # Initialize database
-$ uv run name-db init
+$ uv run st-name-ranking db init
 Database initialized successfully.
 Synced 4,847 names from submodule.
 ```
@@ -24,20 +24,20 @@ Synced 4,847 names from submodule.
 Start the application:
 
 ```bash
-$ uv run streamlit run src/st_name_ranking/main.py
+$ uv run st-name-ranking serve
 
   You can now view your Streamlit app in your browser.
 
   Local URL: http://localhost:8501
 ```
 
-The application opens at **http://localhost:8501** in 2 seconds.
+Open **http://localhost:8501** in your browser.
 
 ## What You Do
 
 1. **Compare names**: Two names appear side-by-side
 2. **Vote**: Click **← Prefer Left**, **Draw**, **Down**, or **Prefer Right →**
-3. **Watch rankings**: Top 10 names update in real-time based on your
+3. **Watch rankings**: Top 10 names update after each vote based on your
    preferences
 
 Use **arrow keys** for speed:
@@ -55,17 +55,24 @@ The application uses **Bayesian preference learning** to understand your taste:
    vector (**phonetic**, **linguistic**, **metadata**)
 2. **Bradley-Terry model**: Learns a weight vector representing your preferences
 3. **Thompson sampling**: Selects the most informative name pairs for comparison
-4. **Real-time updates**: Model updates after each vote
+4. **Model updates**: Parameters update after each vote
 
-After **20 comparisons**, the system understands your preferences well. After
-**50 comparisons**, it predicts your choices with high accuracy.
+After your first set of comparisons, the model starts adapting ranking and pair
+selection to your preferences.
+
+In the **Tournament** view, the sample-size selector defaults to the full
+filtered set (**N**). Available options are **50, 100, 500, 1000, 2000, 3000,
+..., N**.
+
+The Tournament UI also shows queue refill health: **green/yellow/red** latency,
+**last/avg refill ms**, and current queue fill.
 
 ## Documentation
 
 ### Start Here
 
-- **[Tutorial](tutorial.md)** - Complete walkthrough from installation to
-  advanced usage
+- **[Tutorial](tutorial.md)** - Complete walkthrough from installation to daily
+  usage
 
 ### Learn the System
 
@@ -104,7 +111,7 @@ All checks passed
 
 ## Requirements
 
-- **Python 3.13+** (required for modern type hints and features)
+- **Python >=3.12,<3.14**
 - **Git** (for submodule management)
 - **[uv](https://github.com/astral-sh/uv)** package manager
 

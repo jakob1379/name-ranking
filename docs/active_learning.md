@@ -1,6 +1,6 @@
 # Active Learning System
 
-**Python Version**: **Python 3.13+**
+**Python Version**: **Python >=3.12,<3.14**
 
 This guide explains the **Bayesian preference learning** system at the core of
 the Name Ranking application.
@@ -206,7 +206,7 @@ print(f"P(A ≻ B) = {prob:.3f}")
 
 ### UI Integration
 
-- **Real-time updates**: Model updates after each comparison
+- **Model updates**: Parameters update after each comparison
 - **Rating display**: Preference scores (1500 ± 500 scale) shown in UI
 - **Pair selection**: Thompson sampling runs on demand
 

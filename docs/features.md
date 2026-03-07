@@ -4,14 +4,18 @@ Complete feature list for the Name Ranking application.
 
 ## Name Ranking Tournament
 
-Compare names using **active learning** to learn your preferences efficiently.
+Compare names using **active learning** to learn your preferences.
 
 - **Pair selection via Thompson sampling**: The system selects maximally
   informative name pairs
 - **Four voting options**: Prefer left, prefer right, draw, or dislike both
-- **Real-time Bayesian updates**: Model updates after each comparison
-- **Top 10 rankings**: Current best names based on learned preferences
+- **Bayesian updates**: Model updates after each comparison
+- **Top 10 rankings**: Current highest-ranked names based on learned preferences
 - **Keyboard shortcuts**: Arrow keys for rapid voting
+- **Sample-size selector**: 50, 100, 500, 1000, 2000, 3000, ..., N
+- **Default sample size**: Full filtered dataset (**N**)
+- **Queue refill latency indicator**: Green/yellow/red health with last/avg ms
+  and queue fill
 
 ## Similarity Search
 
@@ -83,7 +87,8 @@ Select one or more geographic regions to filter names.
 ### Bayesian Preference Modeling
 
 - **Feature-based Bradley-Terry model**: Learns preferences from name features
-- **Laplace approximation**: Efficient Bayesian updates
+- **Laplace approximation**: Bayesian updates with a local Gaussian
+  approximation
 - **25-dimensional feature vectors**: Phonetic, linguistic, and metadata
   features
 - **Covariance matrix**: Models uncertainty in preferences
@@ -98,8 +103,8 @@ Each name converts to a feature vector including:
 
 ### Thompson Sampling
 
-- **Exploration-exploitation balance**: Learns efficiently with minimal
-  comparisons
+- **Exploration-exploitation balance**: Balances uncertain and high-utility
+  pairs
 - **Information gain maximization**: Selects pairs that teach the most
 - **Diversity constraint**: Ensures coverage across feature space
 
@@ -189,15 +194,16 @@ $ uv run st-name-ranking db features rebuild
 | `st-name-ranking db features status`  | Show cache statistics                    |
 | `st-name-ranking serve`               | Launch the Streamlit web interface       |
 
-## Performance Optimizations
+## Performance Notes
 
-- **2-second startup**: No automatic sync on app launch
+- **Startup path**: No automatic sync on app launch
 - **Feature caching**: In-memory cache for 44,000+ names
-- **Batch processing**: Reduces **ethnidata** API calls by 100x
-- **Efficient database sync**: Commit hash tracking avoids redundant processing
-- **Bulk inserts**: Fast database operations with `executemany`
-- **Vectorized computations**: **NumPy**-optimized pair scoring
-- **Candidate queue**: Pre-fetches name pairs to eliminate selection latency
+- **Batch processing**: Groups **ethnidata** calls into fixed-size batches
+- **Database sync**: Commit hash tracking avoids redundant processing
+- **Bulk inserts**: Uses `executemany` for batched writes
+- **Vectorized computations**: Pair scoring uses **NumPy** operations
+- **Candidate queue**: Pre-fetches name pairs and reports refill latency/queue
+  fill in Tournament UI
 
 ## Command Line Interface
 
@@ -297,19 +303,19 @@ CREATE TABLE model_state (
 
 ### Requirements
 
-- **Python 3.13+** (required for modern type hints)
+- **Python >=3.12,<3.14**
 - **Git** (for submodule management)
 - **[uv](https://github.com/astral-sh/uv)** package manager
 
 ### Performance Characteristics
 
-| Operation           | Time                   |
-| ------------------- | ---------------------- |
-| Application startup | 2 seconds              |
-| Feature extraction  | 1ms per name (cached)  |
-| Model update        | 1ms per comparison     |
-| Thompson sampling   | 10-100ms               |
-| Rating sync         | 100ms for 44,000 names |
+| Operation           | Time                                       |
+| ------------------- | ------------------------------------------ |
+| Application startup | Depends on local machine and dataset state |
+| Feature extraction  | 1ms per name (cached)                      |
+| Model update        | 1ms per comparison                         |
+| Thompson sampling   | 10-100ms                                   |
+| Rating sync         | 100ms for 44,000 names                     |
 
 ### Memory Usage
 

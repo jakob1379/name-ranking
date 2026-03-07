@@ -2,7 +2,7 @@
 
 **Goal**: Understand how the Name Ranking application learns your preferences.
 
-**Requirements**: **Python 3.13+**
+**Requirements**: **Python >=3.12,<3.14**
 
 For usage instructions, see the [Tutorial](tutorial.md). This document explains
 design decisions for developers.
@@ -82,7 +82,7 @@ Stores 5 core tables:
 - **Linguistic analysis**: Syllable counting and vowel ratio calculation
 - **Metadata encoding**: One-hot encoding of gender and origin region
 - **Caching**: In-memory cache for 44,000+ names
-- **Batch processing**: Efficient extraction for all names
+- **Batch processing**: Feature extraction runs in batches for all names
 
 #### Feature Pipeline
 
@@ -128,6 +128,10 @@ Stores 5 core tables:
 ### User Interface Layer (`main.py`, `ui.py`)
 
 - **Tournament interface**: Side-by-side name comparisons
+- **Tournament sample-size selector**: Options are 50, 100, 500, 1000, 2000,
+  3000, ..., N (defaults to full filtered set)
+- **Queue refill latency indicator**: Green/yellow/red status with last/avg
+  refill ms and queue fill level
 - **Similarity search**: Multi-method name matching
 - **Filter controls**: Gender and origin region filters
 - **Administration**: Database sync and classification controls
@@ -135,7 +139,7 @@ Stores 5 core tables:
 ### Command Line Interface (`cli.py`)
 
 - `db init`: Initialize database (includes sync + feature extraction)
-- `db stats`: Display comprehensive database statistics
+- `db stats`: Display database statistics
 - `serve`: Launch the Streamlit web interface
 - `db features rebuild`: Recompute all cached features
 - `db features status`: Show feature cache status
@@ -212,7 +216,7 @@ database.update_ratings(ratings)
 ## Feature Caching System
 
 The **Feature Caching System** stores pre-computed features for all names in the
-database, enabling fast retrieval during model operations.
+database for repeated retrieval during model operations.
 
 ### Architecture
 
@@ -316,7 +320,7 @@ $ uv run st-name-ranking db features rebuild
 
 - **Local SQLite**: Single-file database
 - **Streamlit local server**: Development web server
-- **UV package management**: Fast Python dependency resolution
+- **UV package management**: Python dependency resolution
 
 ### Production Considerations
 

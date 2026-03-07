@@ -4,7 +4,7 @@ Rank Danish names using **Bayesian preference learning**.
 
 ## Quickstart
 
-You need **Python 3.13+** and **Git**.
+You need **Python 3.12 or 3.13** and **Git**.
 
 ```bash
 # Clone with submodules
@@ -29,7 +29,7 @@ $ uv run st-name-ranking serve
   Local URL: http://localhost:8501
 ```
 
-The application opens at **http://localhost:8501** in 2 seconds.
+Open **http://localhost:8501** in your browser.
 
 ### Feature Cache Management
 
@@ -53,7 +53,11 @@ Active version: 20250224_120000
 
 1. Two names side-by-side
 2. Vote buttons: **← Prefer Left**, **Draw**, **Down**, **Prefer Right →**
-3. Top 10 rankings update in real-time
+3. Top 10 rankings update after each vote
+4. A **Tournament sample size** selector (50, 100, 500, 1000, 2000, 3000, ...,
+   **N**)
+5. A queue status line with **green/yellow/red** refill latency, **last/avg
+   ms**, and queue fill
 
 Use **arrow keys** for rapid voting:
 
@@ -71,6 +75,6 @@ Use **arrow keys** for rapid voting:
 
 ## Requirements
 
-- **Python 3.13+**
+- **Python >=3.12,<3.14**
 - **Git**
 - [uv](https://github.com/astral-sh/uv) package manager

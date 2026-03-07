@@ -25,7 +25,7 @@ from st_name_ranking.utils import (
 
 logger = logging.getLogger(__name__)
 MIN_NAMES_FOR_TOURNAMENT = 2
-DEFAULT_TOURNAMENT_SAMPLE_SIZE = 50
+DEFAULT_TOURNAMENT_SAMPLE_SIZE: int | None = None
 logger.setLevel(logging.INFO)
 
 # Configure logging - suppress debug noise
@@ -444,8 +444,6 @@ def main() -> None:
             return 0
         if candidate in options:
             return candidate
-        if DEFAULT_TOURNAMENT_SAMPLE_SIZE in options:
-            return DEFAULT_TOURNAMENT_SAMPLE_SIZE
         return options[-1]
 
     if "tournament_sample_size" not in st.session_state:

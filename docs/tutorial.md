@@ -2,13 +2,13 @@
 
 Learn to use the Name Ranking application through hands-on examples.
 
-This tutorial takes you from installation to advanced usage in **15 minutes**.
+This tutorial takes you from installation to regular usage.
 
 ## Prerequisites
 
 You need:
 
-- **Python 3.13+**
+- **Python 3.12 or 3.13**
 - **Git**
 - [uv](https://github.com/astral-sh/uv) package manager
 
@@ -60,7 +60,7 @@ $ uv run st-name-ranking serve
   Network URL: http://192.168.1.100:8501
 ```
 
-Your browser opens automatically. The application loads in **2 seconds**.
+Open the local URL in your browser.
 
 !!! note "No Automatic Sync" The application does not sync names automatically
 on startup. You ran `st-name-ranking db init` to load names via CLI. You can
@@ -78,8 +78,12 @@ The **Tournament** tab displays:
    - **Draw**: Both names are equal
    - **Down**: You dislike both names
    - **Prefer Right →**: You like the right name more
-3. **Top 10 rankings**: Current best names based on your preferences
+3. **Top 10 rankings**: Current highest-ranked names based on your preferences
 4. **Comparison counter**: How many votes you have made
+5. **Tournament sample size**: Defaults to the full filtered set (**N**), with
+   options **50, 100, 500, 1000, 2000, 3000, ..., N**
+6. **Queue refill status**: **green/yellow/red** latency indicator with
+   **last/avg refill ms** and queue fill
 
 ### Make Your First Vote
 
@@ -191,8 +195,8 @@ The system uses **Thompson sampling** to select name pairs:
 3. **Select informative pairs** that maximize expected information gain
 4. **Balance exploration and exploitation**
 
-After **20 comparisons**, the model understands your basic preferences. After
-**50 comparisons**, it predicts your choices accurately.
+After your first set of comparisons, the model starts personalizing both
+rankings and the next pairs you see.
 
 ## Similarity Search
 
@@ -454,14 +458,14 @@ You now understand:
 
 ### Learn More
 
-- [Active Learning System](active_learning.md) - Deep dive into **Bayesian
-  preference modeling**
+- [Active Learning System](active_learning.md) - Detailed explanation of
+  **Bayesian preference modeling**
 - [System Architecture](architecture.md) - Component design and data flow
 - [Features](features.md) - Complete feature reference
 
 ### Practice
 
-1. Make **50 comparisons** to train the model
+1. Make an initial batch of comparisons to train the model
 2. Use **Similarity Search** to find variants of names you like
 3. Run **Origin Classification** and filter by region
 4. Export your ratings for backup

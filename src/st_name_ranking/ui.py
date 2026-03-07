@@ -225,7 +225,7 @@ def render_tournament(names: list[str]) -> None:
     logger.info("🎮 Tournament started with %d names", len(names))
 
     total_filtered = st.session_state.get("tournament_filtered_count", len(names))
-    selected_sample_size = int(st.session_state.get("tournament_sample_size", 50))
+    selected_sample_size = int(st.session_state.get("tournament_sample_size", len(names)))
     if len(names) < total_filtered:
         st.write(f"Comparing {len(names)} sampled names")
     else:
