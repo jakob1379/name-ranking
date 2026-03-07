@@ -165,9 +165,6 @@ LIQUIDS = set("lr")
 ASCENDERS = set("bdfhklt")
 DESCENDERS = set("gjpqy")
 
-# Common double letters in names
-DOUBLE_LETTERS = {"aa", "ee", "oo", "ll", "mm", "nn", "ss", "tt", "ff", "pp"}
-
 
 def extract_prosodic_features(name: str, syllable_count: int) -> dict[str, float]:
     """Extract prosodic (rhythm/cadence) features from a name.
@@ -897,7 +894,7 @@ class FeatureCache:
             return cached
 
         # Compute features
-        features, all_feature_names = extract_all_features(name, gender, origin_region)
+        features, _ = extract_all_features(name, gender, origin_region)
 
         # Filter to requested features if specified
         if feature_names is not None:
@@ -1006,7 +1003,7 @@ class FeatureExtractor:
         """
         if self._feature_names is None:
             # Extract features for a dummy name to get feature names
-            dummy_features, feature_names = extract_all_features("Test")
+            _, feature_names = extract_all_features("Test")
             self._feature_names = feature_names
         return self._feature_names
 

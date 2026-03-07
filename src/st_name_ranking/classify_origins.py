@@ -181,35 +181,6 @@ def classify_batch(names_batch: list, batch_size: int = 100) -> int:
     return classified_count
 
 
-def _classify_individually(names_batch: list) -> int:
-    """Fallback: classify names individually (used when batch processing fails)."""
-    classified_count = 0
-
-    for i, name_data in enumerate(names_batch):
-        name_id = name_data.id
-        name = name_data.name
-
-        result = classify_name(name)
-        if result:
-            region, confidence = result
-            update_name_origin(name_id, region, confidence)
-            classified_count += 1
-
-        if (i + 1) % 10 == 0:
-            logger.debug(
-                "  Individually processed %d/%d names",
-                i + 1,
-                len(names_batch),
-            )
-
-    logger.info(
-        "Individually classified %d/%d names",
-        classified_count,
-        len(names_batch),
-    )
-    return classified_count
-
-
 def classify_all_names(
     limit: int | None = None,
     batch_size: int = 100,

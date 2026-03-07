@@ -32,7 +32,6 @@ class OriginResult(NamedTuple):
 logger = logging.getLogger(__name__)
 
 # Classification thresholds
-MIN_ETHNICOLR_CONFIDENCE = 0.3
 MIN_ETHNIDATA_CONFIDENCE = 0.3
 HIGH_CONFIDENCE_THRESHOLD = 0.6
 MEDIUM_CONFIDENCE_THRESHOLD = 0.5
@@ -40,18 +39,6 @@ LOW_CONFIDENCE_THRESHOLD = 0.4
 
 # Phonetic similarity threshold
 MIN_PHONETIC_SIMILARITY = 0.6
-
-# Region categories matching the database region_mapping
-REGIONS = [
-    "Nordic",
-    "European",
-    "American",
-    "Middle Eastern",
-    "Asian",
-    "African",
-    "Oceanian",
-    "International",
-]
 
 
 def _get_region_for_nationality(nationality: str) -> tuple[str, float]:
@@ -480,7 +467,7 @@ class OriginClassifier:
         """Classify a single name.
 
         Returns:
-            Tuple of (region, confidence) where region is one of REGIONS.
+            Tuple of (region, confidence).
             Confidence is in range [0.1, 1.0].
 
         """
