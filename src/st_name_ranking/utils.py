@@ -251,7 +251,7 @@ def pull_submodule_updates(*, classify_origins: bool = False) -> bool:
                 try:
                     # Ensure database is initialized before classification
                     database.init_database()
-                    from st_name_ranking.classify_origins import classify_all_names  # noqa: PLC0415
+                    from st_name_ranking.classify_origins import classify_all_names
 
                     with st.spinner("Classifying name origins..."):
                         # Classify only unclassified names
@@ -308,6 +308,7 @@ def setup_session_state(names: list[str]) -> None:
 def select_candidates(
     names: list[str],
     features: np.ndarray | None = None,
+    sample_size: int | None = None,
 ) -> tuple[str, str]:
     """Active learning candidate selection using Bradley-Terry model.
     Uses Thompson sampling to select maximally informative pairs.
@@ -322,14 +323,14 @@ def select_candidates(
         return "", ""
 
     rng = np.random.default_rng()
-    # Sample a subset of names for efficiency (max 50)
-    sample_size = min(50, len(names))
-    if len(names) == sample_size:
+    # Sample a subset of names for efficiency
+    effective_sample_size = min(max(sample_size if sample_size is not None else 50, 2), len(names))
+    if len(names) == effective_sample_size:
         sampled = names
         sampled_indices = list(range(len(names)))
     else:
         sampled_indices = list(
-            rng.choice(len(names), size=sample_size, replace=False),
+            rng.choice(len(names), size=effective_sample_size, replace=False),
         )
         sampled = [names[i] for i in sampled_indices]
 
@@ -365,6 +366,7 @@ def select_candidate_batch(
     names: list[str],
     features: np.ndarray | None = None,
     batch_size: int = 3,
+    sample_size: int | None = None,
 ) -> list[tuple[str, str]]:
     """Select a batch of candidate pairs for active learning.
     Returns list of (name_a, name_b) pairs.
@@ -374,14 +376,14 @@ def select_candidate_batch(
     batch_size = max(batch_size, 1)
     rng = np.random.default_rng()
 
-    # Sample a subset of names for efficiency (max 50)
-    sample_size = min(50, len(names))
-    if len(names) == sample_size:
+    # Sample a subset of names for efficiency
+    effective_sample_size = min(max(sample_size if sample_size is not None else 50, 2), len(names))
+    if len(names) == effective_sample_size:
         sampled = names
         sampled_indices = list(range(len(names)))
     else:
         sampled_indices = list(
-            rng.choice(len(names), size=sample_size, replace=False),
+            rng.choice(len(names), size=effective_sample_size, replace=False),
         )
         sampled = [names[i] for i in sampled_indices]
 
@@ -405,7 +407,10 @@ def select_candidate_batch(
             e,
         )
         # Fallback to single pair selection
-        pair = select_candidates(names, features)
+        if sample_size is None:
+            pair = select_candidates(names, features)
+        else:
+            pair = select_candidates(names, features, sample_size=sample_size)
         return [pair] if pair[0] else []
 
 

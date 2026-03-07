@@ -25,6 +25,7 @@ from st_name_ranking.utils import (
 
 logger = logging.getLogger(__name__)
 MIN_NAMES_FOR_TOURNAMENT = 2
+DEFAULT_TOURNAMENT_SAMPLE_SIZE = 50
 logger.setLevel(logging.INFO)
 
 # Configure logging - suppress debug noise
@@ -49,12 +50,12 @@ def show_reset_ratings_dialog() -> None:
 
     col_confirm, col_cancel = st.columns(2)
     with col_confirm:
-        if st.button("Yes, Reset Ratings", type="primary", use_container_width=True):
+        if st.button("Yes, Reset Ratings", type="primary", width="stretch"):
             st.session_state.ratings = initialize_ratings(st.session_state.names)
             st.toast("✅ Ratings reset to initial values", icon="✅")
             st.rerun()
     with col_cancel:
-        if st.button("Cancel", type="secondary", use_container_width=True):
+        if st.button("Cancel", type="secondary", width="stretch"):
             st.rerun()
 
 
@@ -66,7 +67,7 @@ def show_reset_excluded_dialog() -> None:
 
     col_confirm, col_cancel = st.columns(2)
     with col_confirm:
-        if st.button("Yes, Reset Excluded", type="primary", use_container_width=True):
+        if st.button("Yes, Reset Excluded", type="primary", width="stretch"):
             # Only remove excluded entries (False values), keep included
             inclusions = st.session_state.get("name_inclusions", {})
             st.session_state.name_inclusions = {k: v for k, v in inclusions.items() if v is True}
@@ -84,7 +85,7 @@ def show_reset_excluded_dialog() -> None:
             st.toast("Excluded names reset", icon="🔄")
             st.rerun()
     with col_cancel:
-        if st.button("Cancel", type="secondary", use_container_width=True):
+        if st.button("Cancel", type="secondary", width="stretch"):
             st.rerun()
 
 
@@ -96,7 +97,7 @@ def show_reset_included_dialog() -> None:
 
     col_confirm, col_cancel = st.columns(2)
     with col_confirm:
-        if st.button("Yes, Reset Included", type="primary", use_container_width=True):
+        if st.button("Yes, Reset Included", type="primary", width="stretch"):
             # Only remove included entries (True values), keep excluded
             inclusions = st.session_state.get("name_inclusions", {})
             st.session_state.name_inclusions = {k: v for k, v in inclusions.items() if v is False}
@@ -114,7 +115,7 @@ def show_reset_included_dialog() -> None:
             st.toast("Included names reset", icon="🔄")
             st.rerun()
     with col_cancel:
-        if st.button("Cancel", type="secondary", use_container_width=True):
+        if st.button("Cancel", type="secondary", width="stretch"):
             st.rerun()
 
 
@@ -151,7 +152,7 @@ def main() -> None:
             "Sync Names",
             icon="🔄",
             help="Sync names from submodule to database",
-            use_container_width=True,
+            width="stretch",
         ):
             inserted = sync_names_from_submodule()
             if inserted > 0:
@@ -274,7 +275,7 @@ def main() -> None:
                 "Reset\nExcluded",
                 type="secondary",
                 help="Move all excluded names back to 'not decided'",
-                use_container_width=True,
+                width="stretch",
                 key="reset_excluded_btn",
             ):
                 show_reset_excluded_dialog()
@@ -284,7 +285,7 @@ def main() -> None:
                 "Reset\nIncluded",
                 type="secondary",
                 help="Move all included names back to 'not decided'",
-                use_container_width=True,
+                width="stretch",
                 key="reset_included_btn",
             ):
                 show_reset_included_dialog()
@@ -294,14 +295,14 @@ def main() -> None:
             "Reset Ratings",
             type="secondary",
             help="Reset all tournament ratings to initial values",
-            use_container_width=True,
+            width="stretch",
             key="reset_ratings_btn",
         ):
             show_reset_ratings_dialog()
 
         # Export
         st.subheader("Export")
-        if st.button("Export Database", use_container_width=True):
+        if st.button("Export Database", width="stretch"):
             try:
                 db_bytes = database.export_database()
                 st.download_button(
@@ -377,20 +378,6 @@ def main() -> None:
             query_time,
         )
 
-    # Initialize QueueManager ONLY when on Tournament tab
-    # This avoids slowing down Name Filter with unnecessary background work
-    if st.session_state.get("active_tab") == "Tournament" and len(filtered_names) >= MIN_NAMES_FOR_TOURNAMENT:
-        # Queue size from environment variable (default 15)
-        queue_size = int(os.environ.get("TOURNAMENT_QUEUE_SIZE", "15"))
-        get_queue_manager(filtered_names, queue_size)
-        logger.debug("Initialized QueueManager for Tournament tab")
-    else:
-        logger.debug(
-            "Skipping QueueManager init (tab=%s, names=%d)",
-            st.session_state.get("active_tab"),
-            len(filtered_names),
-        )
-
     if not filtered_names:
         if current_origins:
             st.toast(
@@ -439,6 +426,75 @@ def main() -> None:
         if inclusions.get(name, True)  # True if not in dict or value is True
     ]
 
+    filtered_count = len(filtered_names_included)
+
+    def build_sample_size_options(count: int) -> list[int]:
+        if count <= 0:
+            return []
+        options = [50, 100, 500, 1000]
+        options.extend(range(2000, count + 1, 1000))
+        valid_options = sorted({value for value in options if value <= count})
+        if count not in valid_options:
+            valid_options.append(count)
+        return sorted(valid_options)
+
+    def resolve_sample_size(count: int, candidate: int | None) -> int:
+        options = build_sample_size_options(count)
+        if not options:
+            return 0
+        if candidate in options:
+            return candidate
+        if DEFAULT_TOURNAMENT_SAMPLE_SIZE in options:
+            return DEFAULT_TOURNAMENT_SAMPLE_SIZE
+        return options[-1]
+
+    if "tournament_sample_size" not in st.session_state:
+        stored_sample_size = database.load_user_setting(
+            "tournament_sample_size",
+            str(DEFAULT_TOURNAMENT_SAMPLE_SIZE),
+        )
+        try:
+            parsed_sample_size = int(stored_sample_size)
+        except (TypeError, ValueError):
+            parsed_sample_size = DEFAULT_TOURNAMENT_SAMPLE_SIZE
+        st.session_state.tournament_sample_size = resolve_sample_size(filtered_count, parsed_sample_size)
+
+    sample_size_options = build_sample_size_options(filtered_count)
+    selected_sample_size = resolve_sample_size(
+        filtered_count,
+        st.session_state.get("tournament_sample_size"),
+    )
+    st.session_state.tournament_sample_size = selected_sample_size
+
+    if sample_size_options:
+        selected_sample_size = st.selectbox(
+            "Tournament sample size",
+            options=sample_size_options,
+            index=sample_size_options.index(selected_sample_size),
+            help="How many filtered names are sampled for tournament pair generation.",
+        )
+        if selected_sample_size != st.session_state.tournament_sample_size:
+            st.session_state.tournament_sample_size = selected_sample_size
+            database.save_user_setting("tournament_sample_size", str(selected_sample_size))
+            st.rerun()
+
+    tournament_names = filtered_names_included
+    st.session_state.tournament_filtered_count = filtered_count
+
+    # Initialize QueueManager ONLY when on Tournament tab
+    # This avoids slowing down Name Filter with unnecessary background work
+    if st.session_state.get("active_tab") == "Tournament" and len(tournament_names) >= MIN_NAMES_FOR_TOURNAMENT:
+        # Queue size from environment variable (default 15)
+        queue_size = int(os.environ.get("TOURNAMENT_QUEUE_SIZE", "15"))
+        get_queue_manager(tournament_names, queue_size, sample_size=selected_sample_size)
+        logger.debug("Initialized QueueManager for Tournament tab")
+    else:
+        logger.debug(
+            "Skipping QueueManager init (tab=%s, names=%d)",
+            st.session_state.get("active_tab"),
+            len(tournament_names),
+        )
+
     # Tab selection - only render active tab to improve performance
     if "active_tab" not in st.session_state:
         st.session_state.active_tab = "Name Filter"
@@ -448,7 +504,7 @@ def main() -> None:
     with col1:
         if st.button(
             "📋 Name Filter",
-            use_container_width=True,
+            width="stretch",
             type="primary" if st.session_state.active_tab == "Name Filter" else "secondary",
         ):
             st.session_state.active_tab = "Name Filter"
@@ -456,7 +512,7 @@ def main() -> None:
     with col2:
         if st.button(
             "🏆 Tournament",
-            use_container_width=True,
+            width="stretch",
             type="primary" if st.session_state.active_tab == "Tournament" else "secondary",
         ):
             st.session_state.active_tab = "Tournament"
@@ -464,7 +520,7 @@ def main() -> None:
     with col3:
         if st.button(
             "🏅 Rankings",
-            use_container_width=True,
+            width="stretch",
             type="primary" if st.session_state.active_tab == "Rankings" else "secondary",
         ):
             st.session_state.active_tab = "Rankings"
@@ -472,7 +528,7 @@ def main() -> None:
     with col4:
         if st.button(
             "🔍 Similarity Search",
-            use_container_width=True,
+            width="stretch",
             type="primary" if st.session_state.active_tab == "Similarity Search" else "secondary",
         ):
             st.session_state.active_tab = "Similarity Search"
@@ -484,7 +540,7 @@ def main() -> None:
     if st.session_state.active_tab == "Name Filter":
         render_binary_filter(filtered_names)
     elif st.session_state.active_tab == "Tournament":
-        render_tournament(filtered_names_included)
+        render_tournament(tournament_names)
     elif st.session_state.active_tab == "Rankings":
         render_rankings(filtered_names_included)
     else:  # Similarity Search

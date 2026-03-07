@@ -34,6 +34,7 @@ LAZY_MODEL_UPDATER_KEY: Final[str] = "st_name_ranking_lazy_model_updater"
 DEFAULT_BATCH_SIZE: Final[int] = 5
 DEFAULT_MAX_PENDING: Final[int] = 20
 DEFAULT_STALE_THRESHOLD_SECONDS: Final[int] = 30
+DEFAULT_SAMPLE_SIZE: Final[int] = 50
 MIN_NAMES_FOR_PAIR_SELECTION: Final[int] = 2
 
 
@@ -365,6 +366,7 @@ class LazyModelUpdater:
         self,
         names: list[str],
         features: np.ndarray | None = None,
+        sample_size: int | None = None,
     ) -> tuple[str, str]:
         """Select a pair using appropriate strategy based on model freshness.
 
@@ -391,12 +393,15 @@ class LazyModelUpdater:
 
             # Sample a subset for efficiency
             rng = np.random.default_rng()
-            sample_size = min(50, len(names))
-            if len(names) == sample_size:
+            effective_sample_size = min(
+                max(sample_size if sample_size is not None else DEFAULT_SAMPLE_SIZE, 2),
+                len(names),
+            )
+            if len(names) == effective_sample_size:
                 sampled = names
                 sampled_indices = list(range(len(names)))
             else:
-                sampled_indices = list(rng.choice(len(names), size=sample_size, replace=False))
+                sampled_indices = list(rng.choice(len(names), size=effective_sample_size, replace=False))
                 sampled = [names[i] for i in sampled_indices]
 
             # Get features for sampled names
@@ -420,6 +425,7 @@ class LazyModelUpdater:
         names: list[str],
         batch_size: int,
         features: np.ndarray | None = None,
+        sample_size: int | None = None,
     ) -> list[tuple[str, str]]:
         """Select a batch of pairs using appropriate strategy.
 
@@ -447,12 +453,15 @@ class LazyModelUpdater:
 
             # Sample a subset for efficiency
             rng = np.random.default_rng()
-            sample_size = min(50, len(names))
-            if len(names) == sample_size:
+            effective_sample_size = min(
+                max(sample_size if sample_size is not None else DEFAULT_SAMPLE_SIZE, 2),
+                len(names),
+            )
+            if len(names) == effective_sample_size:
                 sampled = names
                 sampled_indices = list(range(len(names)))
             else:
-                sampled_indices = list(rng.choice(len(names), size=sample_size, replace=False))
+                sampled_indices = list(rng.choice(len(names), size=effective_sample_size, replace=False))
                 sampled = [names[i] for i in sampled_indices]
 
             # Get features for sampled names
@@ -577,6 +586,7 @@ def select_lazy_pair(
     features: np.ndarray | None = None,
     *,
     batch_size: int = DEFAULT_BATCH_SIZE,
+    sample_size: int | None = None,
 ) -> tuple[str, str]:
     """Select a pair using lazy updater's strategy.
 
@@ -592,13 +602,14 @@ def select_lazy_pair(
         Tuple of (name_a, name_b)
     """
     updater = get_lazy_updater(batch_size=batch_size)
-    return updater.select_pair(names, features)
+    return updater.select_pair(names, features, sample_size=sample_size)
 
 
 def select_lazy_batch(
     names: list[str],
     batch_size: int,
     features: np.ndarray | None = None,
+    sample_size: int | None = None,
 ) -> list[tuple[str, str]]:
     """Select a batch of pairs using lazy updater's strategy.
 
@@ -611,7 +622,7 @@ def select_lazy_batch(
         List of (name_a, name_b) tuples
     """
     updater = get_lazy_updater()
-    return updater.select_batch(names, batch_size, features)
+    return updater.select_batch(names, batch_size, features, sample_size=sample_size)
 
 
 def get_lazy_updater_stats() -> dict[str, int | float] | None:

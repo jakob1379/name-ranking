@@ -57,6 +57,7 @@ class QueueManager:
         names: list[str],
         target_size: int = 15,
         refill_threshold: int = 5,
+        sample_size: int = 50,
     ) -> None:
         """Initialize the queue manager.
 
@@ -74,6 +75,12 @@ class QueueManager:
         self.queue: deque[tuple[str, str]] = deque()
         self.target_size: int = max(target_size, 1)
         self.refill_threshold: int = max(refill_threshold, 1)
+        self.sample_size: int = sample_size
+        self.refill_count: int = 0
+        self.last_refill_ms: float = 0.0
+        self.avg_refill_ms: float = 0.0
+        self.last_refill_added: int = 0
+        self.last_refill_timestamp: float = 0.0
         self._lock: threading.Lock = threading.Lock()
         self._stop_event: threading.Event = threading.Event()
         self._worker_thread: threading.Thread | None = None
@@ -126,6 +133,21 @@ class QueueManager:
         """
         with self._lock:
             return len(self.queue)
+
+    def get_stats(self) -> dict[str, int | float]:
+        """Get queue and refill stats (thread-safe)."""
+        with self._lock:
+            return {
+                "queue_size": len(self.queue),
+                "target_size": self.target_size,
+                "refill_threshold": self.refill_threshold,
+                "sample_size": self.sample_size,
+                "refill_count": self.refill_count,
+                "last_refill_ms": self.last_refill_ms,
+                "avg_refill_ms": self.avg_refill_ms,
+                "last_refill_added": self.last_refill_added,
+                "last_refill_timestamp": self.last_refill_timestamp,
+            }
 
     def _fill_queue_continuously(self) -> None:
         """Background thread that continuously keeps the queue full."""
@@ -192,14 +214,14 @@ class QueueManager:
             # Model-based selection with variance calculation
             try:
                 logger.info("🎯 Using model-based selection (training_samples=%d)", model.state.training_samples)
-                # Sample a subset for efficiency (max 50 names)
+                # Sample a subset for efficiency
                 rng = np.random.default_rng()
-                sample_size = min(50, len(self.names))
-                if len(self.names) == sample_size:
+                effective_sample_size = min(max(self.sample_size, 2), len(self.names))
+                if len(self.names) == effective_sample_size:
                     sampled_names = self.names
                     sampled_indices = list(range(len(self.names)))
                 else:
-                    sampled_indices = list(rng.choice(len(self.names), size=sample_size, replace=False))
+                    sampled_indices = list(rng.choice(len(self.names), size=effective_sample_size, replace=False))
                     sampled_names = [self.names[i] for i in sampled_indices]
 
                 sampled_features = features[sampled_indices]
@@ -241,6 +263,11 @@ class QueueManager:
                     added += 1
 
             elapsed = time.perf_counter() - start_time
+            self.refill_count += 1
+            self.last_refill_ms = elapsed * 1000
+            self.avg_refill_ms += (self.last_refill_ms - self.avg_refill_ms) / self.refill_count
+            self.last_refill_added = added
+            self.last_refill_timestamp = time.time()
             if added > 0:
                 logger.info("✅ Added %d pairs to queue (total: %d) in %.2fs", added, len(self.queue), elapsed)
             else:
@@ -266,6 +293,7 @@ def get_queue_manager(
     names: list[str],
     queue_size: int = 15,
     refill_threshold: int = 5,
+    sample_size: int = 50,
 ) -> QueueManager:
     """Get or create a QueueManager from Streamlit session state.
 
@@ -293,18 +321,29 @@ def get_queue_manager(
             and existing_manager.names[-1] == names[-1]
         )
         size_match = existing_manager.target_size == queue_size
+        sample_size_match = existing_manager.sample_size == sample_size
 
-        if names_match and size_match:
+        if names_match and size_match and sample_size_match:
             logger.debug("Reusing existing QueueManager from session state")
             return existing_manager
 
         # Settings changed - stop the old manager
-        logger.info("Settings changed (names=%s, size=%s), stopping old QueueManager", not names_match, not size_match)
+        logger.info(
+            "Settings changed (names=%s, size=%s, sample_size=%s), stopping old QueueManager",
+            not names_match,
+            not size_match,
+            not sample_size_match,
+        )
         existing_manager.stop()
         del st.session_state[QUEUE_MANAGER_KEY]
 
     # Create new manager and start it
-    manager = QueueManager(names, target_size=queue_size, refill_threshold=refill_threshold)
+    manager = QueueManager(
+        names,
+        target_size=queue_size,
+        refill_threshold=refill_threshold,
+        sample_size=sample_size,
+    )
     manager.start()
     st.session_state[QUEUE_MANAGER_KEY] = manager
     logger.info("Created and started new QueueManager (queue_size=%d)", queue_size)
@@ -337,10 +376,7 @@ def get_queue_manager_stats() -> dict[str, int | float | str] | None:
         return None
 
     manager: QueueManager = st.session_state[QUEUE_MANAGER_KEY]
-    return {
-        "queue_size": manager.get_queue_size(),
-        "target_size": manager.target_size,
-        "refill_threshold": manager.refill_threshold,
-        "num_names": len(manager.names),
-        "thread_alive": manager._worker_thread is not None and manager._worker_thread.is_alive(),
-    }
+    stats: dict[str, int | float | str] = manager.get_stats()
+    stats["num_names"] = len(manager.names)
+    stats["thread_alive"] = manager._worker_thread is not None and manager._worker_thread.is_alive()
+    return stats

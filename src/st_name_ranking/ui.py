@@ -6,11 +6,15 @@ import os
 import time
 from typing import Literal
 
+import numpy as np
 import polars as pl
 import streamlit as st
+from sklearn.cluster import KMeans
+from sklearn.decomposition import PCA
+from sklearn.preprocessing import StandardScaler
 
 from st_name_ranking.async_model import select_random_pair
-from st_name_ranking.background_queue import get_queue_manager
+from st_name_ranking.background_queue import get_queue_manager, get_queue_manager_stats
 from st_name_ranking.database import (
     INITIAL_SCORE,
     get_preference_stats_by_gender,
@@ -26,13 +30,39 @@ from st_name_ranking.similarity import (
 )
 from st_name_ranking.types import PreferenceStats
 from st_name_ranking.utils import (
+    get_active_learning_model,
+    get_names_features,
     record_comparison_instant,
 )
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 MIN_NAMES_FOR_COMPARISON = 2
+MIN_NAMES_FOR_LANDSCAPE = 25
+MIN_NON_NOISE_CLUSTERS = 2
+FAST_REFILL_THRESHOLD_MS = 120
+MODERATE_REFILL_THRESHOLD_MS = 300
 SLOW_RENDER_THRESHOLD_MS = 100
+
+try:
+    import altair as alt
+except ImportError:
+    alt = None
+
+try:
+    import pacmap
+except ImportError:
+    pacmap = None
+
+try:
+    import hdbscan
+except ImportError:
+    hdbscan = None
+
+try:
+    from sklearn.cluster import HDBSCAN as SKHDBSCAN
+except ImportError:
+    SKHDBSCAN = None
 
 
 def display_name_with_rating(
@@ -194,15 +224,43 @@ def render_tournament(names: list[str]) -> None:
 
     logger.info("🎮 Tournament started with %d names", len(names))
 
-    st.write(f"Comparing {len(names)} names")
+    total_filtered = st.session_state.get("tournament_filtered_count", len(names))
+    selected_sample_size = int(st.session_state.get("tournament_sample_size", 50))
+    if len(names) < total_filtered:
+        st.write(f"Comparing {len(names)} sampled names")
+    else:
+        st.write(f"Comparing {len(names)} names")
+    st.caption(f"Selection sample size: {selected_sample_size}")
 
     log_timing("Before queue manager")
 
     # Get or create background queue manager for instant transitions
     # Queue size from environment variable (default 15)
     queue_size = int(os.environ.get("TOURNAMENT_QUEUE_SIZE", "15"))
-    manager = get_queue_manager(names, queue_size)
+    manager = get_queue_manager(names, queue_size, sample_size=selected_sample_size)
     log_timing("After queue manager")
+
+    queue_stats = get_queue_manager_stats()
+    if queue_stats and int(queue_stats.get("refill_count", 0)) > 0:
+        last_refill_ms = float(queue_stats.get("last_refill_ms", 0.0))
+        avg_refill_ms = float(queue_stats.get("avg_refill_ms", 0.0))
+        refill_added = int(queue_stats.get("last_refill_added", 0))
+        current_queue_size = int(queue_stats.get("queue_size", 0))
+        target_queue_size = int(queue_stats.get("target_size", queue_size))
+
+        if last_refill_ms <= FAST_REFILL_THRESHOLD_MS:
+            latency_indicator = "🟢"
+        elif last_refill_ms <= MODERATE_REFILL_THRESHOLD_MS:
+            latency_indicator = "🟡"
+        else:
+            latency_indicator = "🔴"
+
+        st.caption(
+            f"{latency_indicator} Queue {current_queue_size}/{target_queue_size} | "
+            f"Last refill {last_refill_ms:.0f} ms (avg {avg_refill_ms:.0f} ms, +{refill_added} pairs)",
+        )
+    else:
+        st.caption("Queue warming up...")
 
     st.caption("Tournament mode: click which name you prefer")
 
@@ -466,6 +524,125 @@ def render_rankings(names: list[str]) -> None:
     # Filter ratings to only show current selection
     filtered_ratings = {name: rating for name, rating in st.session_state.ratings.items() if name in names_set}
 
+    @st.cache_data(show_spinner=False)
+    def build_rankings_dataframe(
+        ratings_pairs: tuple[tuple[str, float], ...],
+        *,
+        include_gender_male: bool,
+    ) -> tuple[pl.DataFrame, list[str]]:
+        sorted_pairs = sorted(ratings_pairs, key=lambda item: item[1], reverse=True)
+        ordered_names = [name for name, _ in sorted_pairs]
+        ordered_ratings = [rating for _, rating in sorted_pairs]
+        base_df = pl.DataFrame({"Name": ordered_names, "Rating": ordered_ratings})
+
+        try:
+            model = get_active_learning_model()
+            feature_names = list(model.feature_names)
+            feature_matrix = get_names_features(ordered_names)
+            top_feature_count = min(6, len(feature_names))
+            top_feature_idx = np.argsort(np.abs(model.state.weight_mean))[::-1][:top_feature_count]
+
+            feature_columns = {feature_names[idx]: feature_matrix[:, idx].astype(float) for idx in top_feature_idx}
+            enriched_df = base_df.with_columns(
+                [pl.Series(feature_name, values) for feature_name, values in feature_columns.items()],
+            )
+            selected_features = [feature_names[idx] for idx in top_feature_idx]
+            if not include_gender_male and "gender_male" in enriched_df.columns:
+                enriched_df = enriched_df.drop("gender_male")
+                selected_features = [name for name in selected_features if name != "gender_male"]
+        except (RuntimeError, ValueError, AttributeError):
+            logger.exception("Failed to enrich rankings table with feature columns")
+            return base_df, []
+        else:
+            return enriched_df, selected_features
+
+    @st.cache_data(show_spinner=False)
+    def compute_landscape(
+        sorted_names: tuple[str, ...],
+        ratings_pairs: tuple[tuple[str, float], ...],
+        random_state: int,
+    ) -> tuple[pl.DataFrame, np.ndarray, list[str], str]:
+        ratings_dict = dict(ratings_pairs)
+        model = get_active_learning_model()
+        feature_names = list(model.feature_names)
+        feature_matrix = get_names_features(list(sorted_names))
+        scaled_features = StandardScaler().fit_transform(feature_matrix)
+
+        weight_mean = model.state.weight_mean
+        weight_cov = model.state.weight_cov
+
+        utility = feature_matrix @ weight_mean
+        variance = np.einsum("ij,jk,ik->i", feature_matrix, weight_cov, feature_matrix)
+        uncertainty = np.sqrt(np.clip(variance, a_min=0.0, a_max=None))
+        ratings = np.array([ratings_dict.get(name, INITIAL_SCORE) for name in sorted_names], dtype=np.float64)
+        confidence = 1.0 / (1.0 + uncertainty)
+
+        status_note = "PaCMAP projection + HDBSCAN clustering"
+        if pacmap is not None:
+            projection = pacmap.PaCMAP(
+                n_components=2,
+                n_neighbors=min(15, max(3, len(sorted_names) - 1)),
+                MN_ratio=0.5,
+                FP_ratio=2.0,
+                random_state=random_state,
+            ).fit_transform(scaled_features)
+        else:
+            projection = PCA(n_components=2, random_state=random_state).fit_transform(scaled_features)
+            status_note = "PaCMAP unavailable, using PCA projection + HDBSCAN clustering"
+
+        labels: np.ndarray
+        hdbscan_valid = False
+        min_cluster_size = max(20, int(0.01 * len(sorted_names)))
+        min_samples = max(5, min_cluster_size // 2)
+
+        if hdbscan is not None:
+            try:
+                labels = hdbscan.HDBSCAN(
+                    min_cluster_size=min_cluster_size,
+                    min_samples=min_samples,
+                    cluster_selection_method="eom",
+                    metric="euclidean",
+                    prediction_data=True,
+                ).fit_predict(projection)
+                non_noise = labels[labels >= 0]
+                hdbscan_valid = len(non_noise) > 0 and len(np.unique(non_noise)) >= MIN_NON_NOISE_CLUSTERS
+            except (ValueError, RuntimeError):
+                hdbscan_valid = False
+
+        if not hdbscan_valid and SKHDBSCAN is not None:
+            try:
+                labels = SKHDBSCAN(
+                    min_cluster_size=min_cluster_size,
+                    min_samples=min_samples,
+                    cluster_selection_method="eom",
+                    copy=False,
+                ).fit_predict(
+                    projection,
+                )
+                non_noise = labels[labels >= 0]
+                hdbscan_valid = len(non_noise) > 0 and len(np.unique(non_noise)) >= MIN_NON_NOISE_CLUSTERS
+            except (ValueError, RuntimeError):
+                hdbscan_valid = False
+
+        if not hdbscan_valid:
+            cluster_count = min(8, max(2, len(sorted_names) // 12))
+            labels = KMeans(n_clusters=cluster_count, random_state=random_state, n_init=10).fit_predict(projection)
+            status_note = f"{status_note} (HDBSCAN fallback: KMeans)"
+
+        landscape = pl.DataFrame(
+            {
+                "Name": list(sorted_names),
+                "Projection X": projection[:, 0],
+                "Projection Y": projection[:, 1],
+                "Cluster": labels,
+                "Rating": ratings,
+                "Utility": utility,
+                "Uncertainty": uncertainty,
+                "Confidence": confidence,
+            },
+        )
+        return landscape, feature_matrix, feature_names, status_note
+
     if not filtered_ratings:
         st.info("No ratings yet. Start comparing names in the Tournament tab to generate rankings.")
         return
@@ -474,8 +651,8 @@ def render_rankings(names: list[str]) -> None:
     tab_overall, tab_male, tab_female = st.tabs(["Overall", "Male", "Female"])
 
     with tab_overall:
-        sorted_ratings = sorted(filtered_ratings.items(), key=lambda x: x[1], reverse=True)
-        df = pl.DataFrame(sorted_ratings, schema=["Name", "Rating"], orient="row")
+        overall_pairs = tuple(filtered_ratings.items())
+        df, feature_columns = build_rankings_dataframe(overall_pairs, include_gender_male=True)
         st.dataframe(
             df,
             width="stretch",
@@ -490,6 +667,149 @@ def render_rankings(names: list[str]) -> None:
                 ),
             },
         )
+        if feature_columns:
+            st.caption(f"Feature columns shown: {', '.join(feature_columns)}")
+
+        st.divider()
+        st.subheader("Preference Landscape")
+
+        if len(filtered_ratings) < MIN_NAMES_FOR_LANDSCAPE:
+            st.info(f"Preference landscape appears after at least {MIN_NAMES_FOR_LANDSCAPE} rated names.")
+        else:
+            try:
+                random_state = st.slider(
+                    "Projection seed",
+                    min_value=0,
+                    max_value=99,
+                    value=42,
+                    key="rankings_projection_seed",
+                )
+
+                sorted_names = tuple(sorted(filtered_ratings))
+                name_to_index = {name: idx for idx, name in enumerate(sorted_names)}
+                ratings_pairs = tuple(sorted(filtered_ratings.items()))
+                with st.status("Building preference landscape...", expanded=False) as status:
+                    status.write("Projecting names with PaCMAP")
+                    status.write("Clustering projection with HDBSCAN")
+                    landscape_df, feature_matrix, feature_names, status_note = compute_landscape(
+                        sorted_names,
+                        ratings_pairs,
+                        random_state,
+                    )
+                    status.update(label="Preference landscape ready", state="complete")
+
+                st.caption(status_note)
+
+                plot_df = landscape_df.with_columns(
+                    pl.col("Cluster").cast(pl.String).alias("Cluster Label"),
+                    (20 + pl.col("Confidence") * 280).alias("Point Size"),
+                ).to_pandas()
+                if alt is not None:
+                    chart = (
+                        alt.Chart(plot_df)
+                        .mark_circle(opacity=0.85)
+                        .encode(
+                            x=alt.X("Projection X:Q", title="Component 1"),
+                            y=alt.Y("Projection Y:Q", title="Component 2"),
+                            color=alt.Color("Cluster Label:N", title="Cluster"),
+                            size=alt.Size("Point Size:Q", legend=None),
+                            tooltip=[
+                                alt.Tooltip("Name:N"),
+                                alt.Tooltip("Rating:Q", format=".1f"),
+                                alt.Tooltip("Cluster Label:N", title="Cluster"),
+                                alt.Tooltip("Utility:Q", format=".4f"),
+                                alt.Tooltip("Uncertainty:Q", format=".4f"),
+                            ],
+                        )
+                        .properties(height=480)
+                    )
+                    st.altair_chart(chart, width="stretch")
+                else:
+                    st.scatter_chart(
+                        landscape_df,
+                        x="Projection X",
+                        y="Projection Y",
+                        color="Cluster",
+                        size="Confidence",
+                        width="stretch",
+                    )
+
+                model = get_active_learning_model()
+                feature_weights = model.state.weight_mean
+                feature_rank = np.argsort(np.abs(feature_weights))[::-1]
+                top_k = min(8, len(feature_names))
+                global_rows = [
+                    {
+                        "Feature": feature_names[idx],
+                        "Weight": float(feature_weights[idx]),
+                        "Direction": "Positive" if feature_weights[idx] >= 0 else "Negative",
+                        "Strength": float(abs(feature_weights[idx])),
+                    }
+                    for idx in feature_rank[:top_k]
+                ]
+
+                st.markdown("**Global predictors**")
+                st.dataframe(
+                    pl.DataFrame(global_rows),
+                    hide_index=True,
+                    width="stretch",
+                    column_config={
+                        "Weight": st.column_config.NumberColumn(format="%.4f"),
+                        "Strength": st.column_config.NumberColumn(format="%.4f"),
+                    },
+                )
+
+                summary_df = (
+                    landscape_df.group_by("Cluster")
+                    .agg(
+                        pl.len().alias("Size"),
+                        pl.col("Rating").mean().alias("Avg Rating"),
+                        pl.col("Utility").mean().alias("Avg Utility"),
+                        pl.col("Uncertainty").mean().alias("Avg Uncertainty"),
+                    )
+                    .sort("Size", descending=True)
+                )
+
+                st.markdown("**Cluster summary**")
+                st.dataframe(
+                    summary_df,
+                    hide_index=True,
+                    width="stretch",
+                    column_config={
+                        "Avg Rating": st.column_config.NumberColumn(format="%.1f"),
+                        "Avg Utility": st.column_config.NumberColumn(format="%.4f"),
+                        "Avg Uncertainty": st.column_config.NumberColumn(format="%.4f"),
+                    },
+                )
+
+                cluster_profiles = []
+                for cluster_id in summary_df["Cluster"].to_list():
+                    cluster_names = landscape_df.filter(pl.col("Cluster") == cluster_id)["Name"].to_list()
+                    cluster_idx = [name_to_index[name] for name in cluster_names]
+                    cluster_features = feature_matrix[cluster_idx]
+
+                    contribution = cluster_features.mean(axis=0) * feature_weights
+                    rank_idx = np.argsort(np.abs(contribution))[::-1][:3]
+                    label_tokens = [
+                        f"{feature_names[idx]} ({'+' if contribution[idx] >= 0 else '-'}{abs(contribution[idx]):.3f})"
+                        for idx in rank_idx
+                    ]
+                    cluster_profiles.append(
+                        {
+                            "Cluster": cluster_id,
+                            "Profile": " | ".join(label_tokens),
+                        },
+                    )
+
+                st.markdown("**Cluster profiles**")
+                st.dataframe(
+                    pl.DataFrame(cluster_profiles).sort("Cluster"),
+                    hide_index=True,
+                    width="stretch",
+                )
+            except (RuntimeError, ValueError, ImportError) as err:
+                logger.exception("Failed to render preference landscape")
+                st.info(f"Preference landscape is temporarily unavailable: {err}")
 
     with tab_male:
         if male_names:
@@ -499,8 +819,10 @@ def render_rankings(names: list[str]) -> None:
                 if name in male_names and name in names_set
             }
             if male_ratings:
-                sorted_male = sorted(male_ratings.items(), key=lambda x: x[1], reverse=True)
-                df_male = pl.DataFrame(sorted_male, schema=["Name", "Rating"], orient="row")
+                df_male, _ = build_rankings_dataframe(
+                    tuple(male_ratings.items()),
+                    include_gender_male=False,
+                )
                 st.dataframe(
                     df_male,
                     width="stretch",
@@ -528,8 +850,10 @@ def render_rankings(names: list[str]) -> None:
                 if name in female_names and name in names_set
             }
             if female_ratings:
-                sorted_female = sorted(female_ratings.items(), key=lambda x: x[1], reverse=True)
-                df_female = pl.DataFrame(sorted_female, schema=["Name", "Rating"], orient="row")
+                df_female, _ = build_rankings_dataframe(
+                    tuple(female_ratings.items()),
+                    include_gender_male=False,
+                )
                 st.dataframe(
                     df_female,
                     width="stretch",
@@ -741,7 +1065,7 @@ def render_binary_filter(names: list[str]) -> None:
         if st.button(
             "Exclude",
             key="exclude_btn",
-            use_container_width=True,
+            width="stretch",
             type="secondary",
             shortcut="Left",
         ):
@@ -770,7 +1094,7 @@ def render_binary_filter(names: list[str]) -> None:
         if st.button(
             "Include",
             key="include_btn",
-            use_container_width=True,
+            width="stretch",
             type="primary",
             shortcut="Right",
         ):

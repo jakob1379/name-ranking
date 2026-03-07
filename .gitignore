@@ -74,3 +74,4 @@ htmlcov/
 # Environment management
 .direnv/
 .droid
+/.ooc

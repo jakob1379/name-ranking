@@ -1615,3 +1615,84 @@ class TestUIIntegration:
             mock_st.rerun.assert_called_once()
             # regular update NOT called
             mock_update.assert_not_called()
+
+    def test_render_rankings_skips_landscape_with_small_sample(self):
+        """Test rankings keeps table behavior and skips landscape for small samples."""
+        mock_st = MagicMock()
+        mock_st.header = MagicMock()
+        mock_st.write = MagicMock()
+        mock_st.dataframe = MagicMock()
+        mock_st.info = MagicMock()
+        mock_st.subheader = MagicMock()
+        mock_st.divider = MagicMock()
+        mock_st.cache_data = lambda **_: lambda func: func
+
+        def create_tab():
+            tab = MagicMock()
+            tab.__enter__ = MagicMock(return_value=tab)
+            tab.__exit__ = MagicMock(return_value=None)
+            return tab
+
+        mock_st.tabs = MagicMock(return_value=[create_tab(), create_tab(), create_tab()])
+        mock_st.session_state = MockSessionState(
+            {
+                "ratings": {f"Name{i}": 1500 + i for i in range(12)},
+                "all_names_data": {"Male": [], "Female": []},
+            },
+        )
+
+        names = [f"Name{i}" for i in range(12)]
+        with patch("st_name_ranking.ui.st", mock_st):
+            ui.render_rankings(names)
+
+        assert mock_st.dataframe.call_count >= 1
+        mock_st.info.assert_any_call("Preference landscape appears after at least 25 rated names.")
+
+    def test_render_rankings_landscape_handles_model_data(self):
+        """Test rankings landscape renders without raising on valid model outputs."""
+        mock_st = MagicMock()
+        mock_st.header = MagicMock()
+        mock_st.write = MagicMock()
+        mock_st.dataframe = MagicMock()
+        mock_st.info = MagicMock()
+        mock_st.subheader = MagicMock()
+        mock_st.divider = MagicMock()
+        mock_st.selectbox = MagicMock(return_value="All")
+        mock_st.slider = MagicMock(return_value=42)
+        mock_st.altair_chart = MagicMock()
+        mock_st.caption = MagicMock()
+        mock_st.markdown = MagicMock()
+        mock_st.status = MagicMock()
+        mock_st.cache_data = lambda **_: lambda func: func
+
+        def create_tab():
+            tab = MagicMock()
+            tab.__enter__ = MagicMock(return_value=tab)
+            tab.__exit__ = MagicMock(return_value=None)
+            return tab
+
+        mock_st.tabs = MagicMock(return_value=[create_tab(), create_tab(), create_tab()])
+        names = [f"Name{i}" for i in range(30)]
+        mock_st.session_state = MockSessionState(
+            {
+                "ratings": {name: 1500 + i for i, name in enumerate(names)},
+                "all_names_data": {"Male": [], "Female": []},
+            },
+        )
+
+        mock_model = MagicMock()
+        mock_model.feature_names = [f"f{i}" for i in range(6)]
+        mock_model.state.weight_mean = np.array([0.8, -0.5, 0.3, 0.1, -0.2, 0.05])
+        mock_model.state.weight_cov = np.eye(6)
+        features = np.random.randn(30, 6)
+
+        with (
+            patch("st_name_ranking.ui.st", mock_st),
+            patch("st_name_ranking.ui.get_active_learning_model", return_value=mock_model),
+            patch("st_name_ranking.ui.get_names_features", return_value=features),
+        ):
+            ui.render_rankings(names)
+
+        assert mock_st.dataframe.call_count >= 3
+        assert mock_st.selectbox.call_count == 0
+        mock_st.status.assert_called_once()
