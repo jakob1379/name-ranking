@@ -278,7 +278,7 @@ class BradleyTerryModel:
         w = self.state.weight_mean.copy()
         cov_inv = np.linalg.inv(self.state.weight_cov)
 
-        for iteration in range(max_iter):
+        for _ in range(max_iter):
             # Current predictions
             eta = X @ w
             # Vectorized stable sigmoid
@@ -600,25 +600,6 @@ class BradleyTerryModel:
             self.feature_names = feature_names
             self.d = len(feature_names)
             return True
-
-    def _sigmoid(self, x: float | np.ndarray) -> float | np.ndarray:
-        """Numerically stable sigmoid function (works for scalars and arrays)."""
-        if isinstance(x, np.ndarray):
-            # Vectorized stable sigmoid
-            pos_mask = x >= 0
-            neg_mask = ~pos_mask
-            result = np.empty_like(x)
-            # For positive values: 1 / (1 + exp(-x))
-            result[pos_mask] = 1.0 / (1.0 + np.exp(-x[pos_mask]))
-            # For negative values: exp(x) / (1 + exp(x))
-            exp_neg = np.exp(x[neg_mask])
-            result[neg_mask] = exp_neg / (1.0 + exp_neg)
-            return result
-        # Scalar case
-        if x >= 0:
-            return 1.0 / (1.0 + np.exp(-x))
-        exp_x = np.exp(x)
-        return exp_x / (1.0 + exp_x)
 
 
 # Helper functions for database integration
