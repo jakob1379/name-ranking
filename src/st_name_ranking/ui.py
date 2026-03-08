@@ -224,13 +224,7 @@ def render_tournament(names: list[str]) -> None:
 
     logger.info("🎮 Tournament started with %d names", len(names))
 
-    total_filtered = st.session_state.get("tournament_filtered_count", len(names))
     selected_sample_size = int(st.session_state.get("tournament_sample_size", len(names)))
-    if len(names) < total_filtered:
-        st.write(f"Comparing {len(names)} sampled names")
-    else:
-        st.write(f"Comparing {len(names)} names")
-    st.caption(f"Selection sample size: {selected_sample_size}")
 
     log_timing("Before queue manager")
 
@@ -257,12 +251,11 @@ def render_tournament(names: list[str]) -> None:
 
         st.caption(
             f"{latency_indicator} Queue {current_queue_size}/{target_queue_size} | "
-            f"Last refill {last_refill_ms:.0f} ms (avg {avg_refill_ms:.0f} ms, +{refill_added} pairs)",
+            f"Last refill {last_refill_ms:.0f} ms (avg {avg_refill_ms:.0f} ms, +{refill_added} pairs) | "
+            "Choose the name you prefer",
         )
     else:
-        st.caption("Queue warming up...")
-
-    st.caption("Tournament mode: click which name you prefer")
+        st.caption("Queue warming up... | Choose the name you prefer")
 
     # Handle empty names list gracefully
     if len(names) < MIN_NAMES_FOR_COMPARISON:
