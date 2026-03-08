@@ -1,5 +1,7 @@
 # Name Ranking
 
+[![Docs](https://img.shields.io/badge/docs-live-2ea44f)](https://jakob1379.github.io/name-ranking)
+
 Rank Danish names using **Bayesian preference learning**.
 
 ## Quickstart
