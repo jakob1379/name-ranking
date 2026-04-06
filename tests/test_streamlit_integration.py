@@ -259,7 +259,7 @@ else:
 
 
 def run_main_app_with_tab(tab_name: str, test_db_path: Path, session_state_data: dict) -> AppTest:
-    """Run the main app with a specific tab pre-selected.
+    """Run the main app with a specific tab preselected.
 
     Args:
         tab_name: The tab to activate
