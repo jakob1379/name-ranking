@@ -69,8 +69,10 @@ def save_ratings(
             ratings_to_save = ratings
 
         if ratings_to_save:
-            # Use batch update for efficiency
-            database.update_ratings_batch(ratings_to_save)
+            skipped = database.update_ratings_batch(ratings_to_save)
+            if skipped:
+                msg = f"Failed to save ratings for missing names: {', '.join(skipped)}"
+                raise DatabaseLoadError(msg)
 
             logger.info("Updated %d ratings in database", len(ratings_to_save))
     except sqlite3.Error as e:

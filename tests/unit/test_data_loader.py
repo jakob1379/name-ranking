@@ -185,6 +185,11 @@ class TestSaveRatings:
         assert ratings["Anna"] == 1700.0
         assert ratings["Peter"] == 1550.0
 
+    def test_save_ratings_missing_name_raises(self, initialized_db):
+        """Skipped rating updates should be reported to callers."""
+        with pytest.raises(data_loader.DatabaseLoadError, match="MissingName"):
+            data_loader.save_ratings({"MissingName": 1550.0})
+
 
 class TestInitializeOrLoadRatings:
     """Tests for initialize_or_load_ratings function."""
