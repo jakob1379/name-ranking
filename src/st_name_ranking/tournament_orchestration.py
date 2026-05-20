@@ -69,7 +69,7 @@ def record_tournament_vote(
 
     next_pair, source = _select_next_pair(names, manager)
     st.session_state.candidate_a, st.session_state.candidate_b = next_pair
-    logger.info(
+    logger.debug(
         "Tournament transition: (%s, %s) -> (%s, %s) via %s",
         candidate_a,
         candidate_b,

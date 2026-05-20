@@ -223,7 +223,7 @@ def _record_vote_and_get_next_pair(names: list[str], manager: Any, preference: i
 
     result = record_tournament_vote(names, manager, candidate_a, candidate_b, preference)
     next_pair = result.next_pair
-    logger.info("📦 Next pair (%s): %s vs %s", result.pair_source, next_pair[0], next_pair[1])
+    logger.debug("Next tournament pair (%s): %s vs %s", result.pair_source, next_pair[0], next_pair[1])
     return next_pair
 
 
@@ -238,9 +238,9 @@ def render_tournament(names: list[str]) -> None:
     start_time = time.perf_counter()
 
     def log_timing(step: str) -> None:
-        logger.info("⏱️ Tournament [%s]: %.2fms", step, (time.perf_counter() - start_time) * 1000)
+        logger.debug("Tournament [%s]: %.2fms", step, (time.perf_counter() - start_time) * 1000)
 
-    logger.info("🎮 Tournament started with %d names", len(names))
+    logger.debug("Tournament render started with %d names", len(names))
 
     if len(names) < MIN_NAMES_FOR_COMPARISON:
         if len(names) == 0:
@@ -574,7 +574,7 @@ def render_rankings(names: list[str]) -> None:
     This is a separate tab to avoid slowing down the tournament UI.
     Only renders when the Rankings tab is active.
     """
-    logger.info("🏅 Rendering rankings for %d names", len(names))
+    logger.debug("Rendering rankings for %d names", len(names))
     st.header("Name Rankings")
     st.write(f"Showing ratings for {len(names)} names")
 
@@ -886,7 +886,7 @@ def _ensure_filter_counts(names: list[str], inclusions: dict[str, bool], names_h
     if not needs_recount:
         return
 
-    logger.info("📊 Computing counts for %d names...", len(names))
+    logger.debug("Computing filter counts for %d names", len(names))
     count_loop_start = time.perf_counter()
     not_decided = explicitly_included = explicitly_excluded = 0
     for name in names:
@@ -903,8 +903,8 @@ def _ensure_filter_counts(names: list[str], inclusions: dict[str, bool], names_h
     st.session_state.filter_counts_excluded = explicitly_excluded
     st.session_state.filter_counts_names_hash = names_hash
 
-    logger.info(
-        "✅ Counts computed: %d not decided, %d included, %d excluded (%.1fms)",
+    logger.debug(
+        "Filter counts computed: %d not decided, %d included, %d excluded (%.1fms)",
         not_decided,
         explicitly_included,
         explicitly_excluded,
@@ -918,12 +918,12 @@ def render_binary_filter(names: list[str]) -> None:
 
     Users review names one by one, marking them as included or excluded.
     """
-    logger.info("🎛️  Filter rendering %d names", len(names))
+    logger.debug("Filter render started with %d names", len(names))
     start_time = time.perf_counter()
 
     def log_timing(step_name: str) -> None:
         elapsed = (time.perf_counter() - start_time) * 1000
-        logger.info("⏱️  %s: %.1fms", step_name, elapsed)
+        logger.debug("%s: %.1fms", step_name, elapsed)
 
     # Clear last button press time (used for performance monitoring)
     if "last_button_press_time" in st.session_state:
@@ -1050,7 +1050,7 @@ def render_binary_filter(names: list[str]) -> None:
         _persist_name_inclusions(inclusions)
         display_next_undecided_name()
 
-        logger.info("⚡ %s handled in %.1fms", label, (time.perf_counter() - button_click_start) * 1000)
+        logger.debug("%s handled in %.1fms", label, (time.perf_counter() - button_click_start) * 1000)
 
     def move_name_to_undecided(name: str, source_label: str) -> None:
         old_status = inclusions.get(name)
@@ -1184,15 +1184,13 @@ def render_binary_filter(names: list[str]) -> None:
 
     log_timing("At end")
 
-    # Performance logging
     end_time = time.perf_counter()
     elapsed_ms = (end_time - start_time) * 1000
 
-    # Log timing at INFO level if slow, DEBUG otherwise
     if elapsed_ms > SLOW_RENDER_THRESHOLD_MS:
-        logger.info("🐌 Filter render slow: %.1fms", elapsed_ms)
+        logger.info("Filter render slow: %.1fms", elapsed_ms)
     else:
-        logger.info("✅ Filter render fast: %.1fms", elapsed_ms)
+        logger.debug("Filter render fast: %.1fms", elapsed_ms)
 
 
 def render_similarity(names: list[str]) -> None:
