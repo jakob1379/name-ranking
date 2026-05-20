@@ -56,6 +56,26 @@ def test_queue_manager_refill_ignores_existing_pairs_in_reverse_order(monkeypatc
     assert manager.get_stats()["last_refill_added"] == 1
 
 
+def test_queue_manager_refill_normalizes_reversed_existing_queue_pairs(monkeypatch):
+    manager = queue.QueueManager(
+        ["Anna", "Bo", "Clara"],
+        target_size=3,
+        refill_threshold=1,
+        sample_size=3,
+    )
+    manager.queue.append(("Bo", "Anna"))
+    monkeypatch.setattr(
+        queue,
+        "select_candidate_batch",
+        Mock(return_value=[("Anna", "Bo"), ("Bo", "Clara")]),
+    )
+
+    manager._refill_queue()
+
+    assert list(manager.queue) == [("Bo", "Anna"), ("Bo", "Clara")]
+    assert manager.get_stats()["last_refill_added"] == 1
+
+
 def test_queue_manager_refill_without_pairs_leaves_stats_unchanged(monkeypatch):
     manager = queue.QueueManager(
         ["Anna", "Bo"],

@@ -16,6 +16,11 @@ MIN_TRAINING_SAMPLES: Final[int] = 10
 MIN_NAMES_FOR_PAIR_SELECTION: Final[int] = 2
 
 
+def _normalize_pair(pair: tuple[str, str]) -> tuple[str, str]:
+    """Return order-insensitive identity for a name pair."""
+    return (min(pair[0], pair[1]), max(pair[0], pair[1]))
+
+
 class QueueManager:
     """Thread-safe background queue of tournament pairs."""
 
@@ -150,11 +155,11 @@ class QueueManager:
             return
 
         with self._lock:
-            existing_pairs = set(self.queue)
+            existing_pairs = {_normalize_pair(pair) for pair in self.queue}
 
             added = 0
             for pair in pairs:
-                normalized = (min(pair[0], pair[1]), max(pair[0], pair[1]))
+                normalized = _normalize_pair(pair)
                 if normalized not in existing_pairs:
                     self.queue.append(pair)
                     existing_pairs.add(normalized)
