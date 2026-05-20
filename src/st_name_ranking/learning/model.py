@@ -100,6 +100,68 @@ def _select_cross_cluster_pairs(
     return pairs
 
 
+@dataclass(frozen=True)
+class CandidatePairScores:
+    """Candidate pair indices and active-learning acquisition scores."""
+
+    idx_a: np.ndarray
+    idx_b: np.ndarray
+    score: np.ndarray
+
+
+def _candidate_index_arrays(
+    n: int,
+    clusters: dict[str, list[int]],
+    rng: np.random.Generator,
+) -> tuple[np.ndarray, np.ndarray]:
+    total_pairs = n * (n - 1) // 2
+    n_candidates = min(1000, total_pairs)
+    cross_cluster_pairs = _select_cross_cluster_pairs(clusters, n_candidates, rng)
+
+    if len(cross_cluster_pairs) >= MIN_CROSS_CLUSTER_PAIRS:
+        return _pairs_to_arrays(cross_cluster_pairs)
+
+    if total_pairs <= n_candidates:
+        return _all_pair_index_arrays(n, total_pairs)
+
+    return _sample_unique_pair_index_arrays(n, n_candidates, rng)
+
+
+def _pairs_to_arrays(pairs: list[tuple[int, int]]) -> tuple[np.ndarray, np.ndarray]:
+    return (
+        np.array([p[0] for p in pairs], dtype=int),
+        np.array([p[1] for p in pairs], dtype=int),
+    )
+
+
+def _all_pair_index_arrays(n: int, total_pairs: int) -> tuple[np.ndarray, np.ndarray]:
+    idx_a = np.zeros(total_pairs, dtype=int)
+    idx_b = np.zeros(total_pairs, dtype=int)
+    pair_idx = 0
+    for i in range(n):
+        for j in range(i + 1, n):
+            idx_a[pair_idx] = i
+            idx_b[pair_idx] = j
+            pair_idx += 1
+    return idx_a, idx_b
+
+
+def _sample_unique_pair_index_arrays(
+    n: int,
+    n_candidates: int,
+    rng: np.random.Generator,
+) -> tuple[np.ndarray, np.ndarray]:
+    pairs_set = set()
+    while len(pairs_set) < n_candidates:
+        i = rng.integers(0, n)
+        j = rng.integers(0, n)
+        if i == j:
+            continue
+        pairs_set.add((min(i, j), max(i, j)))
+
+    return _pairs_to_arrays(list(pairs_set))
+
+
 @dataclass
 class ModelState:
     """Container for model parameters."""
@@ -340,52 +402,14 @@ class BradleyTerryModel:
             _msg = "Need at least 2 names for pair selection"
             raise ValueError(_msg)
 
-        # Group names by phonetic primary code
-        clusters = _group_names_by_phonetic(names)
-
-        # Sample utilities
-        utilities = self.sample_utilities(features)
-
-        # Try to select cross-cluster pairs first
-        n_candidates = min(1000, n * (n - 1) // 2)
-        cross_cluster_pairs = _select_cross_cluster_pairs(clusters, n_candidates, self.rng)
-
-        if len(cross_cluster_pairs) >= MIN_CROSS_CLUSTER_PAIRS:
-            # Use cross-cluster pairs for selection
-            idx_a = np.array([p[0] for p in cross_cluster_pairs])
-            idx_b = np.array([p[1] for p in cross_cluster_pairs])
-        else:
-            # Fallback: random pairs (all names in same phonetic cluster or too few)
-            idx_a = self.rng.choice(n, size=n_candidates, replace=True)
-            idx_b = self.rng.choice(n, size=n_candidates, replace=True)
-
-            # Filter out same indices
-            mask = idx_a != idx_b
-            idx_a = idx_a[mask]
-            idx_b = idx_b[mask]
-
-        if len(idx_a) == 0:
+        candidates = self._score_candidate_pairs(features, names)
+        if len(candidates.idx_a) == 0:
             # Fallback: first two names
             return NamePair(idx_a=0, idx_b=1, name_a=names[0], name_b=names[1])
 
-        # Compute acquisition score: uncertainty + diversity bonus
-        # Vectorized computation for all candidate pairs
-        diff = features[idx_a] - features[idx_b]  # (m, d)
-        var_score = np.einsum(
-            "ij,jk,ik->i",
-            diff,
-            self.state.weight_cov,
-            diff,
-        )  # (m,)
-
-        utility_diff = np.abs(utilities[idx_a] - utilities[idx_b])  # (m,)
-        score = var_score.copy()
-        # Penalize trivial comparisons
-        score[utility_diff < UTILITY_DIFFERENCE_THRESHOLD] *= TRIVIAL_COMPARISON_PENALTY
-
-        best_idx = np.argmax(score)
-        i = int(idx_a[best_idx])
-        j = int(idx_b[best_idx])
+        best_idx = np.argmax(candidates.score)
+        i = int(candidates.idx_a[best_idx])
+        j = int(candidates.idx_b[best_idx])
 
         return NamePair(idx_a=i, idx_b=j, name_a=names[i], name_b=names[j])
 
@@ -407,78 +431,25 @@ class BradleyTerryModel:
             _msg = "k must be at least 1"
             raise ValueError(_msg)
 
-        # Group names by phonetic primary code
-        clusters = _group_names_by_phonetic(names)
-
-        # Sample utilities
-        utilities = self.sample_utilities(features)
-
-        # Sample candidate pairs
-        n_candidates = min(1000, n * (n - 1) // 2)
-        total_pairs = n * (n - 1) // 2
-
-        # Try to select cross-cluster pairs first
-        cross_cluster_pairs = _select_cross_cluster_pairs(clusters, n_candidates, self.rng)
-
-        if len(cross_cluster_pairs) >= MIN_CROSS_CLUSTER_PAIRS:
-            # Use cross-cluster pairs for selection
-            idx_a = np.array([p[0] for p in cross_cluster_pairs])
-            idx_b = np.array([p[1] for p in cross_cluster_pairs])
-        elif total_pairs <= n_candidates:
-            # Use all possible pairs (fallback)
-            idx_a = np.zeros(total_pairs, dtype=int)
-            idx_b = np.zeros(total_pairs, dtype=int)
-            pair_idx = 0
-            for i in range(n):
-                for j in range(i + 1, n):
-                    idx_a[pair_idx] = i
-                    idx_b[pair_idx] = j
-                    pair_idx += 1
-        else:
-            # Sample unique random pairs (fallback)
-            pairs_set = set()
-            while len(pairs_set) < n_candidates:
-                i = self.rng.integers(0, n)
-                j = self.rng.integers(0, n)
-                if i == j:
-                    continue
-                pair = (min(i, j), max(i, j))
-                pairs_set.add(pair)
-            # Convert to arrays
-            pairs_list = list(pairs_set)
-            idx_a = np.array([p[0] for p in pairs_list])
-            idx_b = np.array([p[1] for p in pairs_list])
-
-        if len(idx_a) == 0:
+        candidates = self._score_candidate_pairs(features, names)
+        if len(candidates.idx_a) == 0:
             # Fallback: first two names repeated
             return [NamePair(idx_a=0, idx_b=1, name_a=names[0], name_b=names[1]) for _ in range(k)]
 
-        # Vectorized computation for all candidate pairs
-        diff = features[idx_a] - features[idx_b]  # (m, d)
-        var_score = np.einsum(
-            "ij,jk,ik->i",
-            diff,
-            self.state.weight_cov,
-            diff,
-        )  # (m,)
-        utility_diff = np.abs(utilities[idx_a] - utilities[idx_b])  # (m,)
-        score = var_score.copy()
-        score[utility_diff < UTILITY_DIFFERENCE_THRESHOLD] *= TRIVIAL_COMPARISON_PENALTY
-
         # Get top k indices by score
-        if k >= len(score):
-            top_indices = np.argsort(score)[::-1]  # all indices
+        if k >= len(candidates.score):
+            top_indices = np.argsort(candidates.score)[::-1]  # all indices
         else:
-            top_indices = np.argpartition(score, -k)[-k:]
+            top_indices = np.argpartition(candidates.score, -k)[-k:]
             # Sort descending
-            top_indices = top_indices[np.argsort(score[top_indices])[::-1]]
+            top_indices = top_indices[np.argsort(candidates.score[top_indices])[::-1]]
 
         # Deduplicate pairs (by normalized index tuple)
         pairs_seen: set[tuple[int, int]] = set()
         result: list[NamePair] = []
         for idx in top_indices:
-            i = int(idx_a[idx])
-            j = int(idx_b[idx])
+            i = int(candidates.idx_a[idx])
+            j = int(candidates.idx_b[idx])
             # Normalize pair order
             pair = (min(i, j), max(i, j))
             if pair in pairs_seen:
@@ -509,6 +480,30 @@ class BradleyTerryModel:
                     result.append(NamePair(idx_a=0, idx_b=1, name_a=names[0], name_b=names[1]))
 
         return result
+
+    def _score_candidate_pairs(
+        self,
+        features: np.ndarray,
+        names: list[str],
+    ) -> CandidatePairScores:
+        clusters = _group_names_by_phonetic(names)
+        idx_a, idx_b = _candidate_index_arrays(len(names), clusters, self.rng)
+        if len(idx_a) == 0:
+            empty = np.array([], dtype=int)
+            return CandidatePairScores(idx_a=empty, idx_b=empty, score=np.array([], dtype=float))
+
+        utilities = self.sample_utilities(features)
+        diff = features[idx_a] - features[idx_b]
+        var_score = np.einsum(
+            "ij,jk,ik->i",
+            diff,
+            self.state.weight_cov,
+            diff,
+        )
+        utility_diff = np.abs(utilities[idx_a] - utilities[idx_b])
+        score = var_score.copy()
+        score[utility_diff < UTILITY_DIFFERENCE_THRESHOLD] *= TRIVIAL_COMPARISON_PENALTY
+        return CandidatePairScores(idx_a=idx_a, idx_b=idx_b, score=score)
 
     def get_utility(self, features: np.ndarray) -> np.ndarray:
         """Compute expected utility for names.
