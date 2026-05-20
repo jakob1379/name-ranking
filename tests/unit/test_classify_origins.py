@@ -1,5 +1,6 @@
 """Tests for st_name_ranking.classify_origins module."""
 
+import sqlite3
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -149,6 +150,18 @@ class TestClassifyName:
         result = classify_origins.classify_name("Anna")
         # classify_name catches RuntimeError and returns None
         assert result is None
+
+    def test_reference_name_database_failure_is_not_cached_empty(self, initialized_db):
+        """Reference lookup failures should remain distinguishable from no reference data."""
+        classify_origins.reset_reference_cache()
+        with patch(
+            "st_name_ranking.classify_origins.get_names_with_origins",
+            side_effect=sqlite3.OperationalError("database is locked"),
+        ):
+            with pytest.raises(RuntimeError, match="Failed to load origin-classification reference names"):
+                classify_origins._get_reference_names()
+
+        assert not hasattr(classify_origins._get_reference_names, "_cache")
 
 
 class TestClassifyAllNames:

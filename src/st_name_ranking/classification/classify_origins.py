@@ -76,17 +76,18 @@ def _get_reference_names() -> dict[str, tuple[str, float, str, str]]:
         return cache
 
     try:
-        _get_reference_names._cache = get_names_with_origins(
+        reference_names = get_names_with_origins(
             confidence_threshold=0.5,
         )
-        logger.debug(
-            "Loaded %d reference names",
-            len(_get_reference_names._cache),
-        )
     except sqlite3.Error as e:
-        logger.warning("Failed to load reference names: %s", e)
-        _get_reference_names._cache = {}
+        msg = "Failed to load origin-classification reference names from database"
+        raise RuntimeError(msg) from e
 
+    _get_reference_names._cache = reference_names
+    logger.debug(
+        "Loaded %d reference names",
+        len(_get_reference_names._cache),
+    )
     return _get_reference_names._cache
 
 
