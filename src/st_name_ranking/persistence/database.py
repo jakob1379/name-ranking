@@ -1,11 +1,7 @@
-"""SQLite database for name ranking application.
+"""SQLite schema/bootstrap facade for the name ranking application.
 
-Handles:
-- Names from godkendtefornavne submodule
-- Elo ratings
-- Origin region classification
-- User filter preferences
-- Submodule version tracking
+Focused persistence modules own domain reads and writes. This module keeps
+schema initialization plus the historical import surface during migration.
 """
 
 import logging
@@ -14,8 +10,17 @@ from contextlib import AbstractContextManager
 
 from metaphone import doublemetaphone
 
-from st_name_ranking.persistence import connection as db_connection
-from st_name_ranking.persistence.connection import INITIAL_SCORE, MAX_SQL_PARAMS
+from st_name_ranking.persistence import (
+    connection as db_connection,
+)
+from st_name_ranking.persistence import (
+    name_store,
+    preference_stats_store,
+    ratings_store,
+    region_store,
+    settings_store,
+    stats_store,
+)
 from st_name_ranking.persistence.database_io import export_database, import_database  # noqa: F401
 from st_name_ranking.persistence.feature_store import (  # noqa: F401
     CorruptFeatureCacheError,
@@ -46,90 +51,46 @@ logger = logging.getLogger(__name__)
 
 DB_PATH = db_connection.DB_PATH
 _INIT_STATE = db_connection._INIT_STATE
+INITIAL_SCORE = db_connection.INITIAL_SCORE
+MAX_SQL_PARAMS = db_connection.MAX_SQL_PARAMS
+
+
+def _sync_connection_path() -> None:
+    db_connection.DB_PATH = DB_PATH
 
 
 def reset_database_init_state() -> None:
     """Reset cached database-initialization state."""
-    db_connection.DB_PATH = DB_PATH
+    _sync_connection_path()
     db_connection.reset_database_init_state()
 
 
 def get_connection(timeout: float = 30.0) -> AbstractContextManager[sqlite3.Connection]:
     """Return a database connection using the facade's current DB_PATH."""
-    db_connection.DB_PATH = DB_PATH
+    _sync_connection_path()
     return db_connection.get_connection(timeout)
 
 
 def _compute_phonetic_codes(name: str) -> tuple[str, str]:
-    """Compute Double Metaphone phonetic codes for a name.
-    Returns (primary_code, secondary_code).
-    """
+    """Compute Double Metaphone phonetic codes for a name."""
     primary, secondary = doublemetaphone(name)
     return (primary or "", secondary or "")
 
 
 def update_phonetic_codes(limit: int | None = None, conn: sqlite3.Connection | None = None) -> int:
-    """Update phonetic codes for names where phonetic_primary is NULL.
-    Returns number of names updated.
-
-    Args:
-        limit: Maximum number of names to update
-        conn: Optional existing connection. If provided, uses it; otherwise creates new connection.
-    """
-
-    def _do_update(connection: sqlite3.Connection) -> int:
-        # Get names missing phonetic codes
-        query = """
-            SELECT id, name FROM names
-            WHERE phonetic_primary IS NULL
-            OR phonetic_secondary IS NULL
-        """
-        if limit:
-            query += f" LIMIT {limit}"
-
-        cursor = connection.execute(query)
-        rows = cursor.fetchall()
-
-        updated = 0
-        for row in rows:
-            name_id, name = row
-            primary, secondary = _compute_phonetic_codes(name)
-            connection.execute(
-                """
-                UPDATE names
-                SET phonetic_primary = ?, phonetic_secondary = ?
-                WHERE id = ?
-                """,
-                (primary, secondary, name_id),
-            )
-            updated += 1
-
-        if updated > 0:
-            logger.info("Updated phonetic codes for %d names", updated)
-        else:
-            logger.debug("No names need phonetic code updates")
-        return updated
-
-    if conn is None:
-        with get_connection() as new_conn:
-            return _do_update(new_conn)
-    else:
-        return _do_update(conn)
+    """Update phonetic codes for names where codes are missing."""
+    _sync_connection_path()
+    return name_store.update_phonetic_codes(limit=limit, conn=conn, compute_codes=_compute_phonetic_codes)
 
 
-# Minimum names required for comparison testing
 MIN_NAMES_FOR_COMPARISON_TEST = 2
 
 
 def _migrate_comparisons_table_if_needed(conn: sqlite3.Connection) -> None:
     """Migrate comparisons table to support preference=2 (both disliked) if needed."""
-    # Check if CHECK constraint already includes 2
-    # SQLite doesn't expose CHECK constraints easily, so we try a test insert
-    # Get a valid name_id pair for testing (create dummy names if none exist)
     cursor = conn.execute(f"SELECT id FROM names LIMIT {MIN_NAMES_FOR_COMPARISON_TEST}")
     rows = cursor.fetchall()
     if len(rows) < MIN_NAMES_FOR_COMPARISON_TEST:
-        # Need at least two names for test - insert temporary names
         conn.execute("INSERT OR IGNORE INTO names (name) VALUES ('__temp_a')")
         conn.execute("INSERT OR IGNORE INTO names (name) VALUES ('__temp_b')")
         cursor = conn.execute("SELECT id FROM names WHERE name IN ('__temp_a', '__temp_b')")
@@ -138,21 +99,16 @@ def _migrate_comparisons_table_if_needed(conn: sqlite3.Connection) -> None:
     id_a, id_b = rows[0][0], rows[1][0]
 
     try:
-        # Try to insert a comparison with preference=2
         conn.execute(
             "INSERT INTO comparisons (name_a_id, name_b_id, preference) VALUES (?, ?, 2)",
             (id_a, id_b),
         )
-        # If successful, constraint already allows 2
         conn.execute("DELETE FROM comparisons WHERE name_a_id = ? AND name_b_id = ?", (id_a, id_b))
         logger.debug("Comparisons table already supports preference=2")
     except sqlite3.IntegrityError as e:
         if "CHECK" in str(e):
-            # Constraint violation - need to migrate
             logger.info("Migrating comparisons table to support preference=2")
-            # Clean up any leftover comparisons_new from previous failed migration
             conn.execute("DROP TABLE IF EXISTS comparisons_new")
-            # Create new table with updated constraint
             conn.execute("""
                 CREATE TABLE comparisons_new (
                     id INTEGER PRIMARY KEY,
@@ -163,25 +119,16 @@ def _migrate_comparisons_table_if_needed(conn: sqlite3.Connection) -> None:
                     UNIQUE(name_a_id, name_b_id, preference)
                 )
             """)
-            # Copy existing data, deduplicating on (name_a_id, name_b_id, preference)
-            # Keep the row with the latest created_at for each duplicate (most recent preference)
             conn.execute("""
                 INSERT OR IGNORE INTO comparisons_new (name_a_id, name_b_id, preference, created_at)
                 SELECT name_a_id, name_b_id, preference, MAX(created_at) as created_at
                 FROM comparisons
                 GROUP BY name_a_id, name_b_id, preference
             """)
-            # Drop old table
             conn.execute("DROP TABLE comparisons")
-            # Rename new table
             conn.execute("ALTER TABLE comparisons_new RENAME TO comparisons")
-            # Recreate indexes (they will be recreated later in init_database)
             logger.info("Comparisons table migrated successfully")
-        else:
-            # Some other integrity error (e.g., UNIQUE) - ignore
-            pass
     finally:
-        # Clean up temporary names if we inserted them
         conn.execute("DELETE FROM names WHERE name IN ('__temp_a', '__temp_b')")
 
 
@@ -302,6 +249,11 @@ def _ensure_indexes(conn: sqlite3.Connection) -> None:
         conn.execute(statement)
 
 
+def _insert_default_region_mapping(conn: sqlite3.Connection) -> None:
+    """Insert default nationality -> region mapping."""
+    region_store.insert_default_region_mapping(conn)
+
+
 def _ensure_seed_region_mapping(conn: sqlite3.Connection) -> None:
     if conn.execute("SELECT COUNT(*) FROM region_mapping").fetchone()[0] == 0:
         _insert_default_region_mapping(conn)
@@ -309,27 +261,23 @@ def _ensure_seed_region_mapping(conn: sqlite3.Connection) -> None:
 
 def init_database() -> None:
     """Initialize database schema if it doesn't exist."""
+    _sync_connection_path()
     if _INIT_STATE["db_initialized"] and _INIT_STATE["db_path"] == DB_PATH:
         logger.debug("Database already initialized, skipping initialization")
         return
 
-    # Check if database file exists
     db_exists = DB_PATH.exists()
 
     try:
         with get_connection() as conn:
-            # Check if names table exists to determine if database is already set up
             table_exists = False
             if db_exists:
                 try:
-                    # Try to query the names table
                     conn.execute("SELECT 1 FROM names LIMIT 1").fetchone()
                     table_exists = True
                 except sqlite3.OperationalError:
-                    # Table doesn't exist
                     table_exists = False
 
-            # Log appropriate message based on database state
             if not db_exists:
                 logger.info("Creating new database at %s", DB_PATH)
             elif not table_exists:
@@ -351,892 +299,145 @@ def init_database() -> None:
         _INIT_STATE["db_path"] = DB_PATH
 
 
-def _insert_default_region_mapping(conn: sqlite3.Connection) -> None:
-    """Insert default nationality -> region mapping."""
-    # Nordic countries
-    nordic = [
-        "Denmark",
-        "Norway",
-        "Sweden",
-        "Iceland",
-        "Finland",
-        "Faroe Islands",
-    ]
-    european = [
-        "Germany",
-        "France",
-        "Italy",
-        "Spain",
-        "Portugal",
-        "Netherlands",
-        "Belgium",
-        "Switzerland",
-        "Austria",
-        "Poland",
-        "Czech",
-        "Slovakia",
-        "Hungary",
-        "Romania",
-        "Bulgaria",
-        "Greece",
-        "Croatia",
-        "Serbia",
-        "Slovenia",
-        "Lithuania",
-        "Latvia",
-        "Estonia",
-        "United Kingdom",
-        "Ireland",
-        "Scotland",
-        "Wales",
-        "England",
-        "Russia",
-        "Ukraine",
-        "Belarus",
-        "Moldova",
-        "Albania",
-        "Bosnia",
-        "Montenegro",
-        "Macedonia",
-        "Kosovo",
-    ]
-    # Middle Eastern
-    middle_eastern = [
-        "Egypt",
-        "Turkey",
-        "Iran",
-        "Iraq",
-        "Syria",
-        "Jordan",
-        "Lebanon",
-        "Israel",
-        "Palestine",
-        "Saudi Arabia",
-        "Yemen",
-        "Oman",
-        "United Arab Emirates",
-        "Qatar",
-        "Kuwait",
-        "Bahrain",
-        "Afghanistan",
-        "Pakistan",
-    ]
-    # Asian
-    asian = [
-        "China",
-        "Japan",
-        "South Korea",
-        "North Korea",
-        "India",
-        "Bangladesh",
-        "Pakistan",
-        "Sri Lanka",
-        "Nepal",
-        "Bhutan",
-        "Myanmar",
-        "Thailand",
-        "Vietnam",
-        "Cambodia",
-        "Laos",
-        "Philippines",
-        "Indonesia",
-        "Malaysia",
-        "Singapore",
-        "Taiwan",
-        "Hong Kong",
-        "Mongolia",
-    ]
-    # African
-    african = [
-        "Nigeria",
-        "Ethiopia",
-        "Egypt",
-        "South Africa",
-        "Kenya",
-        "Tanzania",
-        "Uganda",
-        "Ghana",
-        "Morocco",
-        "Algeria",
-        "Sudan",
-        "Mozambique",
-        "Madagascar",
-        "Cameroon",
-        "Ivory Coast",
-        "Niger",
-        "Burkina Faso",
-        "Mali",
-        "Senegal",
-        "Zambia",
-        "Zimbabwe",
-        "Tunisia",
-        "Libya",
-    ]
-    # American
-    american = [
-        "United States",
-        "Canada",
-        "Mexico",
-        "Brazil",
-        "Argentina",
-        "Chile",
-        "Colombia",
-        "Peru",
-        "Venezuela",
-        "Ecuador",
-        "Bolivia",
-        "Paraguay",
-        "Uruguay",
-        "Cuba",
-        "Dominican Republic",
-        "Puerto Rico",
-        "Jamaica",
-        "Haiti",
-        "Trinidad and Tobago",
-        "Bahamas",
-        "Barbados",
-        "Guyana",
-        "Suriname",
-        "Belize",
-        "Costa Rica",
-        "Panama",
-        "Nicaragua",
-        "Honduras",
-        "El Salvador",
-        "Guatemala",
-    ]
-    # Oceanian
-    oceanian = [
-        "Australia",
-        "New Zealand",
-        "Fiji",
-        "Papua New Guinea",
-        "Samoa",
-        "Tonga",
-        "Vanuatu",
-        "Solomon Islands",
-        "Micronesia",
-        "Palau",
-        "Marshall Islands",
-        "Kiribati",
-        "Tuvalu",
-        "Nauru",
-    ]
-
-    mappings = [
-        *[("Nordic", country) for country in nordic],
-        *[("European", country) for country in european],
-        *[("Middle Eastern", country) for country in middle_eastern],
-        *[("Asian", country) for country in asian],
-        *[("African", country) for country in african],
-        *[("American", country) for country in american],
-        *[("Oceanian", country) for country in oceanian],
-    ]
-
-    conn.executemany(
-        "INSERT OR IGNORE INTO region_mapping (region, nationality) VALUES (?, ?)",
-        mappings,
-    )
-
-
 def get_unclassified_names(limit: int | None = None) -> list[UnclassifiedName]:
     """Get names that haven't been classified with origin region."""
-    with get_connection() as conn:
-        query = """
-            SELECT id, name FROM names
-            WHERE origin_region IS NULL
-            ORDER BY id
-        """
-        if limit:
-            query += f" LIMIT {limit}"
-
-        cursor = conn.execute(query)
-        return [UnclassifiedName(id=row[0], name=row[1]) for row in cursor.fetchall()]
+    _sync_connection_path()
+    return name_store.get_unclassified_names(limit=limit)
 
 
 def update_name_origin(name_id: int, region: str, confidence: float) -> None:
     """Update a name's origin region and confidence."""
-    with get_connection() as conn:
-        conn.execute(
-            """
-            UPDATE names
-            SET origin_region = ?,
-                origin_confidence = ?,
-                origin_classified_at = CURRENT_TIMESTAMP,
-                updated_at = CURRENT_TIMESTAMP
-            WHERE id = ?
-            """,
-            (region, confidence, name_id),
-        )
+    _sync_connection_path()
+    name_store.update_name_origin(name_id, region, confidence)
 
 
 def get_names_with_origins(
     confidence_threshold: float = 0.5,
 ) -> dict[str, tuple[str, float, str, str]]:
-    """Get dictionary of known name -> (region, confidence, phonetic_primary, phonetic_secondary)
-    for names with origin classification above confidence threshold.
-
-    Useful for phonetic similarity classification.
-    """
-    with get_connection() as conn:
-        cursor = conn.execute(
-            """
-            SELECT name, origin_region, origin_confidence, phonetic_primary, phonetic_secondary
-            FROM names
-            WHERE origin_region IS NOT NULL
-            AND origin_confidence >= ?
-            """,
-            (confidence_threshold,),
-        )
-        result = {}
-        for row in cursor:
-            result[row["name"]] = (
-                row["origin_region"],
-                row["origin_confidence"],
-                row["phonetic_primary"] or "",
-                row["phonetic_secondary"] or "",
-            )
-        return result
+    """Get known name -> (region, confidence, phonetic_primary, phonetic_secondary)."""
+    _sync_connection_path()
+    return name_store.get_names_with_origins(confidence_threshold=confidence_threshold)
 
 
 def get_names_by_filters(
     gender: str | None = None,
     origins: list[str] | None = None,
 ) -> list[str]:
-    """Get names filtered by gender and origin regions.
-    Returns list of names.
-    """
-    query = "SELECT name FROM names WHERE 1=1"
-    params = []
-
-    if gender and gender != "All":
-        query += " AND gender = ?"
-        params.append(gender)
-
-    if origins:
-        # If origins list is provided but empty, return no names
-        # If origins contains "International", include NULL origin_region
-        if "International" in origins:
-            # Include both NULL and specified regions
-            placeholders = ", ".join(["?"] * (len(origins) - 1))
-            template = " AND (origin_region IN ({ph}) OR origin_region IS NULL)"
-            query = query + template.format(ph=placeholders)
-            params.extend([o for o in origins if o != "International"])
-        else:
-            placeholders = ", ".join(["?"] * len(origins))
-            template = " AND origin_region IN ({ph})"
-            query = query + template.format(ph=placeholders)
-            params.extend(origins)
-
-    query += " ORDER BY name"
-
-    with get_connection() as conn:
-        cursor = conn.execute(query, params)
-        return [row[0] for row in cursor.fetchall()]
+    """Get names filtered by gender and origin regions."""
+    _sync_connection_path()
+    return name_store.get_names_by_filters(gender=gender, origins=origins)
 
 
 def get_names_by_gender() -> dict[str, list[str]]:
-    """Get names categorized by gender.
-    Returns dict with keys: "Male", "Female", "Unisex", "All".
-    Unisex names are included in both "Male" and "Female" categories.
-    """
-    with get_connection() as conn:
-        # Get all names with gender
-        cursor = conn.execute("""
-            SELECT name, gender FROM names
-            WHERE gender IN ('Male', 'Female', 'Unisex')
-            ORDER BY name
-        """)
-        rows = cursor.fetchall()
-
-        # Initialize gender categories
-        gender_lists = {
-            "Female": set(),
-            "Male": set(),
-            "Unisex": set(),
-            "All": set(),
-        }
-
-        # Categorize names
-        for name, gender in rows:
-            # Always add to 'All' category
-            gender_lists["All"].add(name)
-
-            # Add to specific gender category
-            if gender in gender_lists:
-                gender_lists[gender].add(name)
-
-            # Unisex names also go to both Male and Female categories
-            if gender == "Unisex":
-                gender_lists["Male"].add(name)
-                gender_lists["Female"].add(name)
-
-        # Convert sets to sorted lists
-        result = {}
-        for gender, name_set in gender_lists.items():
-            result[gender] = sorted(name_set)
-
-        return result
+    """Get names categorized by gender."""
+    _sync_connection_path()
+    return name_store.get_names_by_gender()
 
 
 def get_all_origin_regions() -> list[str]:
-    """Get distinct origin regions from names table,
-    including NULL as 'International'.
-    """
-    with get_connection() as conn:
-        cursor = conn.execute("""
-            SELECT DISTINCT
-                CASE
-                    WHEN origin_region IS NULL THEN 'International'
-                    ELSE origin_region
-                END as region
-            FROM names
-            ORDER BY region
-        """)
-        return [row[0] for row in cursor.fetchall()]
-
-
-def get_ratings() -> dict[str, float]:
-    """Get all ratings as name -> rating dictionary."""
-    with get_connection() as conn:
-        cursor = conn.execute("""
-            SELECT n.name, r.rating
-            FROM names n
-            JOIN ratings r ON n.id = r.name_id
-        """)
-        return {row[0]: row[1] for row in cursor.fetchall()}
-
-
-def update_rating(name: str, rating: float) -> list[str]:
-    """Update one rating and return the skipped name when it is missing."""
-    with get_connection() as conn:
-        name_id = conn.execute(
-            "SELECT id FROM names WHERE name = ?",
-            (name,),
-        ).fetchone()
-        if not name_id:
-            logger.warning("Name not found in database: %s", name)
-            return [name]
-
-        name_id = name_id[0]
-
-        conn.execute(
-            """
-            INSERT OR REPLACE INTO ratings
-            (name_id, rating, matches, last_updated)
-            VALUES (
-                ?,
-                ?,
-                COALESCE((
-                    SELECT matches FROM ratings
-                    WHERE name_id = ?
-                ), 0),
-                CURRENT_TIMESTAMP
-            )
-        """,
-            (name_id, rating, name_id),
-        )
-    return []
-
-
-def update_ratings_batch(ratings_dict: dict[str, float]) -> list[str]:
-    """Update multiple ratings efficiently in a single transaction.
-
-    Args:
-        ratings_dict: Dictionary mapping name -> new rating
-
-    Returns:
-        Names that were skipped because they were not found.
-
-    """
-    if not ratings_dict:
-        return []
-
-    missing_names: list[str] = []
-    with get_connection() as conn:
-        for name, rating in ratings_dict.items():
-            # Get name_id
-            name_id = conn.execute(
-                "SELECT id FROM names WHERE name = ?",
-                (name,),
-            ).fetchone()
-            if not name_id:
-                logger.warning("Name not found in database: %s", name)
-                missing_names.append(name)
-                continue
-
-            name_id = name_id[0]
-
-            # Update or insert rating
-            conn.execute(
-                """
-                INSERT OR REPLACE INTO ratings
-                (name_id, rating, matches, last_updated)
-                VALUES (
-                    ?,
-                    ?,
-                    COALESCE((
-                        SELECT matches + 1 FROM ratings
-                        WHERE name_id = ?
-                    ), 1),
-                    CURRENT_TIMESTAMP
-                )
-            """,
-                (name_id, rating, name_id),
-            )
-
-    return missing_names
-
-
-def update_ratings_batch_values(ratings_dict: dict[str, float]) -> list[str]:
-    """Update multiple ratings efficiently without incrementing match counts.
-
-    Args:
-        ratings_dict: Dictionary mapping name -> new rating
-
-    Returns:
-        Names that were skipped because they were not found.
-
-    """
-    if not ratings_dict:
-        return []
-
-    missing_names: list[str] = []
-    with get_connection() as conn:
-        for name, rating in ratings_dict.items():
-            # Get name_id
-            name_id = conn.execute(
-                "SELECT id FROM names WHERE name = ?",
-                (name,),
-            ).fetchone()
-            if not name_id:
-                logger.warning("Name not found in database: %s", name)
-                missing_names.append(name)
-                continue
-
-            name_id = name_id[0]
-
-            # Update or insert rating, preserving existing matches
-            conn.execute(
-                """
-                INSERT OR REPLACE INTO ratings
-                (name_id, rating, matches, last_updated)
-                VALUES (
-                    ?,
-                    ?,
-                    COALESCE((
-                        SELECT matches FROM ratings
-                        WHERE name_id = ?
-                    ), 0),
-                    CURRENT_TIMESTAMP
-                )
-            """,
-                (name_id, rating, name_id),
-            )
-
-    return missing_names
-
-
-def record_comparison(name_a: str, name_b: str, preference: int) -> None:
-    """Record a pairwise comparison in the database.
-
-    Args:
-        name_a: First name in comparison
-        name_b: Second name in comparison
-        preference: -1 (name_a preferred), 0 (draw), 1 (name_b preferred), 2 (both disliked)
-
-    Raises:
-        ValueError: If preference not in (-1, 0, 1, 2)
-    """
-    if preference not in (-1, 0, 1, 2):
-        _msg = "preference must be -1, 0, 1, or 2"
-        raise ValueError(_msg)
-
-    with get_connection() as conn:
-        # Get name IDs
-        cursor = conn.execute(
-            "SELECT id FROM names WHERE name = ?",
-            (name_a,),
-        )
-        row = cursor.fetchone()
-        if not row:
-            _msg = f"Name not found: {name_a}"
-            raise ValueError(_msg)
-        name_a_id = row[0]
-
-        cursor = conn.execute(
-            "SELECT id FROM names WHERE name = ?",
-            (name_b,),
-        )
-        row = cursor.fetchone()
-        if not row:
-            _msg = f"Name not found: {name_b}"
-            raise ValueError(_msg)
-        name_b_id = row[0]
-
-        # Insert comparison (ignore duplicates due to UNIQUE constraint)
-        conn.execute(
-            """
-            INSERT OR IGNORE INTO comparisons
-            (name_a_id, name_b_id, preference, created_at)
-            VALUES (?, ?, ?, CURRENT_TIMESTAMP)
-            """,
-            (name_a_id, name_b_id, preference),
-        )
-
-
-def save_user_setting(key: str, value: str) -> None:
-    """Save a user setting."""
-    with get_connection() as conn:
-        conn.execute(
-            "INSERT OR REPLACE INTO user_settings (key, value) VALUES (?, ?)",
-            (key, value),
-        )
-
-
-def load_user_setting(key: str, default: str = "") -> str:
-    """Load a user setting."""
-    with get_connection() as conn:
-        cursor = conn.execute(
-            "SELECT value FROM user_settings WHERE key = ?",
-            (key,),
-        )
-        row = cursor.fetchone()
-        return row[0] if row else default
-
-
-def get_stats() -> DatabaseStats:
-    """Get database statistics."""
-    with get_connection() as conn:
-        total_names = conn.execute("SELECT COUNT(*) FROM names").fetchone()[0]
-        classified_names = conn.execute(
-            "SELECT COUNT(*) FROM names WHERE origin_region IS NOT NULL",
-        ).fetchone()[0]
-        rated_names = conn.execute("SELECT COUNT(*) FROM ratings").fetchone()[0]
-
-        origin_dist = {}
-        cursor = conn.execute("""
-            SELECT
-                CASE
-                    WHEN origin_region IS NULL THEN 'International'
-                    ELSE origin_region
-                END as region,
-                COUNT(*) as count
-            FROM names
-            GROUP BY region
-            ORDER BY count DESC
-        """)
-        for row in cursor.fetchall():
-            origin_dist[row[0]] = row[1]
-
-        unclassified_names = total_names - classified_names
-
-        return DatabaseStats(
-            total_names=total_names,
-            classified_names=classified_names,
-            unclassified_names=unclassified_names,
-            rated_names=rated_names,
-            origin_distribution=origin_dist,
-        )
-
-
-def get_total_comparisons() -> int:
-    """Get total number of recorded pairwise comparisons."""
-    with get_connection() as conn:
-        return conn.execute("SELECT COUNT(*) FROM comparisons").fetchone()[0]
-
-
-def get_comparison_count(name: str) -> int:
-    """Get number of comparisons involving a name."""
-    with get_connection() as conn:
-        # Get name ID
-        cursor = conn.execute("SELECT id FROM names WHERE name = ?", (name,))
-        row = cursor.fetchone()
-        if not row:
-            return 0
-        name_id = row[0]
-
-        # Count comparisons where name appears as name_a or name_b
-        cursor = conn.execute(
-            """
-            SELECT COUNT(*) FROM comparisons
-            WHERE name_a_id = ? OR name_b_id = ?
-            """,
-            (name_id, name_id),
-        )
-        return cursor.fetchone()[0]
-
-
-def get_preference_stats_by_gender() -> dict[str, PreferenceStats]:
-    """Get preference statistics grouped by gender.
-
-    Returns:
-        Dictionary mapping gender -> PreferenceStats
-    """
-    with get_connection() as conn:
-        # CTE to compute outcomes for each name in each comparison
-        cursor = conn.execute("""
-            WITH name_outcomes AS (
-                SELECT
-                    name_a_id as name_id,
-                    CASE
-                        WHEN preference = -1 THEN 'win'
-                        WHEN preference = 1 THEN 'loss'
-                        ELSE 'draw'
-                    END as outcome
-                FROM comparisons
-                WHERE preference IN (-1, 0, 1)
-                UNION ALL
-                SELECT
-                    name_b_id as name_id,
-                    CASE
-                        WHEN preference = 1 THEN 'win'
-                        WHEN preference = -1 THEN 'loss'
-                        ELSE 'draw'
-                    END as outcome
-                FROM comparisons
-                WHERE preference IN (-1, 0, 1)
-            )
-            SELECT
-                COALESCE(n.gender, 'Unknown') as gender,
-                no.outcome,
-                COUNT(*) as count
-            FROM name_outcomes no
-            JOIN names n ON no.name_id = n.id
-            GROUP BY n.gender, no.outcome
-            ORDER BY gender, outcome
-        """)
-        rows = cursor.fetchall()
-
-        # Initialize result dict
-        result: dict[str, dict[str, int]] = {}
-        key_map = {"win": "wins", "loss": "losses", "draw": "draws"}
-        for gender, outcome, count in rows:
-            if gender not in result:
-                result[gender] = {"wins": 0, "losses": 0, "draws": 0, "total": 0}
-            result[gender][key_map[outcome]] = count
-            result[gender]["total"] += count
-
-        # Convert to PreferenceStats
-        return {
-            gender: PreferenceStats(
-                wins=data["wins"],
-                losses=data["losses"],
-                draws=data["draws"],
-                total=data["total"],
-            )
-            for gender, data in result.items()
-        }
-
-
-def get_preference_stats_by_origin() -> dict[str, PreferenceStats]:
-    """Get preference statistics grouped by origin region.
-
-    Returns:
-        Dictionary mapping origin region -> PreferenceStats
-    """
-    with get_connection() as conn:
-        cursor = conn.execute("""
-            WITH name_outcomes AS (
-                SELECT
-                    name_a_id as name_id,
-                    CASE
-                        WHEN preference = -1 THEN 'win'
-                        WHEN preference = 1 THEN 'loss'
-                        ELSE 'draw'
-                    END as outcome
-                FROM comparisons
-                WHERE preference IN (-1, 0, 1)
-                UNION ALL
-                SELECT
-                    name_b_id as name_id,
-                    CASE
-                        WHEN preference = 1 THEN 'win'
-                        WHEN preference = -1 THEN 'loss'
-                        ELSE 'draw'
-                    END as outcome
-                FROM comparisons
-                WHERE preference IN (-1, 0, 1)
-            )
-            SELECT
-                CASE
-                    WHEN n.origin_region IS NULL THEN 'International'
-                    ELSE n.origin_region
-                END as region,
-                no.outcome,
-                COUNT(*) as count
-            FROM name_outcomes no
-            JOIN names n ON no.name_id = n.id
-            GROUP BY region, no.outcome
-            ORDER BY region, outcome
-        """)
-        rows = cursor.fetchall()
-
-        result: dict[str, dict[str, int]] = {}
-        key_map = {"win": "wins", "loss": "losses", "draw": "draws"}
-        for region, outcome, count in rows:
-            if region not in result:
-                result[region] = {"wins": 0, "losses": 0, "draws": 0, "total": 0}
-            result[region][key_map[outcome]] = count
-            result[region]["total"] += count
-
-        # Convert to PreferenceStats
-        return {
-            region: PreferenceStats(
-                wins=data["wins"],
-                losses=data["losses"],
-                draws=data["draws"],
-                total=data["total"],
-            )
-            for region, data in result.items()
-        }
-
-
-def get_preference_stats_by_phonetic() -> dict[str, PreferenceStats]:
-    """Get preference statistics grouped by phonetic primary code.
-
-    Returns:
-        Dictionary mapping phonetic code -> PreferenceStats
-    """
-    with get_connection() as conn:
-        cursor = conn.execute("""
-            WITH name_outcomes AS (
-                SELECT
-                    name_a_id as name_id,
-                    CASE
-                        WHEN preference = -1 THEN 'win'
-                        WHEN preference = 1 THEN 'loss'
-                        ELSE 'draw'
-                    END as outcome
-                FROM comparisons
-                WHERE preference IN (-1, 0, 1)
-                UNION ALL
-                SELECT
-                    name_b_id as name_id,
-                    CASE
-                        WHEN preference = 1 THEN 'win'
-                        WHEN preference = -1 THEN 'loss'
-                        ELSE 'draw'
-                    END as outcome
-                FROM comparisons
-                WHERE preference IN (-1, 0, 1)
-            )
-            SELECT
-                CASE
-                    WHEN n.phonetic_primary IS NULL OR n.phonetic_primary = '' THEN 'Unknown'
-                    ELSE n.phonetic_primary
-                END as phonetic_code,
-                no.outcome,
-                COUNT(*) as count
-            FROM name_outcomes no
-            JOIN names n ON no.name_id = n.id
-            GROUP BY phonetic_code, no.outcome
-            ORDER BY phonetic_code, outcome
-        """)
-        rows = cursor.fetchall()
-
-        result: dict[str, dict[str, int]] = {}
-        key_map = {"win": "wins", "loss": "losses", "draw": "draws"}
-        for phonetic_code, outcome, count in rows:
-            if phonetic_code not in result:
-                result[phonetic_code] = {"wins": 0, "losses": 0, "draws": 0, "total": 0}
-            result[phonetic_code][key_map[outcome]] = count
-            result[phonetic_code]["total"] += count
-
-        # Convert to PreferenceStats
-        return {
-            phonetic_code: PreferenceStats(
-                wins=data["wins"],
-                losses=data["losses"],
-                draws=data["draws"],
-                total=data["total"],
-            )
-            for phonetic_code, data in result.items()
-        }
+    """Get distinct origin regions from names table, including NULL as International."""
+    _sync_connection_path()
+    return name_store.get_all_origin_regions()
 
 
 def get_name_details_batch(
     names: list[str],
 ) -> list[NameDetails]:
-    """Get gender and origin_region for multiple names in batch.
-    Returns list of NameDetails.
-    """
-    if not names:
-        return []
-
-    # Process in chunks to avoid SQL parameter limit
-    chunk_size = MAX_SQL_PARAMS
-    result: list[NameDetails] = []
-
-    for i in range(0, len(names), chunk_size):
-        chunk = names[i : i + chunk_size]
-
-        with get_connection() as conn:
-            placeholders = ", ".join(["?"] * len(chunk))
-            template = "SELECT name, gender, origin_region FROM names WHERE name IN ({ph})"
-            query = template.format(ph=placeholders)
-            cursor = conn.execute(query, chunk)
-            rows = cursor.fetchall()
-
-            # Create mapping for fast lookup
-            details_map = {row[0]: NameDetails(gender=row[1], origin_region=row[2]) for row in rows}
-
-            # Append results for this chunk in order
-            for name in chunk:
-                if name in details_map:
-                    result.append(details_map[name])
-                else:
-                    result.append(NameDetails(gender=None, origin_region=None))
-
-    return result
+    """Get gender and origin_region for multiple names in batch."""
+    _sync_connection_path()
+    return name_store.get_name_details_batch(names)
 
 
 def get_phonetic_codes_batch(names: list[str]) -> dict[str, PhoneticCodes]:
-    """Get phonetic codes for multiple names in batch.
-    Returns dict mapping name -> PhoneticCodes.
-    Missing names are omitted from the result.
-    """
-    if not names:
-        return {}
+    """Get phonetic codes for multiple names in batch."""
+    _sync_connection_path()
+    return name_store.get_phonetic_codes_batch(names)
 
-    # Process in chunks to avoid SQL parameter limit
-    chunk_size = MAX_SQL_PARAMS
-    result: dict[str, PhoneticCodes] = {}
 
-    for i in range(0, len(names), chunk_size):
-        chunk = names[i : i + chunk_size]
+def get_ratings() -> dict[str, float]:
+    """Get all ratings as name -> rating dictionary."""
+    _sync_connection_path()
+    return ratings_store.get_ratings()
 
-        with get_connection() as conn:
-            placeholders = ", ".join(["?"] * len(chunk))
-            template = "SELECT name, phonetic_primary, phonetic_secondary FROM names WHERE name IN ({ph})"
-            query = template.format(ph=placeholders)
-            cursor = conn.execute(query, chunk)
-            rows = cursor.fetchall()
 
-            for row in rows:
-                name = row[0]
-                primary = row[1] or ""
-                secondary = row[2] or ""
-                result[name] = PhoneticCodes(primary=primary, secondary=secondary)
+def update_rating(name: str, rating: float) -> list[str]:
+    """Update one rating and return the skipped name when it is missing."""
+    _sync_connection_path()
+    return ratings_store.update_rating(name, rating)
 
-    return result
+
+def update_ratings_batch(ratings_dict: dict[str, float]) -> list[str]:
+    """Update multiple ratings in one transaction, incrementing match counts."""
+    _sync_connection_path()
+    return ratings_store.update_ratings_batch(ratings_dict)
+
+
+def update_ratings_batch_values(ratings_dict: dict[str, float]) -> list[str]:
+    """Update multiple ratings without incrementing match counts."""
+    _sync_connection_path()
+    return ratings_store.update_ratings_batch_values(ratings_dict)
+
+
+def record_comparison(name_a: str, name_b: str, preference: int) -> None:
+    """Record a pairwise comparison in the database."""
+    _sync_connection_path()
+    ratings_store.record_comparison(name_a, name_b, preference)
+
+
+def get_total_comparisons() -> int:
+    """Get total number of recorded pairwise comparisons."""
+    _sync_connection_path()
+    return ratings_store.get_total_comparisons()
+
+
+def get_comparison_count(name: str) -> int:
+    """Get number of comparisons involving a name."""
+    _sync_connection_path()
+    return ratings_store.get_comparison_count(name)
 
 
 def initialize_ratings(names: list[str]) -> dict[str, float]:
-    """Initialize ratings for a list of names with default score.
+    """Initialize ratings for a list of names with the default score."""
+    return ratings_store.initialize_ratings(names)
 
-    Args:
-        names: List of names
 
-    Returns:
-        Dictionary mapping name -> INITIAL_SCORE
+def save_user_setting(key: str, value: str) -> None:
+    """Save a user setting."""
+    _sync_connection_path()
+    settings_store.save_user_setting(key, value)
 
-    """
-    return dict.fromkeys(names, INITIAL_SCORE)
+
+def load_user_setting(key: str, default: str = "") -> str:
+    """Load a user setting."""
+    _sync_connection_path()
+    return settings_store.load_user_setting(key, default=default)
+
+
+def get_stats() -> DatabaseStats:
+    """Get database statistics."""
+    _sync_connection_path()
+    return stats_store.get_stats()
+
+
+def get_preference_stats_by_gender() -> dict[str, PreferenceStats]:
+    """Get preference statistics grouped by gender."""
+    _sync_connection_path()
+    return preference_stats_store.get_preference_stats_by_gender()
+
+
+def get_preference_stats_by_origin() -> dict[str, PreferenceStats]:
+    """Get preference statistics grouped by origin region."""
+    _sync_connection_path()
+    return preference_stats_store.get_preference_stats_by_origin()
+
+
+def get_preference_stats_by_phonetic() -> dict[str, PreferenceStats]:
+    """Get preference statistics grouped by phonetic primary code."""
+    _sync_connection_path()
+    return preference_stats_store.get_preference_stats_by_phonetic()
 
 
 if __name__ == "__main__":
-    # Initialize database if run directly
     init_database()
     print("Database initialized successfully")
     stats = get_stats()
