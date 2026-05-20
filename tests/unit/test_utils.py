@@ -525,9 +525,9 @@ class TestSyncNamesFromSubmodule:
 class TestRecordComparisonInstant:
     """Tests for the explicit model update status contract."""
 
-    @patch("st_name_ranking.model_service._update_ratings_from_model")
-    @patch("st_name_ranking.model_service._update_model_sync")
-    @patch("st_name_ranking.model_service.database.record_comparison")
+    @patch("st_name_ranking.active_learning.lazy_updates._update_ratings_from_model")
+    @patch("st_name_ranking.active_learning.lazy_updates._update_model_sync")
+    @patch("st_name_ranking.active_learning.lazy_updates.database.record_comparison")
     def test_blocking_status_reports_model_refresh_failure(
         self,
         mock_record_comparison,
