@@ -242,6 +242,13 @@ def render_tournament(names: list[str]) -> None:
 
     logger.info("🎮 Tournament started with %d names", len(names))
 
+    if len(names) < MIN_NAMES_FOR_COMPARISON:
+        if len(names) == 0:
+            st.info("No names to compare. Please select at least two names.")
+        else:
+            st.info(f"Only one name ('{names[0]}') selected. Please select at least two names to compare.")
+        return
+
     selected_sample_size = int(st.session_state.get("tournament_sample_size", len(names)))
 
     log_timing("Before queue manager")
@@ -249,10 +256,7 @@ def render_tournament(names: list[str]) -> None:
     try:
         round_state = prepare_tournament_round(names, selected_sample_size)
     except ValueError:
-        if len(names) == 0:
-            st.info("No names to compare. Please select at least two names.")
-        else:
-            st.info(f"Only one name ('{names[0]}') selected. Please select at least two names to compare.")
+        st.info("No names to compare. Please select at least two names.")
         return
 
     manager = round_state.manager
