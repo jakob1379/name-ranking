@@ -1,30 +1,37 @@
 """Smoke tests for canonical production module paths."""
 
-from scripts import (
-    benchmark_classification,
-    check_phonetic,
-    classify_names,
-    final_stats,
-    take_screenshots,
-)
-from scripts import (
-    test_classify as test_classify_script,
-)
+# Direct module imports are intentional: this test guards every canonical path,
+# and the scanner only credits explicit module import edges.
+# ruff: noqa: PLR0402
 
-from st_name_ranking import name_normalization, tournament_orchestration
-from st_name_ranking.active_learning import lazy_updates, queue, selection
-from st_name_ranking.classification import classify_origins, origin_classifier
-from st_name_ranking.commands import cli, init_database
-from st_name_ranking.interface import app_actions, main, ui
-from st_name_ranking.learning import features, model, name_queue
-from st_name_ranking.persistence import (
-    data_loader,
-    database,
-    database_io,
-    feature_cache,
-    feature_store,
-    sync_store,
-)
+import scripts.benchmark_classification as benchmark_classification
+import scripts.check_phonetic as check_phonetic
+import scripts.classify_names as classify_names
+import scripts.final_stats as final_stats
+import scripts.take_screenshots as take_screenshots
+import scripts.test_classify as test_classify_script
+
+import st_name_ranking.active_learning.lazy_updates as lazy_updates
+import st_name_ranking.active_learning.queue as queue
+import st_name_ranking.active_learning.selection as selection
+import st_name_ranking.classification.classify_origins as classify_origins
+import st_name_ranking.classification.origin_classifier as origin_classifier
+import st_name_ranking.commands.cli as cli
+import st_name_ranking.commands.init_database as init_database
+import st_name_ranking.interface.app_actions as app_actions
+import st_name_ranking.interface.main as main
+import st_name_ranking.interface.ui as ui
+import st_name_ranking.learning.features as features
+import st_name_ranking.learning.model as model
+import st_name_ranking.learning.name_queue as name_queue
+import st_name_ranking.name_normalization as name_normalization
+import st_name_ranking.persistence.data_loader as data_loader
+import st_name_ranking.persistence.database as database
+import st_name_ranking.persistence.database_io as database_io
+import st_name_ranking.persistence.feature_cache as feature_cache
+import st_name_ranking.persistence.feature_store as feature_store
+import st_name_ranking.persistence.sync_store as sync_store
+import st_name_ranking.tournament_orchestration as tournament_orchestration
 
 MODULE_CONTRACTS = [
     (app_actions, "setup_session_state"),
