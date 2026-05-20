@@ -8,9 +8,9 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from st_name_ranking import database
-from st_name_ranking.features import FeatureExtractor
-from st_name_ranking.model import BradleyTerryModel, initialize_model_if_needed
+from st_name_ranking.learning.features import FeatureExtractor
+from st_name_ranking.learning.model import BradleyTerryModel, initialize_model_if_needed
+from st_name_ranking.persistence import database
 from st_name_ranking.phonetic_similarity import phonetic_similarity
 
 logger = logging.getLogger(__name__)

@@ -8,12 +8,12 @@ import threading
 from concurrent.futures import ThreadPoolExecutor, wait
 from dataclasses import dataclass
 
-from st_name_ranking import database
 from st_name_ranking.active_learning.selection import (
     get_active_learning_model,
     get_name_features,
     get_names_features,
 )
+from st_name_ranking.persistence import database
 
 logger = logging.getLogger(__name__)
 
