@@ -151,9 +151,12 @@ Features are versioned to support schema evolution:
 
 ### Adding New Features
 
-To add new features to the extraction pipeline:
+To add new features to the extraction pipeline, use the canonical learning and
+persistence modules. The old root imports (`st_name_ranking.features`,
+`st_name_ranking.feature_store`, and `st_name_ranking.feature_cache`) are
+compatibility shims.
 
-1. **Add extraction function** in `features.py`:
+1. **Add extraction function** in `src/st_name_ranking/learning/features.py`:
 
 ```python
 def extract_custom_features(name: str) -> dict[str, float]:
@@ -164,7 +167,7 @@ def extract_custom_features(name: str) -> dict[str, float]:
     }
 ```
 
-2. **Integrate into pipeline**:
+2. **Integrate into the `FeatureExtractor` pipeline**:
 
 ```python
 def extract_all_features(name, gender, origin_region,
@@ -176,7 +179,8 @@ def extract_all_features(name, gender, origin_region,
     return features, feature_names
 ```
 
-3. **Rebuild feature cache**:
+3. **Rebuild the persisted feature cache** through
+   `st_name_ranking.persistence.feature_store` using the CLI:
 
 ```bash
 $ uv run st-name-ranking db features rebuild
