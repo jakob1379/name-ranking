@@ -3,6 +3,7 @@
 from unittest.mock import Mock, patch
 
 from st_name_ranking.active_learning import queue
+from st_name_ranking.interface import tournament_session
 
 
 def test_queue_manager_refill_adds_model_selected_pairs(monkeypatch):
@@ -94,18 +95,18 @@ def test_queue_manager_get_pair_pops_pairs_in_order(monkeypatch):
 def test_queue_manager_recreated_when_middle_names_change(monkeypatch):
     """Queue reuse should compare the full names tuple, not just list edges."""
     session_state: dict[str, object] = {}
-    monkeypatch.setattr(queue.st, "session_state", session_state)
+    monkeypatch.setattr(tournament_session.st, "session_state", session_state)
 
     with (
         patch.object(queue.QueueManager, "start", autospec=True),
         patch.object(queue.QueueManager, "stop", autospec=True) as stop,
     ):
-        first = queue.get_or_start_queue_manager(
+        first = tournament_session.get_or_start_queue_manager(
             ["Anna", "Bo", "Clara"],
             target_size=2,
             sample_size=10,
         )
-        second = queue.get_or_start_queue_manager(
+        second = tournament_session.get_or_start_queue_manager(
             ["Anna", "Dana", "Clara"],
             target_size=2,
             sample_size=10,
@@ -118,18 +119,18 @@ def test_queue_manager_recreated_when_middle_names_change(monkeypatch):
 def test_queue_manager_reused_for_exact_same_names(monkeypatch):
     """Identical queue settings and names should reuse the existing manager."""
     session_state: dict[str, object] = {}
-    monkeypatch.setattr(queue.st, "session_state", session_state)
+    monkeypatch.setattr(tournament_session.st, "session_state", session_state)
 
     with (
         patch.object(queue.QueueManager, "start", autospec=True),
         patch.object(queue.QueueManager, "stop", autospec=True) as stop,
     ):
-        first = queue.get_or_start_queue_manager(
+        first = tournament_session.get_or_start_queue_manager(
             ["Anna", "Bo", "Clara"],
             target_size=2,
             sample_size=10,
         )
-        second = queue.get_or_start_queue_manager(
+        second = tournament_session.get_or_start_queue_manager(
             ["Anna", "Bo", "Clara"],
             target_size=2,
             sample_size=10,
@@ -141,18 +142,18 @@ def test_queue_manager_reused_for_exact_same_names(monkeypatch):
 
 def test_queue_manager_recreated_when_target_size_changes(monkeypatch):
     session_state: dict[str, object] = {}
-    monkeypatch.setattr(queue.st, "session_state", session_state)
+    monkeypatch.setattr(tournament_session.st, "session_state", session_state)
 
     with (
         patch.object(queue.QueueManager, "start", autospec=True),
         patch.object(queue.QueueManager, "stop", autospec=True) as stop,
     ):
-        first = queue.get_or_start_queue_manager(
+        first = tournament_session.get_or_start_queue_manager(
             ["Anna", "Bo", "Clara"],
             target_size=2,
             sample_size=10,
         )
-        second = queue.get_or_start_queue_manager(
+        second = tournament_session.get_or_start_queue_manager(
             ["Anna", "Bo", "Clara"],
             target_size=3,
             sample_size=10,
@@ -165,12 +166,12 @@ def test_queue_manager_recreated_when_target_size_changes(monkeypatch):
 def test_queue_manager_stats_reports_session_manager(monkeypatch):
     manager = queue.QueueManager(["Anna", "Bo"], target_size=2, sample_size=2)
     monkeypatch.setattr(
-        queue.st,
+        tournament_session.st,
         "session_state",
-        {queue.QUEUE_MANAGER_KEY: manager},
+        {tournament_session.QUEUE_MANAGER_KEY: manager},
     )
 
-    stats = queue.get_queue_manager_stats()
+    stats = tournament_session.get_queue_manager_stats()
 
     assert stats is not None
     assert stats["queue_size"] == 0

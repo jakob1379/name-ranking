@@ -8,13 +8,10 @@ import time
 from collections import deque
 from typing import Final
 
-import streamlit as st
-
 from st_name_ranking.active_learning.selection import PairSelectionOptions, select_candidate_batch
 
 logger = logging.getLogger(__name__)
 
-QUEUE_MANAGER_KEY: Final[str] = "st_name_ranking_queue_manager"
 MIN_TRAINING_SAMPLES: Final[int] = 10
 MIN_NAMES_FOR_PAIR_SELECTION: Final[int] = 2
 
@@ -185,59 +182,3 @@ class QueueManager:
             queue_size = len(self.queue)
         thread_status = "running" if self._worker_thread and self._worker_thread.is_alive() else "stopped"
         return f"QueueManager(target_size={self.target_size}, current_size={queue_size}, thread={thread_status})"
-
-
-def get_or_start_queue_manager(
-    names: list[str],
-    target_size: int = 15,
-    refill_threshold: int = 5,
-    sample_size: int = 50,
-) -> QueueManager:
-    """Get or create the Streamlit session queue manager and ensure it is running.
-
-    sample_size controls the model-ranking subset used when refilling pairs.
-    """
-    names_key = tuple(names)
-    if QUEUE_MANAGER_KEY in st.session_state:
-        existing_manager: QueueManager = st.session_state[QUEUE_MANAGER_KEY]
-
-        names_match = existing_manager.names_key == names_key
-        size_match = existing_manager.target_size == target_size
-        sample_size_match = existing_manager.sample_size == sample_size
-
-        if names_match and size_match and sample_size_match:
-            logger.debug("Reusing existing QueueManager from session state")
-            return existing_manager
-
-        logger.info(
-            "Settings changed (names=%s, size=%s, sample_size=%s), stopping old QueueManager",
-            not names_match,
-            not size_match,
-            not sample_size_match,
-        )
-        existing_manager.stop()
-        del st.session_state[QUEUE_MANAGER_KEY]
-
-    manager = QueueManager(
-        names,
-        target_size=target_size,
-        refill_threshold=refill_threshold,
-        sample_size=sample_size,
-    )
-    manager.start()
-    st.session_state[QUEUE_MANAGER_KEY] = manager
-    logger.info("Created and started new QueueManager (target_size=%d)", target_size)
-
-    return manager
-
-
-def get_queue_manager_stats() -> dict[str, int | float | str] | None:
-    """Return stats for the current queue manager."""
-    if QUEUE_MANAGER_KEY not in st.session_state:
-        return None
-
-    manager: QueueManager = st.session_state[QUEUE_MANAGER_KEY]
-    stats: dict[str, int | float | str] = manager.get_stats()
-    stats["num_names"] = len(manager.names)
-    stats["thread_alive"] = manager._worker_thread is not None and manager._worker_thread.is_alive()
-    return stats

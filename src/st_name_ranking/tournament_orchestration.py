@@ -3,20 +3,18 @@
 from __future__ import annotations
 
 import logging
-import os
 from dataclasses import dataclass
-from typing import Literal
-
-import streamlit as st
+from typing import TYPE_CHECKING, Literal
 
 from st_name_ranking.active_learning.lazy_updates import ModelUpdateStatus, record_comparison_instant
-from st_name_ranking.active_learning.queue import QueueManager, get_or_start_queue_manager, get_queue_manager_stats
 from st_name_ranking.active_learning.selection import select_random_pair
+
+if TYPE_CHECKING:
+    from st_name_ranking.active_learning.queue import QueueManager
 
 logger = logging.getLogger(__name__)
 
 MIN_NAMES_FOR_TOURNAMENT = 2
-DEFAULT_QUEUE_SIZE = 15
 
 PairSource = Literal["queue", "random"]
 
@@ -41,19 +39,23 @@ class VoteResult:
     update_status: ModelUpdateStatus
 
 
-def prepare_tournament_round(names: list[str], sample_size: int) -> TournamentRound:
-    """Ensure the tournament queue and current pair are ready for rendering."""
+def prepare_tournament_round(
+    names: list[str],
+    manager: QueueManager,
+    current_pair: tuple[str, str] | None,
+    queue_stats: dict[str, int | float | str] | None,
+) -> TournamentRound:
+    """Build a tournament round from interface-owned state."""
     if len(names) < MIN_NAMES_FOR_TOURNAMENT:
         msg = f"Need at least {MIN_NAMES_FOR_TOURNAMENT} names"
         raise ValueError(msg)
 
-    manager = _get_manager(names, sample_size)
-    candidate_a, candidate_b = _ensure_current_pair(names, manager)
+    candidate_a, candidate_b = _ensure_current_pair(names, manager, current_pair)
     return TournamentRound(
         manager=manager,
         candidate_a=candidate_a,
         candidate_b=candidate_b,
-        queue_stats=get_queue_manager_stats(),
+        queue_stats=queue_stats,
     )
 
 
@@ -64,11 +66,10 @@ def record_tournament_vote(
     candidate_b: str,
     preference: int,
 ) -> VoteResult:
-    """Record a vote and advance session state to the next tournament pair."""
+    """Record a vote and return the next tournament pair."""
     update_status = record_comparison_instant(candidate_a, candidate_b, preference)
 
     next_pair, source = _select_next_pair(names, manager)
-    st.session_state.candidate_a, st.session_state.candidate_b = next_pair
     logger.debug(
         "Tournament transition: (%s, %s) -> (%s, %s) via %s",
         candidate_a,
@@ -86,29 +87,14 @@ def record_tournament_vote(
     )
 
 
-def _get_manager(names: list[str], sample_size: int) -> QueueManager:
-    target_size = int(os.environ.get("TOURNAMENT_QUEUE_SIZE", str(DEFAULT_QUEUE_SIZE)))
-    return get_or_start_queue_manager(names, target_size=target_size, sample_size=sample_size)
-
-
-def _ensure_current_pair(names: list[str], manager: QueueManager) -> tuple[str, str]:
-    names_set = set(names)
-    candidate_a = st.session_state.get("candidate_a")
-    candidate_b = st.session_state.get("candidate_b")
-
-    if (
-        isinstance(candidate_a, str)
-        and isinstance(candidate_b, str)
-        and candidate_a
-        and candidate_b
-        and candidate_a in names_set
-        and candidate_b in names_set
-        and candidate_a != candidate_b
-    ):
-        return candidate_a, candidate_b
-
+def _ensure_current_pair(
+    names: list[str],
+    manager: QueueManager,
+    current_pair: tuple[str, str] | None,
+) -> tuple[str, str]:
+    if current_pair is not None:
+        return current_pair
     pair, _source = _select_next_pair(names, manager)
-    st.session_state.candidate_a, st.session_state.candidate_b = pair
     return pair
 
 

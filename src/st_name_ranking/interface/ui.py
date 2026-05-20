@@ -16,6 +16,12 @@ from st_name_ranking.active_learning.selection import (
     get_active_learning_model,
     get_names_features,
 )
+from st_name_ranking.interface.tournament_session import (
+    get_current_pair,
+    get_or_start_tournament_queue,
+    get_queue_manager_stats,
+    set_current_pair,
+)
 from st_name_ranking.persistence.database import (
     INITIAL_SCORE,
     get_preference_stats_by_gender,
@@ -223,6 +229,7 @@ def _record_vote_and_get_next_pair(names: list[str], manager: Any, preference: i
 
     result = record_tournament_vote(names, manager, candidate_a, candidate_b, preference)
     next_pair = result.next_pair
+    set_current_pair(next_pair)
     logger.debug("Next tournament pair (%s): %s vs %s", result.pair_source, next_pair[0], next_pair[1])
     return next_pair
 
@@ -254,12 +261,19 @@ def render_tournament(names: list[str]) -> None:
     log_timing("Before queue manager")
 
     try:
-        round_state = prepare_tournament_round(names, selected_sample_size)
+        manager = get_or_start_tournament_queue(names, selected_sample_size)
+        round_state = prepare_tournament_round(
+            names,
+            manager,
+            get_current_pair(names),
+            get_queue_manager_stats(),
+        )
     except ValueError:
         st.info("No names to compare. Please select at least two names.")
         return
 
     manager = round_state.manager
+    set_current_pair((round_state.candidate_a, round_state.candidate_b))
     log_timing("After queue manager")
 
     queue_stats = round_state.queue_stats
