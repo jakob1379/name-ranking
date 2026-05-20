@@ -14,7 +14,7 @@ accuracy, prioritizing speed for batch processing of ~50k names.
 import logging
 import re
 import unicodedata
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from typing import Any, NamedTuple
 
 from metaphone import doublemetaphone
@@ -30,6 +30,9 @@ class OriginResult(NamedTuple):
 
 
 logger = logging.getLogger(__name__)
+ReferenceNameRecord = tuple[str, float, str, str]
+ReferenceNames = Mapping[str, ReferenceNameRecord]
+FrozenReferenceNames = tuple[tuple[str, ReferenceNameRecord], ...]
 
 # Classification thresholds
 MIN_ETHNIDATA_CONFIDENCE = 0.3
@@ -237,7 +240,7 @@ def rule_based_nordic_detection(name: str) -> tuple[str | None, float]:
 
 def phonetic_similarity_classification(
     name: str,
-    reference_names: dict[str, tuple[str, float, str, str]],
+    reference_names: ReferenceNames,
 ) -> tuple[str | None, float]:
     """Classify name by phonetic similarity to known reference names.
 
@@ -399,7 +402,7 @@ class OriginClassifier:
 
     def __init__(
         self,
-        reference_names: dict[str, tuple[str, float, str, str]] | None = None,
+        reference_names: ReferenceNames | None = None,
         ethnidata_classifier: ClassifierFunc | None = None,
         *,
         use_ethnidata: bool = True,
@@ -412,7 +415,7 @@ class OriginClassifier:
         use_ethnidata: Whether to lazy-load ethnidata fallback when no classifier is provided.
 
         """
-        self.reference_names = reference_names or {}
+        self.reference_names = dict(_freeze_reference_names(reference_names))
         self.ethnicolr = get_ethnicolr_classifier()
         self.ethnidata = ethnidata_classifier
         self._use_ethnidata = use_ethnidata or ethnidata_classifier is not None
@@ -534,18 +537,23 @@ class OriginClassifier:
         return results
 
 
-ReferenceCacheKey = tuple[str, int, int]
+ReferenceCacheKey = tuple[str, FrozenReferenceNames]
 
 _CLASSIFIER_CACHE: dict[ReferenceCacheKey, OriginClassifier] = {}
 
 
+def _freeze_reference_names(reference_names: ReferenceNames | None) -> FrozenReferenceNames:
+    """Return stable immutable reference-name content for cache keys and classifier state."""
+    if not reference_names:
+        return ()
+    return tuple(sorted(reference_names.items()))
+
+
 def _reference_cache_key(
-    reference_names: dict[str, tuple[str, float, str, str]] | None,
+    reference_names: ReferenceNames | None,
 ) -> ReferenceCacheKey:
     """Return the classifier-cache key for a reference-name set."""
-    if reference_names is None:
-        return ("none", 0, 0)
-    return ("reference_names", id(reference_names), len(reference_names))
+    return ("reference_names", _freeze_reference_names(reference_names))
 
 
 def reset_classifier_cache() -> None:
@@ -554,7 +562,7 @@ def reset_classifier_cache() -> None:
 
 
 def get_classifier(
-    reference_names: dict[str, tuple[str, float, str, str]] | None = None,
+    reference_names: ReferenceNames | None = None,
 ) -> OriginClassifier:
     """Get a classifier instance for the supplied reference-name set."""
     cache_key = _reference_cache_key(reference_names)

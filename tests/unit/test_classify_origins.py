@@ -44,6 +44,43 @@ class TestOriginClassifierFactory:
         mock_cls.assert_any_call(first_reference_set)
         mock_cls.assert_any_call(second_reference_set)
 
+    def test_get_classifier_reuses_cache_for_equivalent_reference_data(self):
+        """Equivalent reference data should share a classifier regardless of dict identity."""
+        first_reference_set = {"Anna": ("Nordic", 0.9, "AN", "")}
+        second_reference_set = {"Anna": ("Nordic", 0.9, "AN", "")}
+
+        with patch("st_name_ranking.origin_classifier.OriginClassifier") as mock_cls:
+            first_classifier = origin_classifier.get_classifier(first_reference_set)
+            second_classifier = origin_classifier.get_classifier(second_reference_set)
+
+        assert first_classifier is second_classifier
+        mock_cls.assert_called_once_with(first_reference_set)
+
+    def test_get_classifier_cache_key_tracks_in_place_reference_mutation(self):
+        """Mutating reference content should not reuse a stale classifier for the same dict."""
+        reference_set = {"Anna": ("Nordic", 0.9, "AN", "")}
+
+        with patch("st_name_ranking.origin_classifier.OriginClassifier") as mock_cls:
+            mock_cls.side_effect = [object(), object()]
+            first_classifier = origin_classifier.get_classifier(reference_set)
+            reference_set["Anna"] = ("European", 0.8, "MR", "")
+            second_classifier = origin_classifier.get_classifier(reference_set)
+
+        assert first_classifier is not second_classifier
+        assert mock_cls.call_count == 2
+
+    def test_origin_classifier_freezes_reference_names(self):
+        """A classifier should not observe later mutations to caller-owned reference data."""
+        reference_set = {"Anna": ("Nordic", 0.9, "AN", "")}
+
+        with patch("st_name_ranking.origin_classifier.get_ethnicolr_classifier", return_value=None):
+            classifier = origin_classifier.OriginClassifier(reference_set, use_ethnidata=False)
+
+        reference_set["Anna"] = ("European", 0.8, "MR", "")
+        reference_set["Maria"] = ("European", 0.8, "MR", "")
+
+        assert classifier.reference_names == {"Anna": ("Nordic", 0.9, "AN", "")}
+
     def test_get_classifier_uses_origin_classifier_boundary(self):
         """Test factory construction errors surface from origin_classifier directly."""
         with patch("st_name_ranking.origin_classifier.OriginClassifier", side_effect=ImportError):
