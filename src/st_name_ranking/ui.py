@@ -394,7 +394,7 @@ def render_tournament(names: list[str]) -> None:
         )
         st.markdown("</div>", unsafe_allow_html=True)
 
-    # Draw and Down buttons centered below both names
+    # Draw and both-disliked buttons centered below both names
     _, col_mid, _ = st.columns([1, 0.4, 1])
     with col_mid:
         draw_clicked = st.button(
@@ -405,9 +405,9 @@ def render_tournament(names: list[str]) -> None:
             shortcut="Up",
             help="Mark both names as equally preferred (Up arrow key)",
         )
-        down_clicked = st.button(
+        vote_both_disliked_clicked = st.button(
             "👎 Down / Dislike Both",
-            key="vote_down",
+            key="vote_both_disliked",
             width="stretch",
             type="secondary",
             shortcut="Down",
@@ -429,8 +429,8 @@ def render_tournament(names: list[str]) -> None:
         vote_action = (1, "Vote B")
     elif draw_clicked:
         vote_action = (0, "Draw")
-    elif down_clicked:
-        vote_action = (2, "Down")
+    elif vote_both_disliked_clicked:
+        vote_action = (2, "Both disliked")
 
     # Update session state and UI instantly after vote (no rerun needed)
     if vote_action is not None:

@@ -325,25 +325,25 @@ class TestTournamentTab:
         assert vote_a_button.disabled is False, "Vote A button should be clickable"
         assert vote_b_button.disabled is False, "Vote B button should be clickable"
 
-    def test_draw_and_down_buttons_exist(self, test_db_factory, setup_session_state_data):
-        """Test that draw and down vote buttons exist."""
+    def test_draw_and_both_disliked_buttons_exist(self, test_db_factory, setup_session_state_data):
+        """Test that draw and both-disliked vote buttons exist."""
         db_path = test_db_factory()
         at = run_main_app_with_tab("Tournament", db_path, setup_session_state_data)
         at.run(timeout=30)
 
-        # Find draw and down buttons by key
+        # Find draw and both-disliked buttons by key
         draw_button = None
-        down_button = None
+        both_disliked_button = None
 
         for button in at.button:
             if hasattr(button, "key"):
                 if button.key == "vote_draw":
                     draw_button = button
-                elif button.key == "vote_down":
-                    down_button = button
+                elif button.key == "vote_both_disliked":
+                    both_disliked_button = button
 
         assert draw_button is not None, "Draw button should exist"
-        assert down_button is not None, "Down vote button should exist"
+        assert both_disliked_button is not None, "Both-disliked vote button should exist"
 
     def test_candidate_displayed_in_metrics(self, test_db_factory, setup_session_state_data):
         """Test that candidate names are displayed in metric widgets."""

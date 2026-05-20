@@ -24,7 +24,7 @@ from st_name_ranking.features import FeatureExtractor
 from st_name_ranking.utils import (
     select_candidates,
     update_preference_and_save,
-    update_preference_down_and_save,
+    update_preference_both_disliked_and_save,
     update_preference_draw_and_save,
 )
 
@@ -225,8 +225,8 @@ class TestVotingWorkflow:
             assert result is not None
             assert result["preference"] == 0
 
-    def test_down_vote_updates_correctly(self, voting_db):
-        """Verify down votes (preference=2) are handled correctly."""
+    def test_both_disliked_vote_updates_correctly(self, voting_db):
+        """Verify both-disliked votes (preference=2) are handled correctly."""
         names = get_names_by_gender()
         all_names = names.get("All", [])
         ratings = initialize_or_load_ratings(all_names)
@@ -237,7 +237,7 @@ class TestVotingWorkflow:
         initial_b = ratings[name_b]
 
         # Record "both disliked" vote
-        updated_ratings = update_preference_down_and_save(ratings, name_a, name_b)
+        updated_ratings = update_preference_both_disliked_and_save(ratings, name_a, name_b)
 
         # Verify ratings were updated
         assert updated_ratings[name_a] != initial_a or updated_ratings[name_b] != initial_b
@@ -278,7 +278,7 @@ class TestVotingWorkflow:
             elif preference == 0:
                 ratings = update_preference_draw_and_save(ratings, name_a, name_b)
             elif preference == 2:
-                ratings = update_preference_down_and_save(ratings, name_a, name_b)
+                ratings = update_preference_both_disliked_and_save(ratings, name_a, name_b)
 
         # Verify comparisons recorded (at least 4 due to possible UNIQUE constraints)
         with get_connection() as conn:
@@ -299,7 +299,7 @@ class TestVotingWorkflow:
             assert pref_counts.get(-1, 0) >= 1
             # At least 1 draw vote
             assert pref_counts.get(0, 0) >= 1
-            # At least 1 down vote
+            # At least 1 both-disliked vote
             assert pref_counts.get(2, 0) >= 1
 
 

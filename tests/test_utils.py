@@ -649,8 +649,8 @@ class TestUpdatePreferenceDrawAndSave:
         assert mock_update_rating.call_count == 0
 
 
-class TestUpdatePreferenceDownAndSave:
-    """Tests for update_preference_down_and_save function (uses Bradley-Terry model)."""
+class TestUpdatePreferenceBothDislikedAndSave:
+    """Tests for update_preference_both_disliked_and_save function (uses Bradley-Terry model)."""
 
     @patch("st_name_ranking.model_service.database.update_rating")
     @patch("st_name_ranking.model_service._compute_rating_for_name")
@@ -661,12 +661,12 @@ class TestUpdatePreferenceDownAndSave:
         mock_compute_rating,
         mock_update_rating,
     ):
-        """Test successful down update and save."""
+        """Test successful both-disliked update and save."""
         ratings = {"Anna": 1500.0, "Peter": 1500.0}
         # Mock computed ratings (both may decrease)
         mock_compute_rating.side_effect = [1480.0, 1470.0]  # player_a, player_b
 
-        result = utils.update_preference_down_and_save(ratings, "Anna", "Peter", blocking=True)
+        result = utils.update_preference_both_disliked_and_save(ratings, "Anna", "Peter", blocking=True)
 
         mock_record_comparison.assert_called_once_with("Anna", "Peter", 2, blocking=True)
         # Check compute rating called for both names
@@ -693,7 +693,7 @@ class TestUpdatePreferenceDownAndSave:
         ratings = {"Anna": 1500.0, "Peter": 1500.0}
         mock_compute_rating.side_effect = RuntimeError("Computation error")
 
-        result = utils.update_preference_down_and_save(ratings, "Anna", "Peter", blocking=True)
+        result = utils.update_preference_both_disliked_and_save(ratings, "Anna", "Peter", blocking=True)
 
         assert result == ratings
         assert result is not ratings
@@ -949,10 +949,10 @@ class TestModelUpdateExceptionHandling:
     @patch("st_name_ranking.model_service.logger")
     @patch("st_name_ranking.model_service.get_name_features")
     @patch("st_name_ranking.model_service.get_active_learning_model")
-    def test_update_model_down_and_save_exception(self, mock_get_model, mock_get_name_features, mock_logger):
-        """Test exception handling in update_model_down_and_save."""
+    def test_update_model_both_disliked_and_save_exception(self, mock_get_model, mock_get_name_features, mock_logger):
+        """Test exception handling in update_model_both_disliked_and_save."""
         mock_model = MagicMock()
-        mock_model.update_both_disliked.side_effect = RuntimeError("Down update failed")
+        mock_model.update_both_disliked.side_effect = RuntimeError("Both-disliked update failed")
         mock_get_model.return_value = mock_model
 
         mock_get_name_features.side_effect = [
@@ -960,7 +960,7 @@ class TestModelUpdateExceptionHandling:
             np.array([3, 4]),
         ]
 
-        utils.update_model_down_and_save("player_a", "player_b")
+        utils.update_model_both_disliked_and_save("player_a", "player_b")
 
         mock_model.update_both_disliked.assert_called_once()
         mock_logger.exception.assert_called_once()

@@ -13,10 +13,10 @@ from st_name_ranking.active_learning.lazy_updates import (
     record_comparison_instant,
     update_model_and_save,
     update_model_async,
-    update_model_down_and_save,
+    update_model_both_disliked_and_save,
     update_model_draw_and_save,
     update_preference_and_save,
-    update_preference_down_and_save,
+    update_preference_both_disliked_and_save,
     update_preference_draw_and_save,
 )
 from st_name_ranking.active_learning.selection import (
@@ -61,10 +61,10 @@ __all__ = [
     "sync_names_from_submodule",
     "update_model_and_save",
     "update_model_async",
-    "update_model_down_and_save",
+    "update_model_both_disliked_and_save",
     "update_model_draw_and_save",
     "update_preference_and_save",
-    "update_preference_down_and_save",
+    "update_preference_both_disliked_and_save",
     "update_preference_draw_and_save",
 ]
 

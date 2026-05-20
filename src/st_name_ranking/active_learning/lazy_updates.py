@@ -149,7 +149,7 @@ def update_model_draw_and_save(player_a: str, player_b: str) -> bool:
         return True
 
 
-def update_model_down_and_save(player_a: str, player_b: str) -> bool:
+def update_model_both_disliked_and_save(player_a: str, player_b: str) -> bool:
     """Update the model for a both-disliked vote and persist it."""
     try:
         model = get_active_learning_model()
@@ -240,7 +240,7 @@ def update_preference_draw_and_save(
         return ratings.copy()
 
 
-def update_preference_down_and_save(
+def update_preference_both_disliked_and_save(
     ratings: dict[str, float],
     player_a: str,
     player_b: str,
