@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import threading
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -20,6 +21,7 @@ if TYPE_CHECKING:
 
 MIN_NAMES_FOR_PAIR_SELECTION = 2
 DEFAULT_PAIR_SAMPLE_SIZE = 50
+_ACTIVE_LEARNING_STATE_LOCK = threading.RLock()
 
 
 @dataclass(frozen=True)
@@ -39,9 +41,11 @@ class PairSelectionOptions:
 def get_active_learning_model() -> BradleyTerryModel:
     """Get or initialize the active learning model."""
     if get_active_learning_model._cache is None:
-        extractor = get_feature_extractor()
-        feature_names = extractor.get_feature_names()
-        get_active_learning_model._cache = initialize_model_if_needed(feature_names)
+        with _ACTIVE_LEARNING_STATE_LOCK:
+            if get_active_learning_model._cache is None:
+                extractor = get_feature_extractor()
+                feature_names = extractor.get_feature_names()
+                get_active_learning_model._cache = initialize_model_if_needed(feature_names)
     return get_active_learning_model._cache
 
 
@@ -51,11 +55,20 @@ get_active_learning_model._cache = None
 def get_feature_extractor() -> FeatureExtractor:
     """Get or initialize the feature extractor."""
     if get_feature_extractor._cache is None:
-        get_feature_extractor._cache = FeatureExtractor()
+        with _ACTIVE_LEARNING_STATE_LOCK:
+            if get_feature_extractor._cache is None:
+                get_feature_extractor._cache = FeatureExtractor()
     return get_feature_extractor._cache
 
 
 get_feature_extractor._cache = None
+
+
+def reset_active_learning_state() -> None:
+    """Clear active-learning singletons in one synchronized lifecycle step."""
+    with _ACTIVE_LEARNING_STATE_LOCK:
+        get_active_learning_model._cache = None
+        get_feature_extractor._cache = None
 
 
 def get_name_features(name: str) -> np.ndarray:

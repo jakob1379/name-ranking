@@ -43,8 +43,8 @@ def initialized_db(mock_db_path):
     from st_name_ranking.active_learning import selection
     from st_name_ranking.database import get_connection, init_database
 
-    # Clear feature extractor cache to prevent stale data between tests
-    selection.get_feature_extractor._cache = None
+    # Clear active-learning caches to prevent stale data between tests.
+    selection.reset_active_learning_state()
 
     init_database()
 

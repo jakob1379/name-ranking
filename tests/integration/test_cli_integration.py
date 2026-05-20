@@ -609,7 +609,7 @@ class TestCLIModelCommands:
                 assert db_samples >= 1, "Model should have training samples in DB"
 
         # Clear the global singleton to simulate fresh process
-        selection.get_active_learning_model._cache = None
+        selection.reset_active_learning_state()
 
         # Run model-reset (automatically confirms in test)
         result = cli_runner.invoke(app, ["model-reset"], input="y\n")

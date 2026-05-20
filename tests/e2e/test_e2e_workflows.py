@@ -595,7 +595,7 @@ class TestSessionPersistence:
             import st_name_ranking.active_learning.selection as selection_module
             from st_name_ranking.model import initialize_model_if_needed
 
-            selection_module.get_active_learning_model._cache = None
+            selection_module.reset_active_learning_state()
 
             # Create new feature extractor to get feature names
             extractor = FeatureExtractor()

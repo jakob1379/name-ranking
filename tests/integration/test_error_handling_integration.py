@@ -499,7 +499,7 @@ class TestRaceConditions:
     def test_model_singleton_concurrent_access(self, initialized_db):
         """Model singleton should handle concurrent access."""
         # Reset model singleton
-        selection.get_active_learning_model._cache = None
+        selection.reset_active_learning_state()
 
         # Multiple calls to get_active_learning_model should return same instance
         model1 = selection.get_active_learning_model()

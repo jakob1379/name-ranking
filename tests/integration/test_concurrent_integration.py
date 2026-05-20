@@ -652,22 +652,14 @@ class TestTransactionRollback:
             assert cursor.fetchone() is None
 
 
-class TestSingletonRaceConditions:
-    """Tests for singleton initialization race conditions."""
+class TestSingletonLifecycle:
+    """Tests for synchronized singleton lifecycle behavior."""
 
-    def test_model_singleton_race_condition_exists(self, initialized_db):
-        """
-        Demonstrate that model singleton has race condition.
-
-        WARNING: This test documents a known issue - the singleton pattern
-        in active_learning.selection is not thread-safe. Multiple threads can create
-        separate model instances simultaneously.
-        """
+    def test_model_singleton_initialization_is_thread_safe(self, initialized_db):
+        """Model singleton initialization should be thread-safe."""
         from st_name_ranking.active_learning import selection
 
-        # Reset singleton
-        selection.get_active_learning_model._cache = None
-        selection.get_feature_extractor._cache = None
+        selection.reset_active_learning_state()
 
         models = []
         errors = []
@@ -689,15 +681,8 @@ class TestSingletonRaceConditions:
         assert len(errors) == 0, f"Model initialization errors: {errors}"
         assert len(models) == 10, "Not all threads got a model"
 
-        # This documents the race condition: multiple instances may be created
-        # In production, this could lead to:
-        # - Duplicate model initialization
-        # - Wasted resources
-        # - Inconsistent model state between threads
         num_unique_models = len(set(models))
-        print(f"\nWARNING: {num_unique_models} unique model instances created (race condition)")
-        # We don't assert == 1 because the race condition exists
-        # This test documents the issue for future fixing
+        assert num_unique_models == 1, "Multiple model instances created"
 
     def test_feature_extractor_singleton_thread_safety(self, initialized_db):
         """
@@ -705,8 +690,7 @@ class TestSingletonRaceConditions:
         """
         from st_name_ranking.active_learning import selection
 
-        # Reset singleton
-        selection.get_feature_extractor._cache = None
+        selection.reset_active_learning_state()
 
         extractors = []
         errors = []
