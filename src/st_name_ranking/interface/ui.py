@@ -16,6 +16,23 @@ from st_name_ranking.active_learning.selection import (
     get_active_learning_model,
     get_names_features,
 )
+from st_name_ranking.interface.filter_state import (
+    FilterCounts,
+    apply_filter_count_transition,
+    count_filter_statuses,
+    get_excluded_names,
+    get_included_names,
+    get_undecided_names,
+    set_many_filter_statuses,
+)
+from st_name_ranking.interface.rankings_data import (
+    ClusterProfileInputs,
+    build_cluster_profiles,
+    build_cluster_summary,
+    build_global_predictor_rows,
+    build_preference_percentage_dataframe,
+    filter_ratings_for_names,
+)
 from st_name_ranking.interface.tournament_session import (
     get_current_pair,
     get_or_start_tournament_queue,
@@ -36,7 +53,6 @@ from st_name_ranking.similarity import (
     load_embedding_model,
 )
 from st_name_ranking.tournament_orchestration import prepare_tournament_round, record_tournament_vote
-from st_name_ranking.types import PreferenceStats
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -95,36 +111,6 @@ def render_preferences_panel() -> None:
     gender_stats = get_preference_stats_by_gender()
     origin_stats = get_preference_stats_by_origin()
     phonetic_stats = get_preference_stats_by_phonetic()
-
-    def create_percentage_dataframe(stats: dict[str, PreferenceStats]) -> pl.DataFrame:
-        """Convert stats dict to DataFrame with percentage columns for visualization."""
-        rows = []
-        for group, data in stats.items():
-            wins = data.wins
-            losses = data.losses
-            draws = data.draws
-            total = data.total
-
-            # Calculate percentages
-            win_pct = wins / total * 100 if total > 0 else 0.0
-            loss_pct = losses / total * 100 if total > 0 else 0.0
-            draw_pct = draws / total * 100 if total > 0 else 0.0
-            win_rate = wins / (wins + losses) * 100 if wins + losses > 0 else 0.0
-
-            rows.append(
-                {
-                    "Group": group,
-                    "Wins": wins,
-                    "Losses": losses,
-                    "Draws": draws,
-                    "Total": total,
-                    "win_pct": win_pct,
-                    "loss_pct": loss_pct,
-                    "draw_pct": draw_pct,
-                    "win_rate_pct": win_rate,
-                },
-            )
-        return pl.DataFrame(rows)
 
     def create_stacked_bar_chart(df: pl.DataFrame, title: str) -> None:
         """Create stacked bar chart showing win/loss/draw percentages."""
@@ -192,21 +178,21 @@ def render_preferences_panel() -> None:
 
     # Gender preferences
     if gender_stats:
-        df_gender = create_percentage_dataframe(gender_stats)
+        df_gender = build_preference_percentage_dataframe(gender_stats)
         create_stacked_bar_chart(df_gender, "Gender Preferences")
     else:
         st.info("No gender preference data available.")
 
     # Origin preferences
     if origin_stats:
-        df_origin = create_percentage_dataframe(origin_stats)
+        df_origin = build_preference_percentage_dataframe(origin_stats)
         create_stacked_bar_chart(df_origin, "Origin Preferences")
     else:
         st.info("No origin preference data available.")
 
     # Phonetic preferences
     if phonetic_stats:
-        df_phonetic = create_percentage_dataframe(phonetic_stats)
+        df_phonetic = build_preference_percentage_dataframe(phonetic_stats)
         create_stacked_bar_chart(df_phonetic, "Phonetic Preferences")
     else:
         st.info("No phonetic preference data available.")
@@ -596,9 +582,6 @@ def render_rankings(names: list[str]) -> None:
         st.info("No names to rank. Please include some names in the Name Filter tab first.")
         return
 
-    # Create names set for filtering
-    names_set = set(names)
-
     # Get gender-specific name lists if available
     male_names = []
     female_names = []
@@ -608,7 +591,7 @@ def render_rankings(names: list[str]) -> None:
         female_names = gender_data.get("Female", [])
 
     # Filter ratings to only show current selection
-    filtered_ratings = {name: rating for name, rating in st.session_state.ratings.items() if name in names_set}
+    filtered_ratings = filter_ratings_for_names(st.session_state.ratings, names)
 
     if not filtered_ratings:
         st.info("No ratings yet. Start comparing names in the Tournament tab to generate rankings.")
@@ -653,7 +636,6 @@ def render_rankings(names: list[str]) -> None:
                 )
 
                 sorted_names = tuple(sorted(filtered_ratings))
-                name_to_index = {name: idx for idx, name in enumerate(sorted_names)}
                 ratings_pairs = tuple(sorted(filtered_ratings.items()))
                 with st.status("Building preference landscape...", expanded=False) as status:
                     status.write("Projecting names with PaCMAP")
@@ -703,17 +685,7 @@ def render_rankings(names: list[str]) -> None:
 
                 model = get_active_learning_model()
                 feature_weights = model.state.weight_mean
-                feature_rank = np.argsort(np.abs(feature_weights))[::-1]
-                top_k = min(8, len(feature_names))
-                global_rows = [
-                    {
-                        "Feature": feature_names[idx],
-                        "Weight": float(feature_weights[idx]),
-                        "Direction": "Positive" if feature_weights[idx] >= 0 else "Negative",
-                        "Strength": float(abs(feature_weights[idx])),
-                    }
-                    for idx in feature_rank[:top_k]
-                ]
+                global_rows = build_global_predictor_rows(feature_names, feature_weights)
 
                 st.markdown("**Global predictors**")
                 st.dataframe(
@@ -726,16 +698,7 @@ def render_rankings(names: list[str]) -> None:
                     },
                 )
 
-                summary_df = (
-                    landscape_df.group_by("Cluster")
-                    .agg(
-                        pl.len().alias("Size"),
-                        pl.col("Rating").mean().alias("Avg Rating"),
-                        pl.col("Utility").mean().alias("Avg Utility"),
-                        pl.col("Uncertainty").mean().alias("Avg Uncertainty"),
-                    )
-                    .sort("Size", descending=True)
-                )
+                summary_df = build_cluster_summary(landscape_df)
 
                 st.markdown("**Cluster summary**")
                 st.dataframe(
@@ -749,24 +712,16 @@ def render_rankings(names: list[str]) -> None:
                     },
                 )
 
-                cluster_profiles = []
-                for cluster_id in summary_df["Cluster"].to_list():
-                    cluster_names = landscape_df.filter(pl.col("Cluster") == cluster_id)["Name"].to_list()
-                    cluster_idx = [name_to_index[name] for name in cluster_names]
-                    cluster_features = feature_matrix[cluster_idx]
-
-                    contribution = cluster_features.mean(axis=0) * feature_weights
-                    rank_idx = np.argsort(np.abs(contribution))[::-1][:3]
-                    label_tokens = [
-                        f"{feature_names[idx]} ({'+' if contribution[idx] >= 0 else '-'}{abs(contribution[idx]):.3f})"
-                        for idx in rank_idx
-                    ]
-                    cluster_profiles.append(
-                        {
-                            "Cluster": cluster_id,
-                            "Profile": " | ".join(label_tokens),
-                        },
-                    )
+                cluster_profiles = build_cluster_profiles(
+                    ClusterProfileInputs(
+                        landscape_df=landscape_df,
+                        summary_df=summary_df,
+                        sorted_names=sorted_names,
+                        feature_matrix=feature_matrix,
+                        feature_names=feature_names,
+                        feature_weights=feature_weights,
+                    ),
+                )
 
                 st.markdown("**Cluster profiles**")
                 st.dataframe(
@@ -780,11 +735,7 @@ def render_rankings(names: list[str]) -> None:
 
     with tab_male:
         if male_names:
-            male_ratings = {
-                name: rating
-                for name, rating in st.session_state.ratings.items()
-                if name in male_names and name in names_set
-            }
+            male_ratings = filter_ratings_for_names(st.session_state.ratings, names, allowed_names=male_names)
             if male_ratings:
                 df_male, _ = _build_rankings_dataframe(
                     tuple(male_ratings.items()),
@@ -811,11 +762,7 @@ def render_rankings(names: list[str]) -> None:
 
     with tab_female:
         if female_names:
-            female_ratings = {
-                name: rating
-                for name, rating in st.session_state.ratings.items()
-                if name in female_names and name in names_set
-            }
+            female_ratings = filter_ratings_for_names(st.session_state.ratings, names, allowed_names=female_names)
             if female_ratings:
                 df_female, _ = _build_rankings_dataframe(
                     tuple(female_ratings.items()),
@@ -864,20 +811,30 @@ def _persist_name_inclusions_json(inclusions_json: str) -> None:
     save_user_setting("name_inclusions", inclusions_json)
 
 
-def _update_filter_counts(*, old_status: bool | None, new_status: bool | None) -> None:
-    if old_status is None:
-        st.session_state.filter_counts_not_decided -= 1
-    elif old_status is True:
-        st.session_state.filter_counts_included -= 1
-    else:
-        st.session_state.filter_counts_excluded -= 1
+def _current_filter_counts() -> FilterCounts:
+    return FilterCounts(
+        not_decided=st.session_state.filter_counts_not_decided,
+        included=st.session_state.filter_counts_included,
+        excluded=st.session_state.filter_counts_excluded,
+    )
 
-    if new_status is None:
-        st.session_state.filter_counts_not_decided += 1
-    elif new_status is True:
-        st.session_state.filter_counts_included += 1
-    else:
-        st.session_state.filter_counts_excluded += 1
+
+def _store_filter_counts(counts: FilterCounts, names_hash: str | None = None) -> None:
+    st.session_state.filter_counts_not_decided = counts.not_decided
+    st.session_state.filter_counts_included = counts.included
+    st.session_state.filter_counts_excluded = counts.excluded
+    if names_hash is not None:
+        st.session_state.filter_counts_names_hash = names_hash
+
+
+def _update_filter_counts(*, old_status: bool | None, new_status: bool | None) -> None:
+    _store_filter_counts(
+        apply_filter_count_transition(
+            _current_filter_counts(),
+            old_status=old_status,
+            new_status=new_status,
+        ),
+    )
 
 
 def _clear_filter_count_cache() -> None:
@@ -902,26 +859,14 @@ def _ensure_filter_counts(names: list[str], inclusions: dict[str, bool], names_h
 
     logger.debug("Computing filter counts for %d names", len(names))
     count_loop_start = time.perf_counter()
-    not_decided = explicitly_included = explicitly_excluded = 0
-    for name in names:
-        status = inclusions.get(name)
-        if status is None:
-            not_decided += 1
-        elif status is True:
-            explicitly_included += 1
-        else:
-            explicitly_excluded += 1
-
-    st.session_state.filter_counts_not_decided = not_decided
-    st.session_state.filter_counts_included = explicitly_included
-    st.session_state.filter_counts_excluded = explicitly_excluded
-    st.session_state.filter_counts_names_hash = names_hash
+    counts = count_filter_statuses(names, inclusions)
+    _store_filter_counts(counts, names_hash)
 
     logger.debug(
         "Filter counts computed: %d not decided, %d included, %d excluded (%.1fms)",
-        not_decided,
-        explicitly_included,
-        explicitly_excluded,
+        counts.not_decided,
+        counts.included,
+        counts.excluded,
         (time.perf_counter() - count_loop_start) * 1000,
     )
 
@@ -983,7 +928,7 @@ def render_binary_filter(names: list[str]) -> None:
 
     # Filter to only undecided names for the progress tracking
     # This allows users to resume filtering without going through all already-decided names
-    undecided_names = [name for name in names if name not in inclusions]
+    undecided_names = get_undecided_names(names, inclusions)
 
     # If no undecided names, show completion message
     if not undecided_names:
@@ -1116,9 +1061,7 @@ def render_binary_filter(names: list[str]) -> None:
     col_batch1, col_batch2 = st.columns(2)
     with col_batch1:
         if st.button("Include All Remaining", type="secondary", help="Include all remaining undecided names"):
-            count = len(undecided_names) - current_idx
-            for name in undecided_names[current_idx:]:
-                inclusions[name] = True
+            count = set_many_filter_statuses(inclusions, undecided_names[current_idx:], status=True)
             st.session_state.filter_index = 0  # Reset since undecided list will be empty
             _clear_filter_count_cache()
             st.toast(f"Included {count} remaining names", icon="✅")
@@ -1128,9 +1071,7 @@ def render_binary_filter(names: list[str]) -> None:
             st.rerun(scope="fragment")
     with col_batch2:
         if st.button("Exclude All Remaining", type="secondary", help="Exclude all remaining undecided names"):
-            count = len(undecided_names) - current_idx
-            for name in undecided_names[current_idx:]:
-                inclusions[name] = False
+            count = set_many_filter_statuses(inclusions, undecided_names[current_idx:], status=False)
             st.session_state.filter_index = 0  # Reset since undecided list will be empty
             _clear_filter_count_cache()
             st.toast(f"Excluded {count} remaining names", icon="✅")
@@ -1143,7 +1084,7 @@ def render_binary_filter(names: list[str]) -> None:
 
     # Show included names in a multiselect (usually small number, performant)
     # Get list of included names for the multiselect
-    included_names = [name for name in names if inclusions.get(name) is True]
+    included_names = get_included_names(names, inclusions)
     excluded_count = st.session_state.filter_counts_excluded
 
     st.divider()
@@ -1173,7 +1114,7 @@ def render_binary_filter(names: list[str]) -> None:
     if excluded_count > 0:
         with st.expander(f"❌ Show Excluded Names ({excluded_count})"):
             # Get list of excluded names
-            excluded_names = [name for name in names if inclusions.get(name) is False]
+            excluded_names = get_excluded_names(names, inclusions)
             if excluded_names:
                 # Sort and limit for performance
                 sorted_excluded = sorted(excluded_names)[:100]
