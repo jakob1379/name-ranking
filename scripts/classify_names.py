@@ -35,8 +35,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
     _ensure_src_path()
 
-    from st_name_ranking.cli import _print_origin_classification_stats, _run_origin_classification
-    from st_name_ranking.database import get_stats
+    from st_name_ranking.commands.cli import _print_origin_classification_stats, _run_origin_classification
+    from st_name_ranking.persistence.database import get_stats
 
     print(f"=== {args.title} ===")
 
