@@ -747,6 +747,40 @@ class TestDatabaseExportImport:
 class TestFeatureCacheOperations:
     """Tests for feature cache persistence behavior."""
 
+    def test_feature_cache_keeps_versions_separate_locally(self, mock_db_path):
+        """Local cache hits should not cross feature-set versions."""
+        from st_name_ranking.database import get_connection, init_database
+        from st_name_ranking.persistence.feature_cache import FeatureCache
+
+        init_database()
+        with get_connection() as conn:
+            name_id = conn.execute(
+                "INSERT INTO names (name, gender) VALUES (?, ?)",
+                ("Anna", "Female"),
+            ).lastrowid
+            v1_id = conn.execute(
+                "INSERT INTO feature_sets (version, feature_names_json, is_active) VALUES (?, ?, ?)",
+                ("v1", json.dumps(["length"]), 1),
+            ).lastrowid
+            v2_id = conn.execute(
+                "INSERT INTO feature_sets (version, feature_names_json, is_active) VALUES (?, ?, ?)",
+                ("v2", json.dumps(["length"]), 0),
+            ).lastrowid
+            conn.execute(
+                "INSERT INTO name_features (name_id, feature_set_id, features_json) VALUES (?, ?, ?)",
+                (name_id, v1_id, json.dumps({"length": 0.2})),
+            )
+            conn.execute(
+                "INSERT INTO name_features (name_id, feature_set_id, features_json) VALUES (?, ?, ?)",
+                (name_id, v2_id, json.dumps({"length": 0.8})),
+            )
+
+        cache = FeatureCache("v1")
+
+        assert cache.get_features(name_id) == {"length": 0.2}
+        assert cache.get_features(name_id, "v2") == {"length": 0.8}
+        assert cache.get_features(name_id) == {"length": 0.2}
+
     def test_corrupt_cached_features_raise_contextual_error(self, mock_db_path):
         """Corrupt cached JSON should be reported distinctly from a cache miss."""
         from st_name_ranking.database import (

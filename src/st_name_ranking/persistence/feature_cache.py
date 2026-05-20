@@ -18,7 +18,7 @@ class FeatureCache:
         self._version = feature_set_version
         self._feature_set_id: int | None = None
         self._feature_names = feature_names
-        self._local_cache: dict[int, FeatureValues] = {}
+        self._local_cache: dict[tuple[str, int], FeatureValues] = {}
 
     def _get_feature_set_id(self) -> int:
         """Lazy-load or create the backing feature-set row."""
@@ -36,10 +36,11 @@ class FeatureCache:
 
     def get_features(self, name_id: int, feature_set_version: str | None = None) -> FeatureValues | None:
         """Get cached features or return None if not computed."""
-        if name_id in self._local_cache:
-            return self._local_cache[name_id]
-
         version = feature_set_version or self._version
+        cache_key = (version, name_id)
+        if cache_key in self._local_cache:
+            return self._local_cache[cache_key]
+
         if version != self._version:
             feature_set = database.get_feature_set_by_version(version)
             if feature_set is None:
@@ -49,7 +50,7 @@ class FeatureCache:
             features = database.get_cached_features(name_id, self._get_feature_set_id())
 
         if features is not None:
-            self._local_cache[name_id] = features
+            self._local_cache[cache_key] = features
 
         return features
 
@@ -72,7 +73,7 @@ class FeatureCache:
         else:
             feature_set_id = self._get_feature_set_id()
 
-        self._local_cache[name_id] = features_dict
+        self._local_cache[(version, name_id)] = features_dict
         database.set_cached_features(name_id, feature_set_id, features_dict)
 
     def set_features_batch(self, features_data: list[tuple[int, FeatureValues]]) -> int:
@@ -81,7 +82,7 @@ class FeatureCache:
             return 0
 
         for name_id, features in features_data:
-            self._local_cache[name_id] = features
+            self._local_cache[(self._version, name_id)] = features
 
         feature_set_id = self._get_feature_set_id()
         db_data = [(name_id, feature_set_id, features) for name_id, features in features_data]
