@@ -10,7 +10,7 @@ from typing import Literal
 import streamlit as st
 
 from st_name_ranking.active_learning.lazy_updates import ModelUpdateStatus, record_comparison_instant
-from st_name_ranking.active_learning.queue import QueueManager, get_queue_manager, get_queue_manager_stats
+from st_name_ranking.active_learning.queue import QueueManager, get_or_start_queue_manager, get_queue_manager_stats
 from st_name_ranking.active_learning.selection import select_random_pair
 
 logger = logging.getLogger(__name__)
@@ -88,7 +88,7 @@ def record_tournament_vote(
 
 def _get_manager(names: list[str], sample_size: int) -> QueueManager:
     target_size = int(os.environ.get("TOURNAMENT_QUEUE_SIZE", str(DEFAULT_QUEUE_SIZE)))
-    return get_queue_manager(names, target_size=target_size, sample_size=sample_size)
+    return get_or_start_queue_manager(names, target_size=target_size, sample_size=sample_size)
 
 
 def _ensure_current_pair(names: list[str], manager: QueueManager) -> tuple[str, str]:

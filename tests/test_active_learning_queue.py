@@ -14,12 +14,12 @@ def test_queue_manager_recreated_when_middle_names_change(monkeypatch):
         patch.object(queue.QueueManager, "start", autospec=True),
         patch.object(queue.QueueManager, "stop", autospec=True) as stop,
     ):
-        first = queue.get_queue_manager(
+        first = queue.get_or_start_queue_manager(
             ["Anna", "Bo", "Clara"],
             target_size=2,
             sample_size=10,
         )
-        second = queue.get_queue_manager(
+        second = queue.get_or_start_queue_manager(
             ["Anna", "Dana", "Clara"],
             target_size=2,
             sample_size=10,
@@ -38,12 +38,12 @@ def test_queue_manager_reused_for_exact_same_names(monkeypatch):
         patch.object(queue.QueueManager, "start", autospec=True),
         patch.object(queue.QueueManager, "stop", autospec=True) as stop,
     ):
-        first = queue.get_queue_manager(
+        first = queue.get_or_start_queue_manager(
             ["Anna", "Bo", "Clara"],
             target_size=2,
             sample_size=10,
         )
-        second = queue.get_queue_manager(
+        second = queue.get_or_start_queue_manager(
             ["Anna", "Bo", "Clara"],
             target_size=2,
             sample_size=10,

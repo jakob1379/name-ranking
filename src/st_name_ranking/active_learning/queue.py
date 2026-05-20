@@ -187,13 +187,13 @@ class QueueManager:
         return f"QueueManager(target_size={self.target_size}, current_size={queue_size}, thread={thread_status})"
 
 
-def get_queue_manager(
+def get_or_start_queue_manager(
     names: list[str],
     target_size: int = 15,
     refill_threshold: int = 5,
     sample_size: int = 50,
 ) -> QueueManager:
-    """Get or create the Streamlit session queue manager.
+    """Get or create the Streamlit session queue manager and ensure it is running.
 
     sample_size controls the model-ranking subset used when refilling pairs.
     """
