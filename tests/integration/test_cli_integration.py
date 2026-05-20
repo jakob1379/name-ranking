@@ -562,6 +562,7 @@ class TestCLIModelCommands:
         assert "Feature dimension" in result.output
         assert str(expected_dim) in result.output
         assert "Training samples" in result.output
+        assert str(expected_samples) in result.output
 
     def test_model_status_shows_feature_names(self, initialized_real_db, cli_runner):
         """Test that model-status shows feature names preview."""
@@ -757,6 +758,7 @@ class TestCLIIntegrationFlow:
         # Step 2: Reset model (confirm yes)
         reset_result = cli_runner.invoke(app, ["model-reset"], input="y\n")
         # Reset may succeed or be aborted depending on implementation
+        assert reset_result.exit_code in {0, 1}
 
         # Step 3: Check status again
         status2_result = cli_runner.invoke(app, ["model-status"])

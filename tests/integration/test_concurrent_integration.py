@@ -642,9 +642,6 @@ class TestTransactionRollback:
 
         # Verify valid operations were rolled back
         with database.get_connection() as conn:
-            cursor = conn.execute("SELECT name FROM names WHERE name = 'ValidName'")
-            # The name might exist depending on transaction boundary
-            # but the rating should not exist
             cursor = conn.execute("""
                 SELECT r.name_id FROM ratings r
                 JOIN names n ON r.name_id = n.id
@@ -652,6 +649,7 @@ class TestTransactionRollback:
             """)
             # With SQLite's default behavior and our context manager,
             # the transaction should be rolled back
+            assert cursor.fetchone() is None
 
 
 class TestSingletonRaceConditions:
@@ -886,8 +884,9 @@ class TestUtilsConcurrency:
         from st_name_ranking import database, utils
         from st_name_ranking.features import FeatureExtractor
 
-        # Initialize model first
+        # Initialize model first and verify the feature surface is available.
         extractor = FeatureExtractor()
+        assert extractor.get_feature_names()
         utils.get_active_learning_model()
 
         # Insert test names
@@ -927,8 +926,9 @@ class TestUtilsConcurrency:
         from st_name_ranking import database, utils
         from st_name_ranking.features import FeatureExtractor
 
-        # Initialize
+        # Initialize and verify the feature surface is available.
         extractor = FeatureExtractor()
+        assert extractor.get_feature_names()
         utils.get_active_learning_model()
 
         # Insert test names
@@ -1013,6 +1013,7 @@ class TestConnectionTimeoutAndLocks:
         total_time = time.time() - start
 
         # All writes should complete
+        assert total_time >= 0
         assert len(write_times) == 10, f"Only {len(write_times)} writes completed"
         assert len(errors) == 0, f"Write errors: {errors}"
 

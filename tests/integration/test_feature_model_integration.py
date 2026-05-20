@@ -333,7 +333,6 @@ def test_gender_origin_encoded_in_features(initialized_db, test_names_with_metad
     - Different origins produce different feature values
     - Encodings are one-hot like (0 or 1 for known values)
     """
-    extractor = FeatureExtractor()
     name = "TestName"
 
     # Test gender encoding
@@ -443,8 +442,6 @@ def test_model_update_batch_with_extracted_features(initialized_db, test_names_w
 
 def test_phonetic_features_consistency(initialized_db):
     """Phonetic features are consistent for similar names."""
-    extractor = FeatureExtractor()
-
     # Names with similar phonetic patterns
     similar_names = ["Anna", "Ana", "Anne", "Ann"]
 

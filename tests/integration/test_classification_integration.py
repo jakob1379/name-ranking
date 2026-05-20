@@ -639,7 +639,7 @@ class TestErrorHandling:
             "Invalid": None,  # Malformed entry
         }
 
-        classifier = origin_classifier.OriginClassifier(reference_names={"Valid": ("Nordic", 0.9, "VLDT", "")})
+        classifier = origin_classifier.OriginClassifier(reference_names=reference_names)
 
         # Should still work with valid entries
         region, confidence = classifier.classify("Valid")
@@ -648,9 +648,8 @@ class TestErrorHandling:
 
     def test_classify_origins_handles_errors(self, initialized_db, monkeypatch):
         """Test that classify_origins module handles errors gracefully."""
-        # Mock classify_name to simulate occasional failures
-        original_classify = classify_origins.classify_name
 
+        # Mock classify_name to simulate occasional failures
         def failing_classify(name: str):
             if name == "FailName":
                 return None

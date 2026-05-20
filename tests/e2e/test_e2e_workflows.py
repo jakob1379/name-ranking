@@ -378,6 +378,8 @@ class TestFilterWorkflow:
 
         # Cast vote
         updated_ratings = update_preference_and_save(ratings, name_a, name_b)
+        assert name_a in updated_ratings
+        assert name_b in updated_ratings
 
         # Verify rating persisted
         db_ratings = get_ratings()

@@ -9,6 +9,7 @@ Tests critical architectural requirements:
 """
 
 import io
+import json
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import numpy as np
@@ -69,11 +70,12 @@ class TestModelPersistenceRoundTrip:
             saved_weights = np.load(io.BytesIO(row[0]))
             saved_cov = np.load(io.BytesIO(row[1]))
             saved_samples = row[2]
-            saved_features = row[3]
+            saved_features = json.loads(row[3])
 
             np.testing.assert_array_almost_equal(original_weights, saved_weights)
             np.testing.assert_array_almost_equal(original_cov, saved_cov)
             assert original_samples == saved_samples
+            assert original_feature_names == saved_features
 
         # Create new model instance and load
         new_model = BradleyTerryModel(feature_names)
@@ -190,17 +192,6 @@ class TestTransactionSafety:
         with get_connection() as conn:
             count = conn.execute("SELECT COUNT(*) FROM comparisons").fetchone()[0]
             assert count == 1
-
-        # Simulate failure during model save by corrupting the database temporarily
-        # Save the current state, then simulate a failure scenario
-        original_model_state = None
-        with get_connection() as conn:
-            cursor = conn.execute(
-                "SELECT feature_weights, uncertainty_matrix, training_samples FROM model_state WHERE id = 1",
-            )
-            row = cursor.fetchone()
-            if row:
-                original_model_state = (row[0], row[1], row[2])
 
         # The test demonstrates that model.save_to_db and record_comparison
         # are separate operations - if one fails, the other is not rolled back
@@ -357,6 +348,7 @@ class TestConcurrentAccess:
 
         # Verify no errors occurred
         assert len(errors) == 0, f"Errors during concurrent updates: {errors}"
+        assert all(sample_count is not None for sample_count in samples)
 
         # Load final model and verify it's valid
         final_model = BradleyTerryModel(feature_names)
@@ -455,6 +447,7 @@ class TestCorruptionRecovery:
             loaded = model.load_from_db()
             # If it loaded, the data was somehow valid
             # If it didn't load, that's also acceptable
+            assert loaded in {True, False}
         except (ValueError, OSError):
             # Expected behavior - corruption detected
             pass
@@ -513,14 +506,12 @@ class TestFeatureDimensionMismatch:
         import json
 
         from st_name_ranking.database import get_connection
-        from st_name_ranking.model import BradleyTerryModel, ModelState
+        from st_name_ranking.model import BradleyTerryModel
 
         # Create a valid model state with 5 features
         feature_names = ["f1", "f2", "f3", "f4", "f5"]
         weights = np.array([1.0, 2.0, 3.0, 4.0, 5.0])
         cov = np.eye(5)
-        state = ModelState(weights, cov, 10, feature_names)
-
         # Save to database with mismatched feature_names_json (only 3 features)
         wrong_features = ["f1", "f2", "f3"]
         weights_buffer = io.BytesIO()
@@ -552,14 +543,12 @@ class TestFeatureDimensionMismatch:
         import json
 
         from st_name_ranking.database import get_connection
-        from st_name_ranking.model import BradleyTerryModel, ModelState
+        from st_name_ranking.model import BradleyTerryModel
 
         # Create a valid model state
         feature_names = ["f1", "f2", "f3", "f4", "f5"]
         weights = np.array([1.0, 2.0, 3.0, 4.0, 5.0])
         cov = np.eye(5)
-        state = ModelState(weights, cov, 10, feature_names)
-
         # Save to database
         weights_buffer = io.BytesIO()
         np.save(weights_buffer, weights)

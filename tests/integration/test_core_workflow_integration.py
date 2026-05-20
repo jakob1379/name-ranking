@@ -364,6 +364,7 @@ class TestModelPersistenceRoundTrip:
             row = cursor.fetchone()
             assert row[0] == 1, "Training samples should be 1"
             timestamp2 = row[1]
+            assert timestamp2 is not None
 
         # Load and verify
         model2 = BradleyTerryModel(feature_names)
@@ -638,16 +639,9 @@ class TestIntegrationEdgeCases:
 
     def test_model_update_with_invalid_preference(self, populated_db):
         """Test that invalid preference values raise errors."""
-        extractor = FeatureExtractor()
-        feature_names = extractor.get_feature_names()
-        model = BradleyTerryModel(feature_names)
-
         with get_connection() as conn:
             cursor = conn.execute("SELECT name, gender, origin_region FROM names LIMIT 2")
             rows = cursor.fetchall()
-
-        feat_a = extractor.extract(rows[0][0], rows[0][1], rows[0][2])
-        feat_b = extractor.extract(rows[1][0], rows[1][1], rows[1][2])
 
         # Invalid preference should raise error in record_comparison
         with pytest.raises(ValueError):

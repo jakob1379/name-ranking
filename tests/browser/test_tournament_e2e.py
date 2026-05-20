@@ -223,6 +223,7 @@ class TestTournamentE2E:
                 end_time = loop.time()
                 transition_time = end_time - start_time
                 timing_results.append(transition_time)
+                assert name_changed, "Tournament pair did not change after voting"
 
                 # Get queue status after voting
                 queue_after = await self._get_queue_status_text(page)
