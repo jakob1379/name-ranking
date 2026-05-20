@@ -568,6 +568,198 @@ def _compute_landscape(
     return landscape, feature_matrix, feature_names, status_note
 
 
+def _rating_column_config() -> dict[str, Any]:
+    return {
+        "Rating": st.column_config.NumberColumn(
+            "Rating",
+            help="Higher is better",
+            format="%d",
+            pinned=True,
+            width="small",
+        ),
+    }
+
+
+def _render_rankings_table(df: pl.DataFrame) -> None:
+    st.dataframe(
+        df,
+        width="stretch",
+        hide_index=True,
+        column_config=_rating_column_config(),
+    )
+
+
+def _render_overall_rankings(filtered_ratings: dict[str, float]) -> None:
+    overall_pairs = tuple(filtered_ratings.items())
+    df, feature_columns = _build_rankings_dataframe(overall_pairs, include_gender_male=True)
+    _render_rankings_table(df)
+    if feature_columns:
+        st.caption(f"Feature columns shown: {', '.join(feature_columns)}")
+
+
+def _render_preference_landscape(filtered_ratings: dict[str, float]) -> None:
+    st.divider()
+    st.subheader("Preference Landscape")
+
+    if len(filtered_ratings) < MIN_NAMES_FOR_LANDSCAPE:
+        st.info(f"Preference landscape appears after at least {MIN_NAMES_FOR_LANDSCAPE} rated names.")
+        return
+
+    try:
+        random_state = st.slider(
+            "Projection seed",
+            min_value=0,
+            max_value=99,
+            value=42,
+            key="rankings_projection_seed",
+        )
+
+        sorted_names = tuple(sorted(filtered_ratings))
+        ratings_pairs = tuple(sorted(filtered_ratings.items()))
+        with st.status("Building preference landscape...", expanded=False) as status:
+            status.write("Projecting names with PaCMAP")
+            status.write("Clustering projection with HDBSCAN")
+            landscape_df, feature_matrix, feature_names, status_note = _compute_landscape(
+                sorted_names,
+                ratings_pairs,
+                random_state,
+            )
+            status.update(label="Preference landscape ready", state="complete")
+
+        st.caption(status_note)
+        _render_landscape_chart(landscape_df)
+        _render_global_predictors(feature_names)
+        summary_df = _render_cluster_summary(landscape_df)
+        _render_cluster_profiles(
+            landscape_df=landscape_df,
+            summary_df=summary_df,
+            sorted_names=sorted_names,
+            feature_matrix=feature_matrix,
+            feature_names=feature_names,
+        )
+    except (RuntimeError, ValueError, ImportError) as err:
+        logger.exception("Failed to render preference landscape")
+        st.info(f"Preference landscape is temporarily unavailable: {err}")
+
+
+def _render_landscape_chart(landscape_df: pl.DataFrame) -> None:
+    plot_df = landscape_df.with_columns(
+        pl.col("Cluster").cast(pl.String).alias("Cluster Label"),
+        (20 + pl.col("Confidence") * 280).alias("Point Size"),
+    ).to_pandas()
+    if alt is not None:
+        chart = (
+            alt.Chart(plot_df)
+            .mark_circle(opacity=0.85)
+            .encode(
+                x=alt.X("Projection X:Q", title="Component 1"),
+                y=alt.Y("Projection Y:Q", title="Component 2"),
+                color=alt.Color("Cluster Label:N", title="Cluster"),
+                size=alt.Size("Point Size:Q", legend=None),
+                tooltip=[
+                    alt.Tooltip("Name:N"),
+                    alt.Tooltip("Rating:Q", format=".1f"),
+                    alt.Tooltip("Cluster Label:N", title="Cluster"),
+                    alt.Tooltip("Utility:Q", format=".4f"),
+                    alt.Tooltip("Uncertainty:Q", format=".4f"),
+                ],
+            )
+            .properties(height=480)
+        )
+        st.altair_chart(chart, width="stretch")
+    else:
+        st.scatter_chart(
+            landscape_df,
+            x="Projection X",
+            y="Projection Y",
+            color="Cluster",
+            size="Confidence",
+            width="stretch",
+        )
+
+
+def _render_global_predictors(feature_names: list[str]) -> None:
+    model = get_active_learning_model()
+    global_rows = build_global_predictor_rows(feature_names, model.state.weight_mean)
+
+    st.markdown("**Global predictors**")
+    st.dataframe(
+        pl.DataFrame(global_rows),
+        hide_index=True,
+        width="stretch",
+        column_config={
+            "Weight": st.column_config.NumberColumn(format="%.4f"),
+            "Strength": st.column_config.NumberColumn(format="%.4f"),
+        },
+    )
+
+
+def _render_cluster_summary(landscape_df: pl.DataFrame) -> pl.DataFrame:
+    summary_df = build_cluster_summary(landscape_df)
+
+    st.markdown("**Cluster summary**")
+    st.dataframe(
+        summary_df,
+        hide_index=True,
+        width="stretch",
+        column_config={
+            "Avg Rating": st.column_config.NumberColumn(format="%.1f"),
+            "Avg Utility": st.column_config.NumberColumn(format="%.4f"),
+            "Avg Uncertainty": st.column_config.NumberColumn(format="%.4f"),
+        },
+    )
+    return summary_df
+
+
+def _render_cluster_profiles(
+    *,
+    landscape_df: pl.DataFrame,
+    summary_df: pl.DataFrame,
+    sorted_names: tuple[str, ...],
+    feature_matrix: np.ndarray,
+    feature_names: list[str],
+) -> None:
+    model = get_active_learning_model()
+    cluster_profiles = build_cluster_profiles(
+        ClusterProfileInputs(
+            landscape_df=landscape_df,
+            summary_df=summary_df,
+            sorted_names=sorted_names,
+            feature_matrix=feature_matrix,
+            feature_names=feature_names,
+            feature_weights=model.state.weight_mean,
+        ),
+    )
+
+    st.markdown("**Cluster profiles**")
+    st.dataframe(
+        pl.DataFrame(cluster_profiles).sort("Cluster"),
+        hide_index=True,
+        width="stretch",
+    )
+
+
+def _render_gender_rankings(
+    label: str,
+    gender_names: list[str],
+    names: list[str],
+) -> None:
+    if not gender_names:
+        st.info(f"No gender data available for {label.lower()} names.")
+        return
+
+    gender_ratings = filter_ratings_for_names(st.session_state.ratings, names, allowed_names=gender_names)
+    if not gender_ratings:
+        st.info(f"No {label.lower()} names rated yet.")
+        return
+
+    df, _feature_columns = _build_rankings_dataframe(
+        tuple(gender_ratings.items()),
+        include_gender_male=False,
+    )
+    _render_rankings_table(df)
+
+
 def render_rankings(names: list[str]) -> None:
     """Render rankings view showing top rated names.
 
@@ -601,191 +793,14 @@ def render_rankings(names: list[str]) -> None:
     tab_overall, tab_male, tab_female = st.tabs(["Overall", "Male", "Female"])
 
     with tab_overall:
-        overall_pairs = tuple(filtered_ratings.items())
-        df, feature_columns = _build_rankings_dataframe(overall_pairs, include_gender_male=True)
-        st.dataframe(
-            df,
-            width="stretch",
-            hide_index=True,
-            column_config={
-                "Rating": st.column_config.NumberColumn(
-                    "Rating",
-                    help="Higher is better",
-                    format="%d",
-                    pinned=True,
-                    width="small",
-                ),
-            },
-        )
-        if feature_columns:
-            st.caption(f"Feature columns shown: {', '.join(feature_columns)}")
-
-        st.divider()
-        st.subheader("Preference Landscape")
-
-        if len(filtered_ratings) < MIN_NAMES_FOR_LANDSCAPE:
-            st.info(f"Preference landscape appears after at least {MIN_NAMES_FOR_LANDSCAPE} rated names.")
-        else:
-            try:
-                random_state = st.slider(
-                    "Projection seed",
-                    min_value=0,
-                    max_value=99,
-                    value=42,
-                    key="rankings_projection_seed",
-                )
-
-                sorted_names = tuple(sorted(filtered_ratings))
-                ratings_pairs = tuple(sorted(filtered_ratings.items()))
-                with st.status("Building preference landscape...", expanded=False) as status:
-                    status.write("Projecting names with PaCMAP")
-                    status.write("Clustering projection with HDBSCAN")
-                    landscape_df, feature_matrix, feature_names, status_note = _compute_landscape(
-                        sorted_names,
-                        ratings_pairs,
-                        random_state,
-                    )
-                    status.update(label="Preference landscape ready", state="complete")
-
-                st.caption(status_note)
-
-                plot_df = landscape_df.with_columns(
-                    pl.col("Cluster").cast(pl.String).alias("Cluster Label"),
-                    (20 + pl.col("Confidence") * 280).alias("Point Size"),
-                ).to_pandas()
-                if alt is not None:
-                    chart = (
-                        alt.Chart(plot_df)
-                        .mark_circle(opacity=0.85)
-                        .encode(
-                            x=alt.X("Projection X:Q", title="Component 1"),
-                            y=alt.Y("Projection Y:Q", title="Component 2"),
-                            color=alt.Color("Cluster Label:N", title="Cluster"),
-                            size=alt.Size("Point Size:Q", legend=None),
-                            tooltip=[
-                                alt.Tooltip("Name:N"),
-                                alt.Tooltip("Rating:Q", format=".1f"),
-                                alt.Tooltip("Cluster Label:N", title="Cluster"),
-                                alt.Tooltip("Utility:Q", format=".4f"),
-                                alt.Tooltip("Uncertainty:Q", format=".4f"),
-                            ],
-                        )
-                        .properties(height=480)
-                    )
-                    st.altair_chart(chart, width="stretch")
-                else:
-                    st.scatter_chart(
-                        landscape_df,
-                        x="Projection X",
-                        y="Projection Y",
-                        color="Cluster",
-                        size="Confidence",
-                        width="stretch",
-                    )
-
-                model = get_active_learning_model()
-                feature_weights = model.state.weight_mean
-                global_rows = build_global_predictor_rows(feature_names, feature_weights)
-
-                st.markdown("**Global predictors**")
-                st.dataframe(
-                    pl.DataFrame(global_rows),
-                    hide_index=True,
-                    width="stretch",
-                    column_config={
-                        "Weight": st.column_config.NumberColumn(format="%.4f"),
-                        "Strength": st.column_config.NumberColumn(format="%.4f"),
-                    },
-                )
-
-                summary_df = build_cluster_summary(landscape_df)
-
-                st.markdown("**Cluster summary**")
-                st.dataframe(
-                    summary_df,
-                    hide_index=True,
-                    width="stretch",
-                    column_config={
-                        "Avg Rating": st.column_config.NumberColumn(format="%.1f"),
-                        "Avg Utility": st.column_config.NumberColumn(format="%.4f"),
-                        "Avg Uncertainty": st.column_config.NumberColumn(format="%.4f"),
-                    },
-                )
-
-                cluster_profiles = build_cluster_profiles(
-                    ClusterProfileInputs(
-                        landscape_df=landscape_df,
-                        summary_df=summary_df,
-                        sorted_names=sorted_names,
-                        feature_matrix=feature_matrix,
-                        feature_names=feature_names,
-                        feature_weights=feature_weights,
-                    ),
-                )
-
-                st.markdown("**Cluster profiles**")
-                st.dataframe(
-                    pl.DataFrame(cluster_profiles).sort("Cluster"),
-                    hide_index=True,
-                    width="stretch",
-                )
-            except (RuntimeError, ValueError, ImportError) as err:
-                logger.exception("Failed to render preference landscape")
-                st.info(f"Preference landscape is temporarily unavailable: {err}")
+        _render_overall_rankings(filtered_ratings)
+        _render_preference_landscape(filtered_ratings)
 
     with tab_male:
-        if male_names:
-            male_ratings = filter_ratings_for_names(st.session_state.ratings, names, allowed_names=male_names)
-            if male_ratings:
-                df_male, _ = _build_rankings_dataframe(
-                    tuple(male_ratings.items()),
-                    include_gender_male=False,
-                )
-                st.dataframe(
-                    df_male,
-                    width="stretch",
-                    hide_index=True,
-                    column_config={
-                        "Rating": st.column_config.NumberColumn(
-                            "Rating",
-                            help="Higher is better",
-                            format="%d",
-                            pinned=True,
-                            width="small",
-                        ),
-                    },
-                )
-            else:
-                st.info("No male names rated yet.")
-        else:
-            st.info("No gender data available for male names.")
+        _render_gender_rankings("Male", male_names, names)
 
     with tab_female:
-        if female_names:
-            female_ratings = filter_ratings_for_names(st.session_state.ratings, names, allowed_names=female_names)
-            if female_ratings:
-                df_female, _ = _build_rankings_dataframe(
-                    tuple(female_ratings.items()),
-                    include_gender_male=False,
-                )
-                st.dataframe(
-                    df_female,
-                    width="stretch",
-                    hide_index=True,
-                    column_config={
-                        "Rating": st.column_config.NumberColumn(
-                            "Rating",
-                            help="Higher is better",
-                            format="%d",
-                            pinned=True,
-                            width="small",
-                        ),
-                    },
-                )
-            else:
-                st.info("No female names rated yet.")
-        else:
-            st.info("No gender data available for female names.")
+        _render_gender_rankings("Female", female_names, names)
 
 
 def _load_cached_name_inclusions() -> dict[str, bool]:
