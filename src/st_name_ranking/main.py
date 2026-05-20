@@ -115,13 +115,13 @@ def show_reset_included_dialog() -> None:
             st.rerun()
 
 
-def _render_database_sidebar() -> None:
+def render_sidebar_database_controls() -> None:
     st.subheader("Database Management")
 
     database.init_database()
     try:
         stats = database.get_stats()
-        total_names = stats.total_names
+        total_names = _stats_total_names(stats)
         try:
             total_comparisons = int(database.get_total_comparisons())
         except (TypeError, ValueError):
@@ -147,7 +147,7 @@ def _render_database_sidebar() -> None:
             st.rerun()
 
 
-def _ensure_names_loaded() -> None:
+def ensure_names_loaded() -> None:
     if "all_names_data" in st.session_state:
         return
 
@@ -187,7 +187,7 @@ def _ensure_names_loaded() -> None:
     )
 
 
-def _render_filter_controls() -> None:
+def render_sidebar_filter_controls() -> None:
     st.subheader("Filtering")
 
     if "gender_filter" not in st.session_state:
@@ -242,7 +242,7 @@ def _render_filter_controls() -> None:
         st.rerun()
 
 
-def _render_danger_zone() -> None:
+def render_sidebar_danger_zone() -> None:
     st.divider()
     st.subheader("⚠️ Danger Zone")
 
@@ -280,7 +280,7 @@ def _render_danger_zone() -> None:
         show_reset_ratings_dialog()
 
 
-def _render_export_controls() -> None:
+def render_sidebar_export_controls() -> None:
     st.subheader("Export")
     if not st.button("Export Database", width="stretch"):
         return
@@ -297,14 +297,20 @@ def _render_export_controls() -> None:
         st.error(f"Failed to export database: {e}")
 
 
-def _render_sidebar() -> None:
+def render_sidebar() -> None:
     with st.sidebar:
-        _render_database_sidebar()
+        render_sidebar_database_controls()
         st.divider()
-        _ensure_names_loaded()
-        _render_filter_controls()
-        _render_danger_zone()
-        _render_export_controls()
+        ensure_names_loaded()
+        render_sidebar_filter_controls()
+        render_sidebar_danger_zone()
+        render_sidebar_export_controls()
+
+
+def _stats_total_names(stats: object) -> int:
+    if isinstance(stats, dict):
+        return int(stats.get("total_names", 0))
+    return int(getattr(stats, "total_names", 0))
 
 
 def _render_missing_names_message() -> None:
@@ -316,7 +322,7 @@ def _render_missing_names_message() -> None:
     database.init_database()
     try:
         stats = database.get_stats()
-        total_names = stats.total_names
+        total_names = _stats_total_names(stats)
         if total_names == 0:
             st.warning("Database is empty. You need to sync names first.")
         else:
@@ -327,7 +333,7 @@ def _render_missing_names_message() -> None:
         st.warning("Unable to read database statistics.")
 
 
-def _get_filtered_names_for_current_state() -> list[str] | None:
+def resolve_filtered_names() -> list[str] | None:
     current_gender = st.session_state.get("gender_filter", "All")
     current_origins = st.session_state.get("origin_filter", [])
     origins_to_filter = current_origins or None
@@ -435,7 +441,7 @@ def _resolve_sample_size(count: int, candidate: int | None) -> int:
     return options[-1]
 
 
-def _render_sample_size_control(filtered_count: int) -> None:
+def resolve_tournament_sample_size(filtered_count: int) -> int:
     if "tournament_sample_size" not in st.session_state:
         stored_sample_size = database.load_user_setting(
             "tournament_sample_size",
@@ -465,9 +471,10 @@ def _render_sample_size_control(filtered_count: int) -> None:
             st.session_state.tournament_sample_size = selected_sample_size
             database.save_user_setting("tournament_sample_size", str(selected_sample_size))
             st.rerun()
+    return st.session_state.tournament_sample_size
 
 
-def _render_tab_selector() -> None:
+def render_tab_selector() -> None:
     if "active_tab" not in st.session_state:
         st.session_state.active_tab = "Name Filter"
 
@@ -507,7 +514,7 @@ def _render_tab_selector() -> None:
 
 
 def _render_active_tab(filtered_names: list[str], filtered_names_included: list[str]) -> None:
-    _render_tab_selector()
+    render_tab_selector()
     st.divider()
 
     if st.session_state.active_tab == "Name Filter":
@@ -525,19 +532,19 @@ def main() -> None:
     st.set_page_config(page_title="Name Ranker", layout="wide")
     st.title("Name Preference Ranker")
 
-    _render_sidebar()
+    render_sidebar()
 
     if "all_names_data" not in st.session_state:
         _render_missing_names_message()
         return
 
-    filtered_names = _get_filtered_names_for_current_state()
+    filtered_names = resolve_filtered_names()
     if not filtered_names:
         return
 
     filtered_names_included = _get_included_names(filtered_names)
     filtered_count = len(filtered_names_included)
-    _render_sample_size_control(filtered_count)
+    resolve_tournament_sample_size(filtered_count)
     st.session_state.tournament_filtered_count = filtered_count
     _render_active_tab(filtered_names, filtered_names_included)
 
