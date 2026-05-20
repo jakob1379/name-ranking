@@ -17,7 +17,7 @@ import numpy as np
 import pytest
 
 from st_name_ranking.database import get_connection
-from st_name_ranking.features import FeatureExtractor, extract_all_features
+from st_name_ranking.features import FeatureExtractor, extract_all_features, extract_suffix_features
 from st_name_ranking.model import BradleyTerryModel
 from st_name_ranking.utils import get_name_features, get_names_features
 
@@ -180,6 +180,14 @@ def test_batch_extract_rejects_metadata_length_mismatch(feature_extractor, kwarg
     """Batch metadata must align with every requested name."""
     with pytest.raises(ValueError, match=field):
         feature_extractor.batch_extract(["Anna", "Peter"], **kwargs)
+
+
+def test_suffix_features_empty_name_returns_zero_features():
+    """Suffix features should handle empty names like other feature groups."""
+    features = extract_suffix_features("")
+
+    assert features
+    assert all(value == 0.0 for value in features.values())
 
 
 def test_feature_dimensions_consistent(initialized_db, test_names_with_metadata):

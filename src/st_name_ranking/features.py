@@ -162,6 +162,23 @@ MASCULINE_PREFIXES = [
 ]
 
 DANISH_VOWELS = set("aeiouyæøå")
+SUFFIX_FEATURE_KEYS = [
+    "ends_with_a",
+    "ends_with_o",
+    "ends_with_us",
+    "ends_with_ie",
+    "ends_with_ette",
+    "ends_with_elle",
+    "ends_with_ck",
+    "ends_with_sh",
+    "suffix_feminine_score",
+    "suffix_masculine_score",
+    "prefix_feminine",
+    "prefix_masculine",
+    "ends_open_syllable",
+    "coda_weight",
+    "closed_heavy",
+]
 
 
 def extract_suffix_features(name: str) -> dict[str, float]:
@@ -170,6 +187,9 @@ def extract_suffix_features(name: str) -> dict[str, float]:
     Returns features based on cross-cultural research showing strong gender
     associations with certain name endings and beginnings.
     """
+    if not name:
+        return dict.fromkeys(SUFFIX_FEATURE_KEYS, 0.0)
+
     name_lower = name.lower()
     features: dict[str, float] = {}
 

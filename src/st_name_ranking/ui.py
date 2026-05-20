@@ -1023,6 +1023,45 @@ def render_binary_filter(names: list[str]) -> None:
     update_display(current_name, current_idx)
     log_timing("After display update")
 
+    def display_next_undecided_name() -> None:
+        if current_name in undecided_names:
+            undecided_names.remove(current_name)
+
+        if st.session_state.filter_index >= len(undecided_names):
+            st.session_state.filter_index = 0
+
+        next_idx = st.session_state.filter_index
+        if undecided_names:
+            update_display(undecided_names[next_idx], next_idx)
+        else:
+            st.success("✅ All names processed! Switch to Tournament tab.")
+
+    def apply_current_decision(*, status: bool, label: str, icon: str) -> None:
+        logger.info("%s %s: %s", icon, label, current_name)
+        button_click_start = time.perf_counter()
+
+        old_status = inclusions.get(current_name)
+        inclusions[current_name] = status
+        _update_filter_counts(old_status=old_status, new_status=status)
+        st.toast(f"{label}: {current_name}", icon=icon)
+        st.session_state.last_button_press_time = time.perf_counter()
+        _persist_name_inclusions(inclusions)
+        display_next_undecided_name()
+
+        logger.info("⚡ %s handled in %.1fms", label, (time.perf_counter() - button_click_start) * 1000)
+
+    def move_name_to_undecided(name: str, source_label: str) -> None:
+        old_status = inclusions.get(name)
+        if old_status is None:
+            return
+
+        del inclusions[name]
+        _update_filter_counts(old_status=old_status, new_status=None)
+        logger.info("🔄 %s moved from %s to not decided", name, source_label)
+        st.toast(f"{name} moved to not decided", icon="🔄")
+        _persist_name_inclusions(inclusions)
+        st.rerun(scope="fragment")
+
     # Decision buttons - simplified to two clear options
     col_exclude, col_include = st.columns(2)
     with col_exclude:
@@ -1033,26 +1072,7 @@ def render_binary_filter(names: list[str]) -> None:
             type="secondary",
             shortcut="Left",
         ):
-            logger.info("👎 Excluding: %s", current_name)
-            button_click_start = time.perf_counter()
-            old_status = inclusions.get(current_name)
-            inclusions[current_name] = False
-            _update_filter_counts(old_status=old_status, new_status=False)
-            st.session_state.filter_index += 1
-            st.toast(f"Excluded: {current_name}", icon="👎")
-            st.session_state.last_button_press_time = time.perf_counter()
-            _persist_name_inclusions(inclusions)
-            # INSTANT UPDATE - no rerun!
-            # Remove current name from undecided list for instant feedback
-            if current_name in undecided_names:
-                undecided_names.remove(current_name)
-            next_idx = st.session_state.filter_index
-            if next_idx < len(undecided_names):
-                update_display(undecided_names[next_idx], next_idx)
-            else:
-                # All done!
-                st.success("✅ All names processed! Switch to Tournament tab.")
-            logger.info("⚡ Exclude handled in %.1fms", (time.perf_counter() - button_click_start) * 1000)
+            apply_current_decision(status=False, label="Excluded", icon="👎")
     with col_include:
         if st.button(
             "Include",
@@ -1061,27 +1081,7 @@ def render_binary_filter(names: list[str]) -> None:
             type="primary",
             shortcut="Right",
         ):
-            logger.info("👍 Including: %s", current_name)
-            button_click_start = time.perf_counter()
-            # Include (explicitly mark as included)
-            old_status = inclusions.get(current_name)
-            inclusions[current_name] = True
-            _update_filter_counts(old_status=old_status, new_status=True)
-            st.session_state.filter_index += 1
-            st.toast(f"Included: {current_name}", icon="👍")
-            st.session_state.last_button_press_time = time.perf_counter()
-            _persist_name_inclusions(inclusions)
-            # INSTANT UPDATE - no rerun!
-            # Remove current name from undecided list for instant feedback
-            if current_name in undecided_names:
-                undecided_names.remove(current_name)
-            next_idx = st.session_state.filter_index
-            if next_idx < len(undecided_names):
-                update_display(undecided_names[next_idx], next_idx)
-            else:
-                # All done!
-                st.success("✅ All names processed! Switch to Tournament tab.")
-            logger.info("⚡ Include handled in %.1fms", (time.perf_counter() - button_click_start) * 1000)
+            apply_current_decision(status=True, label="Included", icon="👍")
 
     # Save decisions periodically (every 50 actions to reduce DB writes)
     if current_idx % 50 == 0:
@@ -1149,14 +1149,7 @@ def render_binary_filter(names: list[str]) -> None:
         selected_set = set(selected_included)
         for name in sorted_included:
             if name not in selected_set:
-                # User unchecked this name - move to not decided
-                old_status = inclusions.get(name)
-                del inclusions[name]  # Remove from dict = not decided
-                _update_filter_counts(old_status=old_status, new_status=None)
-                logger.info("🔄 %s moved from included to not decided", name)
-                st.toast(f"{name} moved to not decided", icon="🔄")
-                _persist_name_inclusions(inclusions)
-                st.rerun(scope="fragment")
+                move_name_to_undecided(name, "included")
     else:
         st.info("No names included yet. Use 'Include' button above to add names.")
 
@@ -1185,14 +1178,7 @@ def render_binary_filter(names: list[str]) -> None:
                 selected_set = set(selected_excluded)
                 for name in sorted_excluded:
                     if name not in selected_set:
-                        # User unchecked this name - move to not decided
-                        old_status = inclusions.get(name)
-                        del inclusions[name]  # Remove from dict = not decided
-                        _update_filter_counts(old_status=old_status, new_status=None)
-                        logger.info("🔄 %s moved from excluded to not decided", name)
-                        st.toast(f"{name} moved to not decided", icon="🔄")
-                        _persist_name_inclusions(inclusions)
-                        st.rerun(scope="fragment")
+                        move_name_to_undecided(name, "excluded")
 
     log_timing("At end")
 
