@@ -40,6 +40,7 @@ dependencies = [
   "metaphone",
   "pyphen>=0.17.2",
   "rich>=14.3.3",
+  "scikit-learn>=1.5.1",
   "streamlit>=1.55.0",
   "typer>=0.24.1"
 ]
