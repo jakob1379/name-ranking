@@ -615,12 +615,13 @@ def _print_origin_classification_stats(label: str = "Origin Classification Stati
     _print_origin_distribution(stats)
 
 
+@origins_app.command("classify")
 def _run_origin_classification(
-    limit: int | None,
-    batch_size: int,
     *,
-    show_stats: bool = False,
-    stats_only: bool = False,
+    limit: Annotated[int | None, ORIGIN_LIMIT_OPTION] = None,
+    batch_size: Annotated[int, ORIGIN_BATCH_SIZE_OPTION] = 100,
+    show_stats: Annotated[bool, ORIGIN_SHOW_STATS_OPTION] = False,
+    stats_only: Annotated[bool, ORIGIN_STATS_ONLY_OPTION] = False,
 ) -> int:
     """Run the canonical origin-classification maintenance workflow."""
     console.print("[bold blue]Processing Data Enrichment[/bold blue]")
@@ -646,23 +647,6 @@ def _run_origin_classification(
         _print_origin_classification_stats("Origin Classification Statistics")
 
     return classified
-
-
-@origins_app.command("classify")
-def origins_classify(
-    *,
-    limit: Annotated[int | None, ORIGIN_LIMIT_OPTION] = None,
-    batch_size: Annotated[int, ORIGIN_BATCH_SIZE_OPTION] = 100,
-    show_stats: Annotated[bool, ORIGIN_SHOW_STATS_OPTION] = False,
-    stats_only: Annotated[bool, ORIGIN_STATS_ONLY_OPTION] = False,
-) -> None:
-    """Classify unclassified name origins."""
-    _run_origin_classification(
-        limit=limit,
-        batch_size=batch_size,
-        show_stats=show_stats,
-        stats_only=stats_only,
-    )
 
 
 @app.command("process", hidden=True)
