@@ -4,7 +4,7 @@ Integration tests using Playwright for the Name Ranking application.
 These tests actually interact with a running Streamlit application and test
 end-to-end functionality including UI interactions and backend responses.
 
-These tests are separate from test_ui.py which uses Streamlit's AppTest framework.
+These tests are separate from tests/unit/test_ui.py which uses Streamlit's AppTest framework.
 
 Requirements:
 - Playwright browsers installed (run: uv run playwright install chromium)
@@ -17,7 +17,7 @@ Usage:
     uv run streamlit run src/st_name_ranking/main.py
 
     # Run integration tests:
-    uv run pytest tests/test_integration_playwright.py --run-integration --run-playwright -v
+    uv run pytest tests/browser/test_integration_playwright.py --run-integration --run-playwright -v
 
 Note: These tests are slower and require more setup than unit tests.
 They are marked with @pytest.mark.integration and @pytest.mark.playwright
@@ -46,7 +46,7 @@ if is_nix_environment():
         "Skipping Playwright tests in Nix environment due to browser version mismatch.\n"
         "Nix provides chromium-1200 but Playwright expects chromium-1194.\n"
         "To run Playwright tests, use a non-Nix environment or CI with compatible browsers.\n"
-        "For UI testing in Nix, use AppTest-based tests (test_ui.py).",
+        "For UI testing in Nix, use AppTest-based tests (tests/unit/test_ui.py).",
         allow_module_level=True,
     )
 

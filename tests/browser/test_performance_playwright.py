@@ -354,5 +354,5 @@ class TestDatabasePerformance:
 
 if __name__ == "__main__":
     print(
-        "Run with: pytest tests/test_performance_playwright.py --app-url=http://localhost:8501 --run-integration --run-playwright -v",
+        "Run with: pytest tests/browser/test_performance_playwright.py --app-url=http://localhost:8501 --run-integration --run-playwright -v",
     )

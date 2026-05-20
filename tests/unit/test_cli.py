@@ -71,10 +71,12 @@ def test_cli_help(cli_runner):
     result = cli_runner.invoke(app, ["--help"])
     assert result.exit_code == 0
     assert "Name Ranking Database Management CLI" in result.output
-    # Typer uses different help format - check for command names
-    assert "init" in result.output
-    assert "process" in result.output
-    assert "stats" in result.output
+    assert "db" in result.output
+
+    db_help = cli_runner.invoke(app, ["db", "--help"])
+    assert db_help.exit_code == 0
+    assert "init" in db_help.output
+    assert "stats" in db_help.output
 
 
 def test_cli_init_basic(mock_db_path, cli_runner):
