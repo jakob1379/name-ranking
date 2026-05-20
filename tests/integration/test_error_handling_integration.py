@@ -191,16 +191,15 @@ class TestEmptyDatabaseEdgeCases:
     """Tests for empty or minimal database scenarios."""
 
     def test_handles_empty_database(self, mock_db_path):
-        """With no names, candidate selection should return empty."""
+        """With no names, strict candidate selection should report absence."""
         from st_name_ranking.database import init_database
         from st_name_ranking.utils import select_candidates
 
         # Initialize empty database
         init_database()
 
-        # Select candidates from empty list
-        result = select_candidates([])
-        assert result == ("", ""), "Should return empty tuple for empty names list"
+        with pytest.raises(ValueError, match="Need at least 2 names"):
+            select_candidates([])
 
     def test_single_name_no_pairs(self, mock_db_path):
         """With one name, can't form comparison pairs."""
@@ -215,9 +214,8 @@ class TestEmptyDatabaseEdgeCases:
                 ("SoloName", "Male"),
             )
 
-        # Try to select pair with single name
-        result = select_candidates(["SoloName"])
-        assert result == ("", ""), "Should return empty tuple for single name"
+        with pytest.raises(ValueError, match="Need at least 2 names"):
+            select_candidates(["SoloName"])
 
     def test_model_pair_selection_with_two_names(self, initialized_db):
         """Model should handle minimum case of exactly 2 names."""

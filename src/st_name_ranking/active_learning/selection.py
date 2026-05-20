@@ -104,12 +104,25 @@ def select_candidates(
     sample_size limits model ranking to a random subset; None uses
     DEFAULT_PAIR_SAMPLE_SIZE capped to the number of candidate names.
     """
+    pair = try_select_candidates(names, features, sample_size)
+    if pair is None:
+        msg = f"Need at least {MIN_NAMES_FOR_PAIR_SELECTION} names"
+        raise ValueError(msg)
+    return pair
+
+
+def try_select_candidates(
+    names: list[str],
+    features: np.ndarray | None = None,
+    sample_size: int | None = None,
+) -> tuple[str, str] | None:
+    """Select one candidate pair, or return None when no pair is available."""
     pairs = select_candidate_pairs(
         names,
         features,
         PairSelectionOptions(batch_size=1, sample_size=sample_size),
     )
-    return pairs[0] if pairs else ("", "")
+    return pairs[0] if pairs else None
 
 
 def select_candidate_batch(

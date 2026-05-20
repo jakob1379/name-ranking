@@ -239,8 +239,15 @@ class TestSelectCandidates:
 
     def test_empty_names(self):
         """Test with empty or single name list."""
-        assert utils.select_candidates([]) == ("", "")
-        assert utils.select_candidates(["Anna"]) == ("", "")
+        with pytest.raises(ValueError, match="Need at least 2 names"):
+            utils.select_candidates([])
+        with pytest.raises(ValueError, match="Need at least 2 names"):
+            utils.select_candidates(["Anna"])
+
+    def test_try_select_candidates_empty_names(self):
+        """The explicit try_* API returns None when no pair is available."""
+        assert utils.try_select_candidates([]) is None
+        assert utils.try_select_candidates(["Anna"]) is None
 
     @patch(
         "st_name_ranking.utils.database.get_comparison_count",

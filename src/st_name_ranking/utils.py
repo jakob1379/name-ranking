@@ -42,6 +42,7 @@ __all__ = [
     "record_comparison_instant",
     "setup_session_state",
     "sync_names_from_submodule",
+    "try_select_candidates",
 ]
 
 # Minimum names required for pair selection
@@ -62,13 +63,26 @@ def select_candidates(
         sample_size: Optional model-ranking subset size. None uses the pair-selection default capped to the number of names.
 
     """
+    pair = try_select_candidates(names, features, sample_size)
+    if pair is None:
+        msg = f"Need at least {MIN_NAMES_FOR_PAIR_SELECTION} names"
+        raise ValueError(msg)
+    return pair
+
+
+def try_select_candidates(
+    names: list[str],
+    features: np.ndarray | None = None,
+    sample_size: int | None = None,
+) -> tuple[str, str] | None:
+    """Select one candidate pair, or return None when no pair is available."""
     pairs = _select_candidate_pairs(
         names,
         features,
         PairSelectionOptions(batch_size=1, sample_size=sample_size),
         _pair_selection_dependencies(),
     )
-    return pairs[0] if pairs else ("", "")
+    return pairs[0] if pairs else None
 
 
 def select_candidate_batch(
