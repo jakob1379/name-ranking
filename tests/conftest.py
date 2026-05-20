@@ -128,7 +128,7 @@ def mock_classifier():
     from st_name_ranking import classify_origins, origin_classifier
 
     # Clear singleton cache to ensure fresh classifier
-    origin_classifier.get_classifier._cache = None
+    origin_classifier._CLASSIFIER_CACHE.clear()
     classify_origins.get_classifier._cache = None
 
     # The classifier expects a callable that returns (region, confidence) tuple

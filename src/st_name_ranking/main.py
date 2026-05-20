@@ -4,7 +4,6 @@ Refactored version with modular imports.
 
 import json
 import logging
-import os
 import secrets
 import sqlite3
 import time
@@ -13,18 +12,15 @@ from datetime import UTC, datetime
 import streamlit as st
 
 from st_name_ranking import database
-from st_name_ranking.background_queue import get_queue_manager
 from st_name_ranking.data_loader import load_names_by_gender
 from st_name_ranking.database import initialize_ratings
 from st_name_ranking.ui import render_binary_filter, render_rankings, render_similarity, render_tournament
 from st_name_ranking.utils import (
-    get_active_learning_model,
     setup_session_state,
     sync_names_from_submodule,
 )
 
 logger = logging.getLogger(__name__)
-MIN_NAMES_FOR_TOURNAMENT = 2
 DEFAULT_TOURNAMENT_SAMPLE_SIZE: int | None = None
 logger.setLevel(logging.INFO)
 
@@ -119,232 +115,214 @@ def show_reset_included_dialog() -> None:
             st.rerun()
 
 
-def main() -> None:
-    start_time = time.perf_counter()
-    st.set_page_config(page_title="Name Ranker", layout="wide")
-    st.title("Name Preference Ranker")
+def _render_database_sidebar() -> None:
+    st.subheader("Database Management")
 
-    # Data Loading - Only from submodule
-    with st.sidebar:
-        # Database Management - Always show even if names not loaded
-        st.subheader("Database Management")
-
-        # Database stats
-        database.init_database()
+    database.init_database()
+    try:
+        stats = database.get_stats()
+        total_names = stats.total_names
         try:
-            stats = database.get_stats()
-            total_names = stats.total_names
-            try:
-                total_comparisons = int(database.get_total_comparisons())
-            except (TypeError, ValueError):
-                total_comparisons = 0
+            total_comparisons = int(database.get_total_comparisons())
+        except (TypeError, ValueError):
+            total_comparisons = 0
 
-            st.metric(
-                "Names in Database",
-                f"{total_names:,}",
-                f"{total_comparisons:,} comparisons",
-                border=True,
-            )
-        except sqlite3.Error:
-            st.caption("Database stats unavailable")
-
-        if st.button(
-            "Sync Names",
-            icon="🔄",
-            help="Sync names from submodule to database",
-            width="stretch",
-        ):
-            inserted = sync_names_from_submodule()
-            if inserted > 0:
-                st.rerun()
-
-        st.divider()
-
-        # Auto-load from submodule on first run
-        if "all_names_data" not in st.session_state:
-            with st.spinner("Loading names from submodule..."):
-                gender_data = load_names_by_gender(sync_with_submodule=False)
-
-            if gender_data and "All" in gender_data:
-                # Store the full dataset
-                st.session_state.all_names_data = gender_data
-                st.session_state.all_names = gender_data["All"]
-
-                # Initialize with all names for ratings
-                setup_session_state(gender_data["All"])
-
-                # Pre-load the active learning model in background
-                # so Tournament tab is ready instantly when clicked
-                get_active_learning_model()
-
-                st.toast(
-                    f"Loaded {len(gender_data['All'])} total names",
-                    icon="✅",
-                )
-
-                # Show breakdown
-                for gender in ["Male", "Female", "Unisex"]:
-                    if gender in gender_data:
-                        st.toast(
-                            f"{gender}: {len(gender_data[gender])} names",
-                            icon="ℹ️",
-                        )
-            else:
-                st.toast(
-                    "Failed to load names from submodule",
-                    icon="❌",
-                    duration="long",
-                )
-                # Don't return - allow user to sync names from database management section
-
-        # Filtering
-        st.subheader("Filtering")
-
-        # Gender selection
-        if "gender_filter" not in st.session_state:
-            # Random initial gender for demo purposes
-            st.session_state.gender_filter = secrets.choice(["Male", "Female"])
-
-        gender_option = st.pills(
-            "Gender:",
-            ["All", "Male", "Female"],
-            default=st.session_state.gender_filter,
-            help=("Select which gender of names to compare. Click or use left/right arrow keys to navigate."),
+        st.metric(
+            "Names in Database",
+            f"{total_names:,}",
+            f"{total_comparisons:,} comparisons",
+            border=True,
         )
+    except sqlite3.Error:
+        st.caption("Database stats unavailable")
 
-        if gender_option != st.session_state.gender_filter:
-            st.session_state.gender_filter = gender_option
-            st.toast(
-                f"Filter set to: {gender_option}",
-                icon="ℹ️",
-            )
-            # When changing filter, we need to update the displayed names
-            # but keep all ratings
+    if st.button(
+        "Sync Names",
+        icon="🔄",
+        help="Sync names from submodule to database",
+        width="stretch",
+    ):
+        inserted = sync_names_from_submodule()
+        if inserted > 0:
             st.rerun()
 
-        # Origin selection
-        database.init_database()
-        available_regions = database.get_all_origin_regions()
 
-        if "origin_filter" not in st.session_state:
-            # Load saved origin filter from database
-            saved_origins_json = database.load_user_setting(
-                "selected_origins",
-                "[]",
-            )
-            try:
-                saved_origins = json.loads(saved_origins_json)
-                # Validate that saved origins are still available
-                saved_origins = [o for o in saved_origins if o in available_regions]
-                st.session_state.origin_filter = saved_origins
-            except json.JSONDecodeError:
-                # Default: empty list (show all regions)
-                st.session_state.origin_filter = []
-
-        selected_origins = st.multiselect(
-            "Origin regions:",
-            options=available_regions,
-            default=st.session_state.origin_filter,
-            help="Select origin regions. Empty shows all.",
-        )
-
-        # Save to session state and persist to database if changed
-        if selected_origins != st.session_state.origin_filter:
-            st.session_state.origin_filter = selected_origins
-            # Save to database
-            database.save_user_setting(
-                "selected_origins",
-                json.dumps(selected_origins),
-            )
-            st.toast(
-                f"Filter: {selected_origins or 'All'}",
-                icon="ℹ️",
-            )
-            st.rerun()
-
-        # Danger Zone - destructive actions grouped together
-        st.divider()
-        st.subheader("⚠️ Danger Zone")
-
-        if "names" in st.session_state and st.session_state.names:
-            st.caption(f"Active Dataset: {len(st.session_state.names)} names")
-
-        col1, col2 = st.columns(2)
-        with col1:
-            if st.button(
-                "Reset\nExcluded",
-                type="secondary",
-                help="Move all excluded names back to 'not decided'",
-                width="stretch",
-                key="reset_excluded_btn",
-            ):
-                show_reset_excluded_dialog()
-
-        with col2:
-            if st.button(
-                "Reset\nIncluded",
-                type="secondary",
-                help="Move all included names back to 'not decided'",
-                width="stretch",
-                key="reset_included_btn",
-            ):
-                show_reset_included_dialog()
-
-        # Reset Ratings button (full width, below the two column buttons)
-        if st.button(
-            "Reset Ratings",
-            type="secondary",
-            help="Reset all tournament ratings to initial values",
-            width="stretch",
-            key="reset_ratings_btn",
-        ):
-            show_reset_ratings_dialog()
-
-        # Export
-        st.subheader("Export")
-        if st.button("Export Database", width="stretch"):
-            try:
-                db_bytes = database.export_database()
-                st.download_button(
-                    label="Download Database",
-                    data=db_bytes,
-                    file_name=f"name_ranker_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}.db",
-                    mime="application/x-sqlite3",
-                )
-            except (OSError, RuntimeError) as e:
-                st.error(f"Failed to export database: {e}")
-
-    # Main Content
-    if "all_names_data" not in st.session_state:
-        st.error("No names loaded in the database.")
-        st.info(
-            "Click **Sync Names** in the sidebar to load names from the submodule.",
-        )
-
-        # Show database status
-        database.init_database()
-        try:
-            stats = database.get_stats()
-            total_names = stats.total_names
-            if total_names == 0:
-                st.warning("Database is empty. You need to sync names first.")
-            else:
-                st.success(
-                    f"Database has {total_names} names. Try reloading the page.",
-                )
-        except sqlite3.Error:
-            st.warning("Unable to read database statistics.")
-
+def _ensure_names_loaded() -> None:
+    if "all_names_data" in st.session_state:
         return
 
-    # Get current gender filter
-    current_gender = st.session_state.get("gender_filter", "All")
-    # Get current origin filter
-    current_origins = st.session_state.get("origin_filter", [])
-    # Empty list means no origin filtering (show all regions)
-    origins_to_filter = current_origins or None
+    with st.spinner("Loading names from submodule..."):
+        gender_data = load_names_by_gender(sync_with_submodule=False)
 
-    # Get filtered names using database with caching
+    if gender_data and "All" in gender_data:
+        st.session_state.all_names_data = gender_data
+        st.session_state.all_names = gender_data["All"]
+        setup_session_state(gender_data["All"])
+
+        st.toast(
+            f"Loaded {len(gender_data['All'])} total names",
+            icon="✅",
+        )
+
+        for gender in ["Male", "Female", "Unisex"]:
+            if gender in gender_data:
+                st.toast(
+                    f"{gender}: {len(gender_data[gender])} names",
+                    icon="ℹ️",
+                )
+        return
+
+    st.toast(
+        "Failed to load names from submodule",
+        icon="❌",
+        duration="long",
+    )
+
+
+def _render_filter_controls() -> None:
+    st.subheader("Filtering")
+
+    if "gender_filter" not in st.session_state:
+        st.session_state.gender_filter = secrets.choice(["Male", "Female"])
+
+    gender_option = st.pills(
+        "Gender:",
+        ["All", "Male", "Female"],
+        default=st.session_state.gender_filter,
+        help=("Select which gender of names to compare. Click or use left/right arrow keys to navigate."),
+    )
+
+    if gender_option != st.session_state.gender_filter:
+        st.session_state.gender_filter = gender_option
+        st.toast(
+            f"Filter set to: {gender_option}",
+            icon="ℹ️",
+        )
+        st.rerun()
+
+    database.init_database()
+    available_regions = database.get_all_origin_regions()
+
+    if "origin_filter" not in st.session_state:
+        saved_origins_json = database.load_user_setting(
+            "selected_origins",
+            "[]",
+        )
+        try:
+            saved_origins = json.loads(saved_origins_json)
+            st.session_state.origin_filter = [origin for origin in saved_origins if origin in available_regions]
+        except json.JSONDecodeError:
+            st.session_state.origin_filter = []
+
+    selected_origins = st.multiselect(
+        "Origin regions:",
+        options=available_regions,
+        default=st.session_state.origin_filter,
+        help="Select origin regions. Empty shows all.",
+    )
+
+    if selected_origins != st.session_state.origin_filter:
+        st.session_state.origin_filter = selected_origins
+        database.save_user_setting(
+            "selected_origins",
+            json.dumps(selected_origins),
+        )
+        st.toast(
+            f"Filter: {selected_origins or 'All'}",
+            icon="ℹ️",
+        )
+        st.rerun()
+
+
+def _render_danger_zone() -> None:
+    st.divider()
+    st.subheader("⚠️ Danger Zone")
+
+    if "names" in st.session_state and st.session_state.names:
+        st.caption(f"Active Dataset: {len(st.session_state.names)} names")
+
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button(
+            "Reset\nExcluded",
+            type="secondary",
+            help="Move all excluded names back to 'not decided'",
+            width="stretch",
+            key="reset_excluded_btn",
+        ):
+            show_reset_excluded_dialog()
+
+    with col2:
+        if st.button(
+            "Reset\nIncluded",
+            type="secondary",
+            help="Move all included names back to 'not decided'",
+            width="stretch",
+            key="reset_included_btn",
+        ):
+            show_reset_included_dialog()
+
+    if st.button(
+        "Reset Ratings",
+        type="secondary",
+        help="Reset all tournament ratings to initial values",
+        width="stretch",
+        key="reset_ratings_btn",
+    ):
+        show_reset_ratings_dialog()
+
+
+def _render_export_controls() -> None:
+    st.subheader("Export")
+    if not st.button("Export Database", width="stretch"):
+        return
+
+    try:
+        db_bytes = database.export_database()
+        st.download_button(
+            label="Download Database",
+            data=db_bytes,
+            file_name=f"name_ranker_{datetime.now(UTC).strftime('%Y%m%d_%H%M%S')}.db",
+            mime="application/x-sqlite3",
+        )
+    except (OSError, RuntimeError) as e:
+        st.error(f"Failed to export database: {e}")
+
+
+def _render_sidebar() -> None:
+    with st.sidebar:
+        _render_database_sidebar()
+        st.divider()
+        _ensure_names_loaded()
+        _render_filter_controls()
+        _render_danger_zone()
+        _render_export_controls()
+
+
+def _render_missing_names_message() -> None:
+    st.error("No names loaded in the database.")
+    st.info(
+        "Click **Sync Names** in the sidebar to load names from the submodule.",
+    )
+
+    database.init_database()
+    try:
+        stats = database.get_stats()
+        total_names = stats.total_names
+        if total_names == 0:
+            st.warning("Database is empty. You need to sync names first.")
+        else:
+            st.success(
+                f"Database has {total_names} names. Try reloading the page.",
+            )
+    except sqlite3.Error:
+        st.warning("Unable to read database statistics.")
+
+
+def _get_filtered_names_for_current_state() -> list[str] | None:
+    current_gender = st.session_state.get("gender_filter", "All")
+    current_origins = st.session_state.get("origin_filter", [])
+    origins_to_filter = current_origins or None
     cache_key = f"filtered_names_{current_gender}_{tuple(sorted(current_origins)) if current_origins else 'all'}"
 
     if (
@@ -389,12 +367,9 @@ def main() -> None:
                 f"No names found for gender filter: {current_gender}",
                 icon="⚠️",
             )
-        return
+        return None
 
-    # Get total names count for reference (all names in database)
     total_names_count = len(st.session_state.all_names)
-
-    # Show filter info
     if current_origins:
         st.toast(
             f"Showing {len(filtered_names)} names "
@@ -408,8 +383,10 @@ def main() -> None:
             f"Showing {len(filtered_names)} {current_gender.lower()} names out of {total_names_count} total",
             icon="ℹ️",
         )
+    return filtered_names
 
-    # Load inclusion decisions and apply filter
+
+def _load_name_inclusions() -> dict:
     inclusions_json = database.load_user_setting("name_inclusions", "{}")
     inclusions = {}
     try:
@@ -418,34 +395,39 @@ def main() -> None:
             inclusions = loaded
     except json.JSONDecodeError as e:
         logger.warning("Failed to parse inclusions JSON: %s", e)
+    return inclusions
 
-    # Filter names: include names that are not explicitly excluded (default True)
-    filtered_names_included = [
+
+def _get_included_names(filtered_names: list[str]) -> list[str]:
+    inclusions = _load_name_inclusions()
+    return [
         name
         for name in filtered_names
         if inclusions.get(name, True)  # True if not in dict or value is True
     ]
 
-    filtered_count = len(filtered_names_included)
 
-    def build_sample_size_options(count: int) -> list[int]:
-        if count <= 0:
-            return []
-        options = [50, 100, 500, 1000]
-        options.extend(range(2000, count + 1, 1000))
-        valid_options = sorted({value for value in options if value <= count})
-        if count not in valid_options:
-            valid_options.append(count)
-        return sorted(valid_options)
+def _build_sample_size_options(count: int) -> list[int]:
+    if count <= 0:
+        return []
+    options = [50, 100, 500, 1000]
+    options.extend(range(2000, count + 1, 1000))
+    valid_options = sorted({value for value in options if value <= count})
+    if count not in valid_options:
+        valid_options.append(count)
+    return sorted(valid_options)
 
-    def resolve_sample_size(count: int, candidate: int | None) -> int:
-        options = build_sample_size_options(count)
-        if not options:
-            return 0
-        if candidate in options:
-            return candidate
-        return options[-1]
 
+def _resolve_sample_size(count: int, candidate: int | None) -> int:
+    options = _build_sample_size_options(count)
+    if not options:
+        return 0
+    if candidate in options:
+        return candidate
+    return options[-1]
+
+
+def _render_sample_size_control(filtered_count: int) -> None:
     if "tournament_sample_size" not in st.session_state:
         stored_sample_size = database.load_user_setting(
             "tournament_sample_size",
@@ -455,10 +437,10 @@ def main() -> None:
             parsed_sample_size = int(stored_sample_size)
         except (TypeError, ValueError):
             parsed_sample_size = DEFAULT_TOURNAMENT_SAMPLE_SIZE
-        st.session_state.tournament_sample_size = resolve_sample_size(filtered_count, parsed_sample_size)
+        st.session_state.tournament_sample_size = _resolve_sample_size(filtered_count, parsed_sample_size)
 
-    sample_size_options = build_sample_size_options(filtered_count)
-    selected_sample_size = resolve_sample_size(
+    sample_size_options = _build_sample_size_options(filtered_count)
+    selected_sample_size = _resolve_sample_size(
         filtered_count,
         st.session_state.get("tournament_sample_size"),
     )
@@ -476,28 +458,11 @@ def main() -> None:
             database.save_user_setting("tournament_sample_size", str(selected_sample_size))
             st.rerun()
 
-    tournament_names = filtered_names_included
-    st.session_state.tournament_filtered_count = filtered_count
 
-    # Initialize QueueManager ONLY when on Tournament tab
-    # This avoids slowing down Name Filter with unnecessary background work
-    if st.session_state.get("active_tab") == "Tournament" and len(tournament_names) >= MIN_NAMES_FOR_TOURNAMENT:
-        # Queue size from environment variable (default 15)
-        queue_size = int(os.environ.get("TOURNAMENT_QUEUE_SIZE", "15"))
-        get_queue_manager(tournament_names, queue_size, sample_size=selected_sample_size)
-        logger.debug("Initialized QueueManager for Tournament tab")
-    else:
-        logger.debug(
-            "Skipping QueueManager init (tab=%s, names=%d)",
-            st.session_state.get("active_tab"),
-            len(tournament_names),
-        )
-
-    # Tab selection - only render active tab to improve performance
+def _render_tab_selector() -> None:
     if "active_tab" not in st.session_state:
         st.session_state.active_tab = "Name Filter"
 
-    # Display tab selector as radio buttons in columns for better UX
     col1, col2, col3, col4 = st.columns(4)
     with col1:
         if st.button(
@@ -532,19 +497,42 @@ def main() -> None:
             st.session_state.active_tab = "Similarity Search"
             st.rerun()
 
+
+def _render_active_tab(filtered_names: list[str], filtered_names_included: list[str]) -> None:
+    _render_tab_selector()
     st.divider()
 
-    # Render only the active tab
     if st.session_state.active_tab == "Name Filter":
         render_binary_filter(filtered_names)
     elif st.session_state.active_tab == "Tournament":
-        render_tournament(tournament_names)
+        render_tournament(filtered_names_included)
     elif st.session_state.active_tab == "Rankings":
         render_rankings(filtered_names_included)
     else:  # Similarity Search
         render_similarity(filtered_names_included)
 
-    # Log total execution time
+
+def main() -> None:
+    start_time = time.perf_counter()
+    st.set_page_config(page_title="Name Ranker", layout="wide")
+    st.title("Name Preference Ranker")
+
+    _render_sidebar()
+
+    if "all_names_data" not in st.session_state:
+        _render_missing_names_message()
+        return
+
+    filtered_names = _get_filtered_names_for_current_state()
+    if not filtered_names:
+        return
+
+    filtered_names_included = _get_included_names(filtered_names)
+    filtered_count = len(filtered_names_included)
+    _render_sample_size_control(filtered_count)
+    st.session_state.tournament_filtered_count = filtered_count
+    _render_active_tab(filtered_names, filtered_names_included)
+
     end_time = time.perf_counter()
     elapsed_ms = (end_time - start_time) * 1000
     logger.debug("main() execution time: %.1fms (active tab: %s)", elapsed_ms, st.session_state.active_tab)

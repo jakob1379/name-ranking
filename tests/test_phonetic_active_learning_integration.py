@@ -594,7 +594,7 @@ class TestPhoneticCache:
             primary, secondary = codes[name]
             assert isinstance(primary, str)
             assert primary != ""  # Should have a primary code
-            assert secondary is None or isinstance(secondary, str)
+            assert isinstance(secondary, str)
 
     def test_phonetic_similarity_function(self):
         """Test phonetic similarity computation."""

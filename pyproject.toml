@@ -32,10 +32,7 @@ authors = [
 ]
 requires-python = ">=3.12,<3.14"
 dependencies = [
-  "httpx>=0.28.1",
   "ethnidata>=4.4.0",
-  "unidecode>=1.4.0",
-  "pycountry>=26.2.16",
   "numpy>=2.4.2",
   "pandas>=2.3.3",
   "polars>=1.38.1",
@@ -43,10 +40,13 @@ dependencies = [
   "metaphone",
   "pyphen>=0.17.2",
   "rich>=14.3.3",
-  "sentence-transformers>=5.2.3",
   "streamlit>=1.55.0",
-  "typer>=0.24.1",
-  "ethnicolr2>=0.3.1"
+  "typer>=0.24.1"
+]
+
+[project.optional-dependencies]
+semantic-search = [
+  "sentence-transformers>=5.2.3"
 ]
 
 [project.scripts]

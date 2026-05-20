@@ -270,13 +270,13 @@ def test_feature_caching_works_correctly(initialized_db, test_names_with_metadat
     gender = "Female"
     origin = "Nordic"
 
-    # Clear any existing cache
-    extractor._feature_cache.clear()
+    # Clear any existing in-memory vector cache
+    extractor._local_cache.clear()
 
     # First extraction - should compute
     features1 = extractor.extract(name, gender, origin)
     cache_key = (name, gender, origin)
-    assert cache_key in extractor._feature_cache
+    assert cache_key in extractor._local_cache
 
     # Second extraction - should use cache
     features2 = extractor.extract(name, gender, origin)

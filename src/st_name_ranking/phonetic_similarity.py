@@ -7,15 +7,13 @@ from metaphone import doublemetaphone
 logger = logging.getLogger(__name__)
 
 
-def compute_phonetic_codes(name: str) -> tuple[str, str | None]:
+def compute_phonetic_codes(name: str) -> tuple[str, str]:
     """Compute Double Metaphone codes for a name.
     Returns (primary_code, secondary_code).
-    Secondary code may be None if not applicable.
+    Secondary code is an empty string when not applicable.
     """
     primary, secondary = doublemetaphone(name)
-    # doublemetaphone returns empty string for no secondary code
-    secondary = secondary or None
-    return primary, secondary
+    return primary or "", secondary or ""
 
 
 def phonetic_similarity(name1: str, name2: str) -> float:
@@ -43,7 +41,7 @@ def phonetic_similarity(name1: str, name2: str) -> float:
 
 def batch_compute_phonetic_codes(
     names: list[str],
-) -> dict[str, tuple[str, str | None]]:
+) -> dict[str, tuple[str, str]]:
     """Compute phonetic codes for multiple names efficiently.
     Returns dict mapping name -> (primary, secondary).
     """
@@ -55,8 +53,8 @@ def batch_compute_phonetic_codes(
 
 
 def phonetic_similarity_batch(
-    target_codes: tuple[str, str | None],
-    name_codes_dict: dict[str, tuple[str, str | None]],
+    target_codes: tuple[str, str],
+    name_codes_dict: dict[str, tuple[str, str]],
 ) -> dict[str, float]:
     """Compute phonetic similarity between target and multiple names.
     target_codes: (primary, secondary) for target name

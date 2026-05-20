@@ -11,25 +11,19 @@ This script:
 
 import argparse
 import logging
+import sqlite3
 import sys
 import time
 from collections.abc import Callable
-from typing import NamedTuple
-
-
-class ClassificationResult(NamedTuple):
-    """Origin classification result."""
-
-    region: str
-    confidence: float
-
 
 from st_name_ranking.database import (
-    get_connection,
     get_names_with_origins,
     get_stats,
     get_unclassified_names,
     update_name_origin,
+)
+from st_name_ranking.origin_classifier import (
+    OriginResult,
 )
 from st_name_ranking.origin_classifier import (
     get_classifier as get_origin_classifier,
@@ -40,8 +34,7 @@ logger = logging.getLogger(__name__)
 # Minimum confidence threshold for classification results
 MIN_CONFIDENCE_THRESHOLD = 0.1
 
-# Type alias for the classifier function
-Classifier = "Callable[[str], ClassificationResult | None]"
+Classifier = Callable[[str], OriginResult | None]
 
 
 def get_classifier() -> Classifier:
@@ -70,35 +63,7 @@ def get_classifier() -> Classifier:
     return get_classifier._cache
 
 
-def get_region_for_nationality(nationality: str) -> tuple[str, float]:
-    """Map nationality to region using database mapping.
-    Returns (region, confidence_adjustment).
-    """
-    with get_connection() as conn:
-        cursor = conn.execute(
-            "SELECT region FROM region_mapping WHERE nationality = ?",
-            (nationality,),
-        )
-        row = cursor.fetchone()
-        if row:
-            return row[0], 1.0  # Full confidence for exact match
-
-        # Try partial matching (e.g., "American" matches "United States")
-        cursor = conn.execute(
-            "SELECT region FROM region_mapping "
-            "WHERE ? LIKE '%' || nationality || '%' "
-            "OR nationality LIKE '%' || ? || '%'",
-            (nationality, nationality),
-        )
-        row = cursor.fetchone()
-        if row:
-            return row[0], 0.8  # Reduced confidence for partial match
-
-        # Default to International
-        return "International", 0.5
-
-
-def classify_name(name: str) -> tuple[str, float] | None:
+def classify_name(name: str) -> OriginResult | None:
     """Classify a single name using hierarchical classifier.
     Returns (region, confidence) or None if classification failed.
     """
@@ -122,7 +87,7 @@ def classify_name(name: str) -> tuple[str, float] | None:
             region,
             confidence,
         )
-        return region, confidence
+        return OriginResult(region, confidence)
 
 
 def _get_reference_names() -> dict[str, tuple[str, float, str, str]]:

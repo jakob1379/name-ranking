@@ -519,8 +519,9 @@ class TestBatchOperations:
         ratings_dict = dict.fromkeys(test_names, 1600.0)
         ratings_dict["NonExistentName"] = 1700.0  # This name doesn't exist
 
-        # This should complete without error (skips non-existent names)
-        update_ratings_batch_values(ratings_dict)
+        # This should complete without error and report skipped names.
+        skipped = update_ratings_batch_values(ratings_dict)
+        assert skipped == ["NonExistentName"]
 
         # Verify valid names were still updated
         with get_connection() as conn:

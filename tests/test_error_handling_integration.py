@@ -450,8 +450,9 @@ class TestConsistencyAndRecovery:
         # Attempt batch update with one non-existent name
         ratings_dict = {"NameA": 1600.0, "NameB": 1500.0, "NameC": 1400.0}
 
-        # Should complete without error (logs warning for NameC)
-        update_ratings_batch(ratings_dict)
+        # Should complete without error and report skipped names.
+        skipped = update_ratings_batch(ratings_dict)
+        assert skipped == ["NameC"]
 
         # Verify valid names were updated
         final_ratings = get_ratings()

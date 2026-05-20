@@ -163,7 +163,7 @@ class TestOriginClassifierIntegration:
         from unittest.mock import patch
 
         # Patch ethnidata classifier to simulate missing package
-        with patch("st_name_ranking.origin_classifier._create_ethnidata_classifier", return_value=False):
+        with patch("st_name_ranking.origin_classifier._create_ethnidata_classifier", return_value=None):
             classifier = origin_classifier.get_classifier(reference_names={})
             # Should still return a classifier (using rule-based and phonetic)
             assert classifier is not None

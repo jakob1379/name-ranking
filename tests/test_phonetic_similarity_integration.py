@@ -10,7 +10,7 @@ class TestPhoneticSimilarityIntegration:
         """Test computing phonetic codes for names."""
         primary, secondary = phonetic_similarity.compute_phonetic_codes("Smith")
         assert isinstance(primary, str)
-        assert secondary is None or isinstance(secondary, str)
+        assert isinstance(secondary, str)
 
         # Test with a name that may have secondary code
         primary2, secondary2 = phonetic_similarity.compute_phonetic_codes("Schmidt")

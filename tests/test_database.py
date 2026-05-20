@@ -356,28 +356,6 @@ class TestRatingOperations:
         assert isinstance(ratings, dict)
         assert len(ratings) == 0
 
-    def test_update_rating_with_match(self, initialized_db):
-        """Test update_rating_with_match function (wrapper)."""
-        from st_name_ranking.database import (
-            get_connection,
-            get_ratings,
-            update_rating_with_match,
-        )
-
-        # Insert name
-        with get_connection() as conn:
-            conn.execute(
-                "INSERT OR IGNORE INTO names (name, gender) VALUES (?, ?)",
-                ("Maria", "Female"),
-            )
-
-        # Update using wrapper function
-        update_rating_with_match("Maria", 1700.0)
-
-        # Verify rating updated
-        ratings = get_ratings()
-        assert ratings["Maria"] == 1700.0
-
 
 class TestSubmoduleOperations:
     """Tests for submodule version tracking."""
@@ -393,8 +371,7 @@ class TestSubmoduleOperations:
         version = get_latest_submodule_version()
         assert version is None
 
-        # Update version (names_count ignored)
-        update_submodule_version("abc123", 100)
+        update_submodule_version("abc123")
 
         # Get updated version
         version = get_latest_submodule_version()
@@ -410,13 +387,13 @@ class TestSubmoduleOperations:
         )
 
         # First update
-        update_submodule_version("abc123", 100)
+        update_submodule_version("abc123")
         version1 = get_latest_submodule_version()
         assert version1 is not None
         assert version1.commit_hash == "abc123"
 
         # Second update (should add new row)
-        update_submodule_version("def456", 150)
+        update_submodule_version("def456")
         version2 = get_latest_submodule_version()
         assert version2 is not None
         assert version2.commit_hash == "def456"
@@ -532,14 +509,14 @@ class TestSyncOperations:
         )
 
         # Mock subprocess.run to return a fake commit hash
-        # Also mock is_valid_name to print and return True
+        # Also mock sync validation to accept all fixture names.
         def mock_is_valid_name(name):
             return True
 
         with (
-            patch("subprocess.run") as mock_run,
+            patch("st_name_ranking.sync_store.subprocess.run") as mock_run,
             patch(
-                "st_name_ranking.data_loader.is_valid_name",
+                "st_name_ranking.sync_store.is_valid_name",
                 side_effect=mock_is_valid_name,
             ),
         ):
@@ -599,7 +576,7 @@ class TestSyncOperations:
         json_file.write_text(json.dumps([]))
 
         # Mock subprocess.run to return a fake commit hash
-        with patch("subprocess.run") as mock_run:
+        with patch("st_name_ranking.sync_store.subprocess.run") as mock_run:
             mock_process = mock_run.return_value
             mock_process.stdout = "mockcommithash456\n"
             mock_process.stderr = ""

@@ -33,7 +33,7 @@ from st_name_ranking.database import (
 from st_name_ranking.features import FeatureExtractor
 
 # Import model functions
-from st_name_ranking.utils import (
+from st_name_ranking.pair_selection import (
     get_active_learning_model,
 )
 

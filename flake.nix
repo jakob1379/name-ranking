@@ -15,7 +15,7 @@
             "claude-code"
           ];
         };
-        python = pkgs.python314;
+        python = pkgs.python313;
       in
       {
         devShells.default = pkgs.mkShell {

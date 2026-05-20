@@ -73,9 +73,9 @@ def _get_region_for_nationality(nationality: str) -> tuple[str, float]:
 ClassifierFunc = Callable[[str], OriginResult | None]
 
 
-def _create_ethnidata_classifier() -> ClassifierFunc | bool:
+def _create_ethnidata_classifier() -> ClassifierFunc | None:
     """Create an ethnidata classifier callable that returns (region, confidence).
-    Returns the classifier instance, or False if ethnidata not installed.
+    Returns the classifier instance, or None if ethnidata is unavailable.
     """
     try:
         from ethnidata import EthniData  # noqa: PLC0415
@@ -83,10 +83,10 @@ def _create_ethnidata_classifier() -> ClassifierFunc | bool:
         ethnidata = EthniData()
     except ImportError:
         logger.debug("ethnidata not installed")
-        return False
+        return None
     except (OSError, FileNotFoundError) as e:
         logger.warning("ethnidata data files missing or broken: %s", e)
-        return False
+        return None
 
     def classify_with_ethnidata(name: str) -> tuple[str, float] | None:
         """Classify a single name using ethnidata."""
@@ -400,18 +400,22 @@ class OriginClassifier:
     def __init__(
         self,
         reference_names: dict[str, tuple[str, float, str, str]] | None = None,
-        ethnidata_classifier: ClassifierFunc | bool | None = None,  # noqa: FBT001
+        ethnidata_classifier: ClassifierFunc | None = None,
+        *,
+        use_ethnidata: bool = True,
     ) -> None:
         """Args:
         reference_names: Dict of known name -> (region, confidence, phonetic_primary, phonetic_secondary) for
                         phonetic similarity classification.
         ethnidata_classifier: Pre‑initialized ethnidata classifier instance.
-                              If None, will be lazy‑loaded when needed.
+                              If None, will be lazy‑loaded when needed and enabled.
+        use_ethnidata: Whether to lazy-load ethnidata fallback when no classifier is provided.
 
         """
         self.reference_names = reference_names or {}
         self.ethnicolr = get_ethnicolr_classifier()
-        self.ethnidata = ethnidata_classifier  # Can be None, False, or classifier instance
+        self.ethnidata = ethnidata_classifier
+        self._use_ethnidata = use_ethnidata or ethnidata_classifier is not None
 
     def _classify_with_phonetic(self, name: str) -> tuple[str | None, float]:
         """Classify using phonetic similarity if reference data exists."""
@@ -440,11 +444,14 @@ class OriginClassifier:
 
     def _classify_with_ethnidata(self, name: str) -> tuple[str | None, float]:
         """Classify using ethnidata model if available."""
+        if not self._use_ethnidata:
+            return None, 0.0
+
         if self.ethnidata is None:
             self.ethnidata = _create_ethnidata_classifier()
-
-        if not callable(self.ethnidata):
-            return None, 0.0
+            if self.ethnidata is None:
+                self._use_ethnidata = False
+                return None, 0.0
 
         try:
             result = self.ethnidata(name)
@@ -462,7 +469,6 @@ class OriginClassifier:
     def classify(
         self,
         name: str,
-        _gender: str | None = None,
     ) -> tuple[str, float]:
         """Classify a single name.
 
@@ -497,31 +503,28 @@ class OriginClassifier:
     def classify_batch(
         self,
         names: list[str],
-        genders: list[str | None] | None = None,
+        _genders: list[str | None] | None = None,
     ) -> list[tuple[str, float]]:
         """Classify a batch of names efficiently.
 
         Args:
             names: List of names to classify
-            genders: Optional list of genders (same length as names)
+            _genders: Optional list of genders (same length as names)
 
         Returns:
             List of (region, confidence) tuples
 
         """
-        gender_list = genders if genders is not None else [None] * len(names)
-
         results = []
 
         # Process in chunks to balance memory and speed
         chunk_size = 100
         for i in range(0, len(names), chunk_size):
             chunk_names = names[i : i + chunk_size]
-            chunk_genders = gender_list[i : i + chunk_size]
 
             chunk_results = []
-            for name, gender in zip(chunk_names, chunk_genders, strict=False):
-                region, confidence = self.classify(name, gender)
+            for name in chunk_names:
+                region, confidence = self.classify(name)
                 chunk_results.append((region, confidence))
 
             results.extend(chunk_results)
@@ -529,10 +532,6 @@ class OriginClassifier:
             logger.debug("Processed %d/%d names", i + len(chunk_names), len(names))
 
         return results
-
-    def _load_ethnidata(self) -> ClassifierFunc | bool:
-        """Lazy load ethnidata classifier."""
-        return _create_ethnidata_classifier()
 
 
 _CLASSIFIER_CACHE: dict[str, OriginClassifier] = {}

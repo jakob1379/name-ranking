@@ -2,9 +2,8 @@
 
 import json
 import logging
-import os
 import time
-from typing import Literal
+from typing import Any, Literal
 
 import numpy as np
 import polars as pl
@@ -13,8 +12,6 @@ from sklearn.cluster import KMeans
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
 
-from st_name_ranking.async_model import select_random_pair
-from st_name_ranking.background_queue import get_queue_manager, get_queue_manager_stats
 from st_name_ranking.database import (
     INITIAL_SCORE,
     get_preference_stats_by_gender,
@@ -23,17 +20,17 @@ from st_name_ranking.database import (
     load_user_setting,
     save_user_setting,
 )
+from st_name_ranking.pair_selection import (
+    get_active_learning_model,
+    get_names_features,
+)
 from st_name_ranking.similarity import (
     get_string_similarity_scores,
     get_vector_similarity_scores,
     load_embedding_model,
 )
+from st_name_ranking.tournament_orchestration import prepare_tournament_round, record_tournament_vote
 from st_name_ranking.types import PreferenceStats
-from st_name_ranking.utils import (
-    get_active_learning_model,
-    get_names_features,
-    record_comparison_instant,
-)
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -209,6 +206,27 @@ def render_preferences_panel() -> None:
         st.info("No phonetic preference data available.")
 
 
+def _record_vote_and_get_next_pair(names: list[str], manager: Any, preference: int) -> tuple[str, str]:
+    candidate_a = st.session_state.candidate_a
+    candidate_b = st.session_state.candidate_b
+
+    if preference == -1:
+        logger.info("🎮 Vote: '%s' preferred over '%s'", candidate_a, candidate_b)
+    elif preference == 1:
+        logger.info("🎮 Vote: '%s' preferred over '%s'", candidate_b, candidate_a)
+    elif preference == 0:
+        logger.info("🎮 Vote: Draw between '%s' and '%s'", candidate_a, candidate_b)
+        st.toast("🤝 you chose a draw!", duration="long")
+    else:
+        logger.info("🎮 Vote: Both '%s' and '%s' disliked", candidate_a, candidate_b)
+        st.toast("👎 you disliked both!", duration="long")
+
+    result = record_tournament_vote(names, manager, candidate_a, candidate_b, preference)
+    next_pair = result.next_pair
+    logger.info("📦 Next pair (%s): %s vs %s", result.pair_source, next_pair[0], next_pair[1])
+    return next_pair
+
+
 @st.fragment
 def render_tournament(names: list[str]) -> None:
     """Render tournament interface for comparing names.
@@ -228,19 +246,25 @@ def render_tournament(names: list[str]) -> None:
 
     log_timing("Before queue manager")
 
-    # Get or create background queue manager for instant transitions
-    # Queue size from environment variable (default 15)
-    queue_size = int(os.environ.get("TOURNAMENT_QUEUE_SIZE", "15"))
-    manager = get_queue_manager(names, queue_size, sample_size=selected_sample_size)
+    try:
+        round_state = prepare_tournament_round(names, selected_sample_size)
+    except ValueError:
+        if len(names) == 0:
+            st.info("No names to compare. Please select at least two names.")
+        else:
+            st.info(f"Only one name ('{names[0]}') selected. Please select at least two names to compare.")
+        return
+
+    manager = round_state.manager
     log_timing("After queue manager")
 
-    queue_stats = get_queue_manager_stats()
+    queue_stats = round_state.queue_stats
     if queue_stats and int(queue_stats.get("refill_count", 0)) > 0:
         last_refill_ms = float(queue_stats.get("last_refill_ms", 0.0))
         avg_refill_ms = float(queue_stats.get("avg_refill_ms", 0.0))
         refill_added = int(queue_stats.get("last_refill_added", 0))
         current_queue_size = int(queue_stats.get("queue_size", 0))
-        target_queue_size = int(queue_stats.get("target_size", queue_size))
+        target_queue_size = int(queue_stats.get("target_size", target_size))
 
         if last_refill_ms <= FAST_REFILL_THRESHOLD_MS:
             latency_indicator = "🟢"
@@ -257,36 +281,9 @@ def render_tournament(names: list[str]) -> None:
     else:
         st.caption("Queue warming up... | Choose the name you prefer")
 
-    # Handle empty names list gracefully
-    if len(names) < MIN_NAMES_FOR_COMPARISON:
-        if len(names) == 0:
-            st.info("No names to compare. Please select at least two names.")
-        else:
-            st.info(f"Only one name ('{names[0]}') selected. Please select at least two names to compare.")
-        return
-
-    # Create names set for filtering
-    names_set = set(names)
-
     # Create placeholders for dynamic content
     pair_display_placeholder = st.empty()
     st.empty()
-
-    # Initialize candidates if not set, empty, or no longer in current filtered names
-    if (
-        "candidate_a" not in st.session_state
-        or "candidate_b" not in st.session_state
-        or not st.session_state.candidate_a
-        or not st.session_state.candidate_b
-        or st.session_state.candidate_a not in names_set
-        or st.session_state.candidate_b not in names_set
-        or st.session_state.candidate_a == st.session_state.candidate_b
-    ):
-        current_pair = manager.get_pair()
-        if not current_pair:
-            # Fallback if queue empty (fresh pair on reload/new session)
-            current_pair = select_random_pair(names)
-        st.session_state.candidate_a, st.session_state.candidate_b = current_pair
 
     st.markdown(
         """
@@ -422,60 +419,19 @@ def render_tournament(names: list[str]) -> None:
     if vote_a_clicked:
         log_timing("Vote A clicked - handling")
         vote_handled = True
-        logger.info("🎮 Vote: '%s' preferred over '%s'", st.session_state.candidate_a, st.session_state.candidate_b)
-        # 1. Record comparison instantly (async model update in background)
-        record_comparison_instant(st.session_state.candidate_a, st.session_state.candidate_b, -1)
-        # 2. Get next pair instantly from background queue
-        next_pair = manager.get_pair()
-        if not next_pair:
-            next_pair = select_random_pair(names)
-            logger.info("📦 Next pair (random): %s vs %s", next_pair[0], next_pair[1])
-        else:
-            logger.info("📦 Next pair (queue): %s vs %s", next_pair[0], next_pair[1])
+        next_pair = _record_vote_and_get_next_pair(names, manager, -1)
     elif vote_b_clicked:
         vote_handled = True
-        logger.info("🎮 Vote: '%s' preferred over '%s'", st.session_state.candidate_b, st.session_state.candidate_a)
-        # 1. Record comparison instantly (async model update in background)
-        record_comparison_instant(st.session_state.candidate_a, st.session_state.candidate_b, 1)
-        # 2. Get next pair instantly from background queue
-        next_pair = manager.get_pair()
-        if not next_pair:
-            next_pair = select_random_pair(names)
-            logger.info("📦 Next pair (random): %s vs %s", next_pair[0], next_pair[1])
-        else:
-            logger.info("📦 Next pair (queue): %s vs %s", next_pair[0], next_pair[1])
+        next_pair = _record_vote_and_get_next_pair(names, manager, 1)
     elif draw_clicked:
         vote_handled = True
-        logger.info("🎮 Vote: Draw between '%s' and '%s'", st.session_state.candidate_a, st.session_state.candidate_b)
-        st.toast("🤝 you chose a draw!", duration="long")
-        # 1. Record comparison instantly (async model update in background)
-        record_comparison_instant(st.session_state.candidate_a, st.session_state.candidate_b, 0)
-        # 2. Get next pair instantly from background queue
-        next_pair = manager.get_pair()
-        if not next_pair:
-            next_pair = select_random_pair(names)
-            logger.info("📦 Next pair (random): %s vs %s", next_pair[0], next_pair[1])
-        else:
-            logger.info("📦 Next pair (queue): %s vs %s", next_pair[0], next_pair[1])
+        next_pair = _record_vote_and_get_next_pair(names, manager, 0)
     elif down_clicked:
         vote_handled = True
-        logger.info("🎮 Vote: Both '%s' and '%s' disliked", st.session_state.candidate_a, st.session_state.candidate_b)
-        st.toast("👎 you disliked both!", duration="long")
-        # 1. Record comparison instantly (async model update in background)
-        record_comparison_instant(st.session_state.candidate_a, st.session_state.candidate_b, 2)
-        # 2. Get next pair instantly from background queue
-        next_pair = manager.get_pair()
-        if not next_pair:
-            next_pair = select_random_pair(names)
-            logger.info("📦 Next pair (random): %s vs %s", next_pair[0], next_pair[1])
-        else:
-            logger.info("📦 Next pair (queue): %s vs %s", next_pair[0], next_pair[1])
+        next_pair = _record_vote_and_get_next_pair(names, manager, 2)
 
     # Update session state and UI instantly after vote (no rerun needed)
     if vote_handled and next_pair:
-        old_a, old_b = st.session_state.candidate_a, st.session_state.candidate_b
-        st.session_state.candidate_a, st.session_state.candidate_b = next_pair
-        logger.info("🔄 Transition: (%s, %s) → (%s, %s)", old_a, old_b, next_pair[0], next_pair[1])
         # Update UI instantly with st.fragment placeholder updates
         update_display(next_pair[0], next_pair[1], st.session_state.ratings)
 
@@ -487,6 +443,127 @@ def render_tournament(names: list[str]) -> None:
     # The dataframes and tabs were being processed even when collapsed
 
     log_timing("At end")
+
+
+@st.cache_data(show_spinner=False)
+def _build_rankings_dataframe(
+    ratings_pairs: tuple[tuple[str, float], ...],
+    *,
+    include_gender_male: bool,
+) -> tuple[pl.DataFrame, list[str]]:
+    sorted_pairs = sorted(ratings_pairs, key=lambda item: item[1], reverse=True)
+    ordered_names = [name for name, _ in sorted_pairs]
+    ordered_ratings = [rating for _, rating in sorted_pairs]
+    base_df = pl.DataFrame({"Name": ordered_names, "Rating": ordered_ratings})
+
+    try:
+        model = get_active_learning_model()
+        feature_names = list(model.feature_names)
+        feature_matrix = get_names_features(ordered_names)
+        top_feature_count = min(6, len(feature_names))
+        top_feature_idx = np.argsort(np.abs(model.state.weight_mean))[::-1][:top_feature_count]
+
+        feature_columns = {feature_names[idx]: feature_matrix[:, idx].astype(float) for idx in top_feature_idx}
+        enriched_df = base_df.with_columns(
+            [pl.Series(feature_name, values) for feature_name, values in feature_columns.items()],
+        )
+        selected_features = [feature_names[idx] for idx in top_feature_idx]
+        if not include_gender_male and "gender_male" in enriched_df.columns:
+            enriched_df = enriched_df.drop("gender_male")
+            selected_features = [name for name in selected_features if name != "gender_male"]
+    except (RuntimeError, ValueError, AttributeError):
+        logger.exception("Failed to enrich rankings table with feature columns")
+        return base_df, []
+    else:
+        return enriched_df, selected_features
+
+
+@st.cache_data(show_spinner=False)
+def _compute_landscape(
+    sorted_names: tuple[str, ...],
+    ratings_pairs: tuple[tuple[str, float], ...],
+    random_state: int,
+) -> tuple[pl.DataFrame, np.ndarray, list[str], str]:
+    ratings_dict = dict(ratings_pairs)
+    model = get_active_learning_model()
+    feature_names = list(model.feature_names)
+    feature_matrix = get_names_features(list(sorted_names))
+    scaled_features = StandardScaler().fit_transform(feature_matrix)
+
+    weight_mean = model.state.weight_mean
+    weight_cov = model.state.weight_cov
+
+    utility = feature_matrix @ weight_mean
+    variance = np.einsum("ij,jk,ik->i", feature_matrix, weight_cov, feature_matrix)
+    uncertainty = np.sqrt(np.clip(variance, a_min=0.0, a_max=None))
+    ratings = np.array([ratings_dict.get(name, INITIAL_SCORE) for name in sorted_names], dtype=np.float64)
+    confidence = 1.0 / (1.0 + uncertainty)
+
+    status_note = "PaCMAP projection + HDBSCAN clustering"
+    if pacmap is not None:
+        projection = pacmap.PaCMAP(
+            n_components=2,
+            n_neighbors=min(15, max(3, len(sorted_names) - 1)),
+            MN_ratio=0.5,
+            FP_ratio=2.0,
+            random_state=random_state,
+        ).fit_transform(scaled_features)
+    else:
+        projection = PCA(n_components=2, random_state=random_state).fit_transform(scaled_features)
+        status_note = "PaCMAP unavailable, using PCA projection + HDBSCAN clustering"
+
+    labels: np.ndarray
+    hdbscan_valid = False
+    min_cluster_size = max(20, int(0.01 * len(sorted_names)))
+    min_samples = max(5, min_cluster_size // 2)
+
+    if hdbscan is not None:
+        try:
+            labels = hdbscan.HDBSCAN(
+                min_cluster_size=min_cluster_size,
+                min_samples=min_samples,
+                cluster_selection_method="eom",
+                metric="euclidean",
+                prediction_data=True,
+            ).fit_predict(projection)
+            non_noise = labels[labels >= 0]
+            hdbscan_valid = len(non_noise) > 0 and len(np.unique(non_noise)) >= MIN_NON_NOISE_CLUSTERS
+        except (ValueError, RuntimeError):
+            hdbscan_valid = False
+
+    if not hdbscan_valid and SKHDBSCAN is not None:
+        try:
+            labels = SKHDBSCAN(
+                min_cluster_size=min_cluster_size,
+                min_samples=min_samples,
+                cluster_selection_method="eom",
+                copy=False,
+            ).fit_predict(
+                projection,
+            )
+            non_noise = labels[labels >= 0]
+            hdbscan_valid = len(non_noise) > 0 and len(np.unique(non_noise)) >= MIN_NON_NOISE_CLUSTERS
+        except (ValueError, RuntimeError):
+            hdbscan_valid = False
+
+    if not hdbscan_valid:
+        cluster_count = min(8, max(2, len(sorted_names) // 12))
+        labels = KMeans(n_clusters=cluster_count, random_state=random_state, n_init=10).fit_predict(projection)
+        status_note = f"{status_note} (HDBSCAN fallback: KMeans)"
+
+    landscape = pl.DataFrame(
+        {
+            "Name": list(sorted_names),
+            "Projection X": projection[:, 0],
+            "Projection Y": projection[:, 1],
+            "Cluster": labels,
+            "Rating": ratings,
+            "Utility": utility,
+            "Uncertainty": uncertainty,
+            "Confidence": confidence,
+        },
+    )
+    return landscape, feature_matrix, feature_names, status_note
 
 
 def render_rankings(names: list[str]) -> None:
@@ -517,125 +594,6 @@ def render_rankings(names: list[str]) -> None:
     # Filter ratings to only show current selection
     filtered_ratings = {name: rating for name, rating in st.session_state.ratings.items() if name in names_set}
 
-    @st.cache_data(show_spinner=False)
-    def build_rankings_dataframe(
-        ratings_pairs: tuple[tuple[str, float], ...],
-        *,
-        include_gender_male: bool,
-    ) -> tuple[pl.DataFrame, list[str]]:
-        sorted_pairs = sorted(ratings_pairs, key=lambda item: item[1], reverse=True)
-        ordered_names = [name for name, _ in sorted_pairs]
-        ordered_ratings = [rating for _, rating in sorted_pairs]
-        base_df = pl.DataFrame({"Name": ordered_names, "Rating": ordered_ratings})
-
-        try:
-            model = get_active_learning_model()
-            feature_names = list(model.feature_names)
-            feature_matrix = get_names_features(ordered_names)
-            top_feature_count = min(6, len(feature_names))
-            top_feature_idx = np.argsort(np.abs(model.state.weight_mean))[::-1][:top_feature_count]
-
-            feature_columns = {feature_names[idx]: feature_matrix[:, idx].astype(float) for idx in top_feature_idx}
-            enriched_df = base_df.with_columns(
-                [pl.Series(feature_name, values) for feature_name, values in feature_columns.items()],
-            )
-            selected_features = [feature_names[idx] for idx in top_feature_idx]
-            if not include_gender_male and "gender_male" in enriched_df.columns:
-                enriched_df = enriched_df.drop("gender_male")
-                selected_features = [name for name in selected_features if name != "gender_male"]
-        except (RuntimeError, ValueError, AttributeError):
-            logger.exception("Failed to enrich rankings table with feature columns")
-            return base_df, []
-        else:
-            return enriched_df, selected_features
-
-    @st.cache_data(show_spinner=False)
-    def compute_landscape(
-        sorted_names: tuple[str, ...],
-        ratings_pairs: tuple[tuple[str, float], ...],
-        random_state: int,
-    ) -> tuple[pl.DataFrame, np.ndarray, list[str], str]:
-        ratings_dict = dict(ratings_pairs)
-        model = get_active_learning_model()
-        feature_names = list(model.feature_names)
-        feature_matrix = get_names_features(list(sorted_names))
-        scaled_features = StandardScaler().fit_transform(feature_matrix)
-
-        weight_mean = model.state.weight_mean
-        weight_cov = model.state.weight_cov
-
-        utility = feature_matrix @ weight_mean
-        variance = np.einsum("ij,jk,ik->i", feature_matrix, weight_cov, feature_matrix)
-        uncertainty = np.sqrt(np.clip(variance, a_min=0.0, a_max=None))
-        ratings = np.array([ratings_dict.get(name, INITIAL_SCORE) for name in sorted_names], dtype=np.float64)
-        confidence = 1.0 / (1.0 + uncertainty)
-
-        status_note = "PaCMAP projection + HDBSCAN clustering"
-        if pacmap is not None:
-            projection = pacmap.PaCMAP(
-                n_components=2,
-                n_neighbors=min(15, max(3, len(sorted_names) - 1)),
-                MN_ratio=0.5,
-                FP_ratio=2.0,
-                random_state=random_state,
-            ).fit_transform(scaled_features)
-        else:
-            projection = PCA(n_components=2, random_state=random_state).fit_transform(scaled_features)
-            status_note = "PaCMAP unavailable, using PCA projection + HDBSCAN clustering"
-
-        labels: np.ndarray
-        hdbscan_valid = False
-        min_cluster_size = max(20, int(0.01 * len(sorted_names)))
-        min_samples = max(5, min_cluster_size // 2)
-
-        if hdbscan is not None:
-            try:
-                labels = hdbscan.HDBSCAN(
-                    min_cluster_size=min_cluster_size,
-                    min_samples=min_samples,
-                    cluster_selection_method="eom",
-                    metric="euclidean",
-                    prediction_data=True,
-                ).fit_predict(projection)
-                non_noise = labels[labels >= 0]
-                hdbscan_valid = len(non_noise) > 0 and len(np.unique(non_noise)) >= MIN_NON_NOISE_CLUSTERS
-            except (ValueError, RuntimeError):
-                hdbscan_valid = False
-
-        if not hdbscan_valid and SKHDBSCAN is not None:
-            try:
-                labels = SKHDBSCAN(
-                    min_cluster_size=min_cluster_size,
-                    min_samples=min_samples,
-                    cluster_selection_method="eom",
-                    copy=False,
-                ).fit_predict(
-                    projection,
-                )
-                non_noise = labels[labels >= 0]
-                hdbscan_valid = len(non_noise) > 0 and len(np.unique(non_noise)) >= MIN_NON_NOISE_CLUSTERS
-            except (ValueError, RuntimeError):
-                hdbscan_valid = False
-
-        if not hdbscan_valid:
-            cluster_count = min(8, max(2, len(sorted_names) // 12))
-            labels = KMeans(n_clusters=cluster_count, random_state=random_state, n_init=10).fit_predict(projection)
-            status_note = f"{status_note} (HDBSCAN fallback: KMeans)"
-
-        landscape = pl.DataFrame(
-            {
-                "Name": list(sorted_names),
-                "Projection X": projection[:, 0],
-                "Projection Y": projection[:, 1],
-                "Cluster": labels,
-                "Rating": ratings,
-                "Utility": utility,
-                "Uncertainty": uncertainty,
-                "Confidence": confidence,
-            },
-        )
-        return landscape, feature_matrix, feature_names, status_note
-
     if not filtered_ratings:
         st.info("No ratings yet. Start comparing names in the Tournament tab to generate rankings.")
         return
@@ -645,7 +603,7 @@ def render_rankings(names: list[str]) -> None:
 
     with tab_overall:
         overall_pairs = tuple(filtered_ratings.items())
-        df, feature_columns = build_rankings_dataframe(overall_pairs, include_gender_male=True)
+        df, feature_columns = _build_rankings_dataframe(overall_pairs, include_gender_male=True)
         st.dataframe(
             df,
             width="stretch",
@@ -684,7 +642,7 @@ def render_rankings(names: list[str]) -> None:
                 with st.status("Building preference landscape...", expanded=False) as status:
                     status.write("Projecting names with PaCMAP")
                     status.write("Clustering projection with HDBSCAN")
-                    landscape_df, feature_matrix, feature_names, status_note = compute_landscape(
+                    landscape_df, feature_matrix, feature_names, status_note = _compute_landscape(
                         sorted_names,
                         ratings_pairs,
                         random_state,
@@ -812,7 +770,7 @@ def render_rankings(names: list[str]) -> None:
                 if name in male_names and name in names_set
             }
             if male_ratings:
-                df_male, _ = build_rankings_dataframe(
+                df_male, _ = _build_rankings_dataframe(
                     tuple(male_ratings.items()),
                     include_gender_male=False,
                 )
@@ -843,7 +801,7 @@ def render_rankings(names: list[str]) -> None:
                 if name in female_names and name in names_set
             }
             if female_ratings:
-                df_female, _ = build_rankings_dataframe(
+                df_female, _ = _build_rankings_dataframe(
                     tuple(female_ratings.items()),
                     include_gender_male=False,
                 )
@@ -867,6 +825,91 @@ def render_rankings(names: list[str]) -> None:
             st.info("No gender data available for female names.")
 
 
+def _load_cached_name_inclusions() -> dict[str, bool]:
+    cache_key = "name_inclusions_loaded"
+    if cache_key in st.session_state:
+        return st.session_state.name_inclusions
+
+    try:
+        inclusions_json = load_user_setting("name_inclusions", "{}")
+        st.session_state.name_inclusions = json.loads(inclusions_json)
+        logger.debug("Loaded %d inclusions from database", len(st.session_state.name_inclusions))
+    except json.JSONDecodeError:
+        st.session_state.name_inclusions = {}
+    st.session_state[cache_key] = True
+    return st.session_state.name_inclusions
+
+
+def _persist_name_inclusions(inclusions: dict[str, bool]) -> None:
+    _persist_name_inclusions_json(json.dumps(inclusions))
+
+
+def _persist_name_inclusions_json(inclusions_json: str) -> None:
+    save_user_setting("name_inclusions", inclusions_json)
+
+
+def _update_filter_counts(*, old_status: bool | None, new_status: bool | None) -> None:
+    if old_status is None:
+        st.session_state.filter_counts_not_decided -= 1
+    elif old_status is True:
+        st.session_state.filter_counts_included -= 1
+    else:
+        st.session_state.filter_counts_excluded -= 1
+
+    if new_status is None:
+        st.session_state.filter_counts_not_decided += 1
+    elif new_status is True:
+        st.session_state.filter_counts_included += 1
+    else:
+        st.session_state.filter_counts_excluded += 1
+
+
+def _clear_filter_count_cache() -> None:
+    if "filter_counts_names_hash" in st.session_state:
+        del st.session_state.filter_counts_names_hash
+
+
+def _names_filter_hash(names: list[str]) -> str:
+    fast_hash = hash((names[0], names[-1], len(names))) if names else hash(0)
+    return str(fast_hash)
+
+
+def _ensure_filter_counts(names: list[str], inclusions: dict[str, bool], names_hash: str) -> None:
+    needs_recount = (
+        "filter_counts_not_decided" not in st.session_state
+        or "filter_counts_included" not in st.session_state
+        or "filter_counts_excluded" not in st.session_state
+        or st.session_state.get("filter_counts_names_hash") != names_hash
+    )
+    if not needs_recount:
+        return
+
+    logger.info("📊 Computing counts for %d names...", len(names))
+    count_loop_start = time.perf_counter()
+    not_decided = explicitly_included = explicitly_excluded = 0
+    for name in names:
+        status = inclusions.get(name)
+        if status is None:
+            not_decided += 1
+        elif status is True:
+            explicitly_included += 1
+        else:
+            explicitly_excluded += 1
+
+    st.session_state.filter_counts_not_decided = not_decided
+    st.session_state.filter_counts_included = explicitly_included
+    st.session_state.filter_counts_excluded = explicitly_excluded
+    st.session_state.filter_counts_names_hash = names_hash
+
+    logger.info(
+        "✅ Counts computed: %d not decided, %d included, %d excluded (%.1fms)",
+        not_decided,
+        explicitly_included,
+        explicitly_excluded,
+        (time.perf_counter() - count_loop_start) * 1000,
+    )
+
+
 @st.fragment
 def render_binary_filter(names: list[str]) -> None:
     """Render binary filter interface for including/excluding names.
@@ -884,27 +927,6 @@ def render_binary_filter(names: list[str]) -> None:
     if "last_button_press_time" in st.session_state:
         del st.session_state.last_button_press_time
 
-    # Helper function to update counts incrementally
-    def update_counts(_name: str, *, old_status: bool | None, new_status: bool | None) -> None:
-        """Update filter counts when a name's inclusion status changes."""
-        # old_status: None (not decided), True (included), False (excluded)
-
-        # Decrement old category
-        if old_status is None:
-            st.session_state.filter_counts_not_decided -= 1
-        elif old_status is True:
-            st.session_state.filter_counts_included -= 1
-        else:  # old_status is False
-            st.session_state.filter_counts_excluded -= 1
-
-        # Increment new category
-        if new_status is None:
-            st.session_state.filter_counts_not_decided += 1
-        elif new_status is True:
-            st.session_state.filter_counts_included += 1
-        else:  # new_status is False
-            st.session_state.filter_counts_excluded += 1
-
     st.header("Name Filter")
     st.write(
         "Review names one by one. Include names you want to compare in the tournament, "
@@ -919,26 +941,10 @@ def render_binary_filter(names: list[str]) -> None:
     stats_placeholder = st.empty()
     name_display_placeholder = st.empty()
 
-    # Load inclusion decisions from session state or database (cached)
-    cache_key = "name_inclusions_loaded"
-    if cache_key not in st.session_state:
-        try:
-            inclusions_json = load_user_setting("name_inclusions", "{}")
-            st.session_state.name_inclusions = json.loads(inclusions_json)
-            st.session_state[cache_key] = True
-            logger.debug("Loaded %d inclusions from database", len(st.session_state.name_inclusions))
-        except json.JSONDecodeError:
-            st.session_state.name_inclusions = {}
-            st.session_state[cache_key] = True
-
-    inclusions = st.session_state.name_inclusions
+    inclusions = _load_cached_name_inclusions()
     log_timing("After inclusions loaded")
 
-    # Detect if names list has changed (e.g., gender/origin filter changed)
-    # Use a faster hash: just hash the first, last, and length
-    # This is O(1) instead of O(n) for hashing the full tuple
-    fast_hash = hash((names[0], names[-1], len(names))) if len(names) > 0 else hash(0)
-    names_hash = str(fast_hash)
+    names_hash = _names_filter_hash(names)
 
     if "filter_names_hash" not in st.session_state:
         st.session_state.filter_names_hash = names_hash
@@ -956,42 +962,7 @@ def render_binary_filter(names: list[str]) -> None:
     if st.session_state.filter_index >= len(names):
         st.session_state.filter_index = 0
 
-    # Initialize or update filter counts if names list changed
-    needs_recount = (
-        "filter_counts_not_decided" not in st.session_state
-        or "filter_counts_included" not in st.session_state
-        or "filter_counts_excluded" not in st.session_state
-        or st.session_state.get("filter_counts_names_hash") != names_hash
-    )
-
-    if needs_recount:
-        # Recompute counts from scratch - O(n) operation
-        logger.info("📊 Computing counts for %d names...", len(names))
-        count_loop_start = time.perf_counter()
-        not_decided = explicitly_included = explicitly_excluded = 0
-        for name in names:
-            status = inclusions.get(name)
-            if status is None:
-                not_decided += 1
-            elif status is True:
-                explicitly_included += 1
-            else:  # status is False
-                explicitly_excluded += 1
-        count_loop_time = time.perf_counter() - count_loop_start
-
-        st.session_state.filter_counts_not_decided = not_decided
-        st.session_state.filter_counts_included = explicitly_included
-        st.session_state.filter_counts_excluded = explicitly_excluded
-        st.session_state.filter_counts_names_hash = names_hash
-
-        logger.info(
-            "✅ Counts computed: %d not decided, %d included, %d excluded (%.1fms)",
-            not_decided,
-            explicitly_included,
-            explicitly_excluded,
-            count_loop_time * 1000,
-        )
-
+    _ensure_filter_counts(names, inclusions, names_hash)
     log_timing("After counts")
 
     # Filter to only undecided names for the progress tracking
@@ -1066,12 +1037,11 @@ def render_binary_filter(names: list[str]) -> None:
             button_click_start = time.perf_counter()
             old_status = inclusions.get(current_name)
             inclusions[current_name] = False
-            update_counts(current_name, old_status=old_status, new_status=False)
+            _update_filter_counts(old_status=old_status, new_status=False)
             st.session_state.filter_index += 1
             st.toast(f"Excluded: {current_name}", icon="👎")
             st.session_state.last_button_press_time = time.perf_counter()
-            # Save to database immediately to prevent data loss on reload
-            save_user_setting("name_inclusions", json.dumps(inclusions))
+            _persist_name_inclusions(inclusions)
             # INSTANT UPDATE - no rerun!
             # Remove current name from undecided list for instant feedback
             if current_name in undecided_names:
@@ -1096,12 +1066,11 @@ def render_binary_filter(names: list[str]) -> None:
             # Include (explicitly mark as included)
             old_status = inclusions.get(current_name)
             inclusions[current_name] = True
-            update_counts(current_name, old_status=old_status, new_status=True)
+            _update_filter_counts(old_status=old_status, new_status=True)
             st.session_state.filter_index += 1
             st.toast(f"Included: {current_name}", icon="👍")
             st.session_state.last_button_press_time = time.perf_counter()
-            # Save to database immediately to prevent data loss on reload
-            save_user_setting("name_inclusions", json.dumps(inclusions))
+            _persist_name_inclusions(inclusions)
             # INSTANT UPDATE - no rerun!
             # Remove current name from undecided list for instant feedback
             if current_name in undecided_names:
@@ -1122,7 +1091,7 @@ def render_binary_filter(names: list[str]) -> None:
         json_time = (time.perf_counter() - json_start) * 1000
 
         save_start = time.perf_counter()
-        save_user_setting("name_inclusions", inclusions_json)
+        _persist_name_inclusions_json(inclusions_json)
         save_time = (time.perf_counter() - save_start) * 1000
 
         logger.debug("Periodic save: JSON=%.1fms, DB=%.1fms, entries=%d", json_time, save_time, len(inclusions))
@@ -1135,13 +1104,10 @@ def render_binary_filter(names: list[str]) -> None:
             for name in undecided_names[current_idx:]:
                 inclusions[name] = True
             st.session_state.filter_index = 0  # Reset since undecided list will be empty
-            # Invalidate counts cache to force recomputation
-            if "filter_counts_names_hash" in st.session_state:
-                del st.session_state.filter_counts_names_hash
+            _clear_filter_count_cache()
             st.toast(f"Included {count} remaining names", icon="✅")
             st.session_state.last_button_press_time = time.perf_counter()
-            # Save to database immediately to prevent data loss on reload
-            save_user_setting("name_inclusions", json.dumps(inclusions))
+            _persist_name_inclusions(inclusions)
             # Fragment-level refresh for batch operations
             st.rerun(scope="fragment")
     with col_batch2:
@@ -1150,13 +1116,10 @@ def render_binary_filter(names: list[str]) -> None:
             for name in undecided_names[current_idx:]:
                 inclusions[name] = False
             st.session_state.filter_index = 0  # Reset since undecided list will be empty
-            # Invalidate counts cache to force recomputation
-            if "filter_counts_names_hash" in st.session_state:
-                del st.session_state.filter_counts_names_hash
+            _clear_filter_count_cache()
             st.toast(f"Excluded {count} remaining names", icon="✅")
             st.session_state.last_button_press_time = time.perf_counter()
-            # Save to database immediately to prevent data loss on reload
-            save_user_setting("name_inclusions", json.dumps(inclusions))
+            _persist_name_inclusions(inclusions)
             # Fragment-level refresh for batch operations
             st.rerun(scope="fragment")
 
@@ -1189,11 +1152,10 @@ def render_binary_filter(names: list[str]) -> None:
                 # User unchecked this name - move to not decided
                 old_status = inclusions.get(name)
                 del inclusions[name]  # Remove from dict = not decided
-                update_counts(name, old_status=old_status, new_status=None)
+                _update_filter_counts(old_status=old_status, new_status=None)
                 logger.info("🔄 %s moved from included to not decided", name)
                 st.toast(f"{name} moved to not decided", icon="🔄")
-                # Save to database immediately to prevent data loss on reload
-                save_user_setting("name_inclusions", json.dumps(inclusions))
+                _persist_name_inclusions(inclusions)
                 st.rerun(scope="fragment")
     else:
         st.info("No names included yet. Use 'Include' button above to add names.")
@@ -1226,11 +1188,10 @@ def render_binary_filter(names: list[str]) -> None:
                         # User unchecked this name - move to not decided
                         old_status = inclusions.get(name)
                         del inclusions[name]  # Remove from dict = not decided
-                        update_counts(name, old_status=old_status, new_status=None)
+                        _update_filter_counts(old_status=old_status, new_status=None)
                         logger.info("🔄 %s moved from excluded to not decided", name)
                         st.toast(f"{name} moved to not decided", icon="🔄")
-                        # Save to database immediately to prevent data loss on reload
-                        save_user_setting("name_inclusions", json.dumps(inclusions))
+                        _persist_name_inclusions(inclusions)
                         st.rerun(scope="fragment")
 
     log_timing("At end")
@@ -1271,7 +1232,11 @@ def render_similarity(names: list[str]) -> None:
             )
         else:
             with st.spinner("Loading Embedding Model (first run is slow)..."):
-                model = load_embedding_model()
+                try:
+                    model = load_embedding_model()
+                except RuntimeError as e:
+                    st.warning(str(e))
+                    return
 
             with st.spinner("Computing Similarities..."):
                 results = get_vector_similarity_scores(

@@ -4,7 +4,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from st_name_ranking import classify_origins
+from st_name_ranking import classify_origins, origin_classifier
 
 
 class TestGetClassifier:
@@ -36,7 +36,7 @@ class TestGetClassifier:
 
 
 class TestGetRegionForNationality:
-    """Tests for get_region_for_nationality function."""
+    """Tests for nationality-to-region mapping."""
 
     def test_region_found(self, initialized_db):
         """Test when nationality mapping exists in database."""
@@ -54,7 +54,7 @@ class TestGetRegionForNationality:
                 ("TestCountry", "TestRegion"),
             )
 
-        region, confidence = classify_origins.get_region_for_nationality(
+        region, confidence = origin_classifier._get_region_for_nationality(
             "TestCountry",
         )
         assert region == "TestRegion"
@@ -62,7 +62,7 @@ class TestGetRegionForNationality:
 
     def test_region_not_found(self, initialized_db):
         """Test when nationality mapping does not exist."""
-        region, confidence = classify_origins.get_region_for_nationality("XX")
+        region, confidence = origin_classifier._get_region_for_nationality("XX")
         assert region == "International"
         assert confidence == 0.5  # Penalty for unknown region
 
@@ -81,7 +81,7 @@ class TestGetRegionForNationality:
                 ("TestCountry2", "TestRegion2"),
             )
 
-        region, confidence = classify_origins.get_region_for_nationality(
+        region, confidence = origin_classifier._get_region_for_nationality(
             "TestCountry2",
         )
         assert region == "TestRegion2"

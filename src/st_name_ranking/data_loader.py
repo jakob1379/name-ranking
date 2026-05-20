@@ -1,7 +1,6 @@
 """Data loading and persistence functions."""
 
 import logging
-import re
 import sqlite3
 from pathlib import Path
 
@@ -10,73 +9,13 @@ import streamlit as st
 
 from st_name_ranking import database
 from st_name_ranking.database import INITIAL_SCORE, initialize_ratings
+from st_name_ranking.name_normalization import is_valid_name, strip_name_notes
 
 logger = logging.getLogger(__name__)
 
 # Constants for validation and logging
-MIN_NAME_LENGTH = 2
 MAX_INVALID_NAME_LOG = 5
 LARGE_DATASET_THRESHOLD = 1000
-
-
-def strip_name_notes(name: str) -> str:
-    """Strip note suffixes from raw name strings.
-
-    Example:
-        "Matteos - variant af godkendt fornavn" -> "Matteos"
-    """
-    if not isinstance(name, str):
-        return ""
-    return name.split(" - ", 1)[0].strip()
-
-
-def is_valid_name(name: str) -> bool:
-    """Check if a string is a valid name (not a header or placeholder).
-    Filters out strings like 'name1', 'Navn', 'name', etc.
-    """
-    if not name or not isinstance(name, str):
-        return False
-
-    name_lower = name.strip().lower()
-
-    # Common header/placeholder patterns to exclude
-    invalid_patterns = [
-        "name",
-        "navn",
-        "fornavn",
-        "firstname",
-        "køn",
-        "gender",
-        "kjønn",
-        "id",
-        "nummer",
-        "number",
-        # Pattern like 'name1', 'name 1', 'navn1', etc.
-        r"^name\s*\d+$",
-        r"^navn\s*\d+$",
-        r"^fornavn\s*\d+$",
-    ]
-
-    # Check exact matches
-    if name_lower in [
-        "name",
-        "navn",
-        "fornavn",
-        "firstname",
-        "køn",
-        "gender",
-        "kjønn",
-    ]:
-        return False
-
-    # Check pattern matches
-
-    for pattern in invalid_patterns[-3:]:  # The regex patterns
-        if re.match(pattern, name_lower, re.IGNORECASE):
-            return False
-
-    # Name should have at least MIN_NAME_LENGTH characters
-    return not len(name_lower) < MIN_NAME_LENGTH
 
 
 def load_ratings() -> dict[str, float] | None:
@@ -173,7 +112,7 @@ def load_submodule_json() -> list[dict[str, str]]:
         # Ensure we have the expected columns
         if not all(col in df.columns for col in ["name", "gender"]):
             st.toast(
-                f"JSON missing required columns. Found: {df.columns.tolist()}",
+                f"JSON missing required columns. Found: {list(df.columns)}",
                 icon="❌",
                 duration="long",
             )
