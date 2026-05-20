@@ -746,27 +746,19 @@ def get_ratings() -> dict[str, float]:
         return {row[0]: row[1] for row in cursor.fetchall()}
 
 
-def update_rating(name: str, rating: float) -> None:
-    """Update rating for a name, preserving or setting matches count.
-
-    Args:
-        name: Name to update
-        rating: New rating value
-
-    """
+def update_rating(name: str, rating: float) -> list[str]:
+    """Update one rating and return the skipped name when it is missing."""
     with get_connection() as conn:
-        # Get name_id
         name_id = conn.execute(
             "SELECT id FROM names WHERE name = ?",
             (name,),
         ).fetchone()
         if not name_id:
-            _msg = f"Name not found: {name}"
-            raise ValueError(_msg)
+            logger.warning("Name not found in database: %s", name)
+            return [name]
 
         name_id = name_id[0]
 
-        # Update or insert rating, preserving existing matches or default 0
         conn.execute(
             """
             INSERT OR REPLACE INTO ratings
@@ -783,6 +775,7 @@ def update_rating(name: str, rating: float) -> None:
         """,
             (name_id, rating, name_id),
         )
+    return []
 
 
 def update_ratings_batch(ratings_dict: dict[str, float]) -> list[str]:

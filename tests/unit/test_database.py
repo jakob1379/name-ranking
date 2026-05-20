@@ -364,12 +364,10 @@ class TestRatingOperations:
             assert result[0] == 0
 
     def test_update_rating_nonexistent_name(self, initialized_db):
-        """Test updating rating for non-existent name raises error."""
+        """Test updating rating for non-existent name reports it as skipped."""
         from st_name_ranking.database import update_rating
 
-        # Should raise ValueError
-        with pytest.raises(ValueError, match="Name not found"):
-            update_rating("Nonexistent", 1500.0)
+        assert update_rating("Nonexistent", 1500.0) == ["Nonexistent"]
 
     def test_get_ratings_empty(self, initialized_db):
         """Test getting ratings when no ratings exist."""
