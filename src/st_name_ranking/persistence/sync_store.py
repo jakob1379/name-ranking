@@ -8,7 +8,7 @@ from pathlib import Path
 from metaphone import doublemetaphone
 
 from st_name_ranking.name_normalization import is_valid_name, strip_name_notes
-from st_name_ranking.persistence import database
+from st_name_ranking.persistence.connection import get_connection
 from st_name_ranking.types import SourceVersion
 
 logger = logging.getLogger(__name__)
@@ -23,7 +23,7 @@ def sync_names_with_submodule(submodule_path: Path = Path("godkendtefornavne")) 
         raise FileNotFoundError(_msg)
 
     current_commit = _current_submodule_commit(submodule_path)
-    with database.get_connection() as conn:
+    with get_connection() as conn:
         last_sync = conn.execute(
             "SELECT commit_hash FROM source_versions ORDER BY id DESC LIMIT 1",
         ).fetchone()
@@ -36,7 +36,7 @@ def sync_names_with_submodule(submodule_path: Path = Path("godkendtefornavne")) 
     logger.debug("Filtered %d valid names", len(valid_names))
 
     inserted_count = 0
-    with database.get_connection() as conn:
+    with get_connection() as conn:
         if valid_names:
             before = conn.total_changes
             conn.executemany(
@@ -57,7 +57,7 @@ def sync_names_with_submodule(submodule_path: Path = Path("godkendtefornavne")) 
 
 def get_latest_submodule_version() -> SourceVersion | None:
     """Get the latest synced submodule commit."""
-    with database.get_connection() as conn:
+    with get_connection() as conn:
         cursor = conn.execute(
             "SELECT commit_hash FROM source_versions ORDER BY id DESC LIMIT 1",
         )
@@ -69,7 +69,7 @@ def get_latest_submodule_version() -> SourceVersion | None:
 
 def update_submodule_version(commit_hash: str) -> None:
     """Record a source-version commit hash."""
-    with database.get_connection() as conn:
+    with get_connection() as conn:
         conn.execute(
             "INSERT INTO source_versions (commit_hash) VALUES (?)",
             (commit_hash,),

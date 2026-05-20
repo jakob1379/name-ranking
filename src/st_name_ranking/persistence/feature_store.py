@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, Protocol
 
-from st_name_ranking.persistence import database
+from st_name_ranking.persistence.connection import MAX_SQL_PARAMS, get_connection
 from st_name_ranking.types import FeatureSetRecord, FeatureValues
 
 logger = logging.getLogger(__name__)
@@ -44,7 +44,7 @@ class CorruptFeatureCacheError(RuntimeError):
 
 def get_or_create_feature_set(version: str, feature_names: list[str]) -> int:
     """Get a feature-set ID, creating the row when needed."""
-    with database.get_connection() as conn:
+    with get_connection() as conn:
         cursor = conn.execute(
             "SELECT id FROM feature_sets WHERE version = ?",
             (version,),
@@ -66,7 +66,7 @@ def get_or_create_feature_set(version: str, feature_names: list[str]) -> int:
 
 def create_active_feature_set(version: str, feature_names: list[str]) -> int:
     """Create a new active feature-set row and deactivate older versions."""
-    with database.get_connection() as conn:
+    with get_connection() as conn:
         if not _table_exists(conn, "feature_sets"):
             msg = "Database not initialized. Run 'st-name-ranking db init' first."
             raise RuntimeError(msg)
@@ -108,7 +108,7 @@ def rebuild_feature_cache(
 
 def get_active_feature_set_version() -> str | None:
     """Get the currently active feature-set version."""
-    with database.get_connection() as conn:
+    with get_connection() as conn:
         cursor = conn.execute(
             """
             SELECT version FROM feature_sets
@@ -123,7 +123,7 @@ def get_active_feature_set_version() -> str | None:
 
 def get_feature_set_by_version(version: str) -> FeatureSetRecord | None:
     """Get feature-set details by version."""
-    with database.get_connection() as conn:
+    with get_connection() as conn:
         cursor = conn.execute(
             """
             SELECT id, version, feature_names_json, is_active, created_at
@@ -155,9 +155,9 @@ def get_cached_features_batch(
         return {}
 
     result: dict[int, FeatureValues] = {}
-    chunk_size = database.MAX_SQL_PARAMS // 2
+    chunk_size = MAX_SQL_PARAMS // 2
 
-    with database.get_connection() as conn:
+    with get_connection() as conn:
         for i in range(0, len(name_ids), chunk_size):
             chunk = name_ids[i : i + chunk_size]
             placeholders = ", ".join(["?"] * len(chunk))
@@ -179,7 +179,7 @@ def get_cached_features_batch(
 
 def get_cached_features(name_id: int, feature_set_id: int) -> FeatureValues | None:
     """Get cached features for a single name."""
-    with database.get_connection() as conn:
+    with get_connection() as conn:
         cursor = conn.execute(
             """
             SELECT features_json FROM name_features
@@ -206,9 +206,9 @@ def set_cached_features_batch(
         return 0
 
     inserted = 0
-    chunk_size = database.MAX_SQL_PARAMS // 4
+    chunk_size = MAX_SQL_PARAMS // 4
 
-    with database.get_connection() as conn:
+    with get_connection() as conn:
         for i in range(0, len(features_data), chunk_size):
             chunk = features_data[i : i + chunk_size]
             conn.executemany(
@@ -233,7 +233,7 @@ def extract_and_cache_features(
     extractor = _new_feature_extractor()
     feature_names = extractor.get_feature_names()
 
-    with database.get_connection() as conn:
+    with get_connection() as conn:
         cursor = conn.execute("""
             SELECT id, name, gender, origin_region
             FROM names
@@ -271,7 +271,7 @@ def extract_and_cache_features(
 
 def clear_all_features() -> int:
     """Clear all cached name features and return the number of deleted rows."""
-    with database.get_connection() as conn:
+    with get_connection() as conn:
         if not _table_exists(conn, "name_features"):
             return 0
         cursor = conn.execute("DELETE FROM name_features")
@@ -281,7 +281,7 @@ def clear_all_features() -> int:
 def has_feature_cache() -> bool:
     """Return whether feature tables exist and contain cached rows."""
     try:
-        with database.get_connection() as conn:
+        with get_connection() as conn:
             existing_tables = _existing_tables(conn, {"feature_sets", "name_features"})
             if "feature_sets" not in existing_tables or "name_features" not in existing_tables:
                 return False
@@ -295,7 +295,7 @@ def has_feature_cache() -> bool:
 
 def get_feature_stats() -> dict[str, int | str | None]:
     """Get feature-cache summary statistics for CLI/status output."""
-    with database.get_connection() as conn:
+    with get_connection() as conn:
         existing_tables = _existing_tables(conn, {"feature_sets", "name_features"})
         if "feature_sets" not in existing_tables or "name_features" not in existing_tables:
             return {
@@ -360,7 +360,7 @@ def set_cached_features(
     features: FeatureValues,
 ) -> None:
     """Cache computed features for a single name."""
-    with database.get_connection() as conn:
+    with get_connection() as conn:
         conn.execute(
             """
             INSERT OR REPLACE INTO name_features
@@ -373,7 +373,7 @@ def set_cached_features(
 
 def is_features_computed(name_id: int, feature_set_id: int) -> bool:
     """Return whether a cache row exists for a name and feature set."""
-    with database.get_connection() as conn:
+    with get_connection() as conn:
         cursor = conn.execute(
             """
             SELECT 1 FROM name_features
@@ -386,7 +386,7 @@ def is_features_computed(name_id: int, feature_set_id: int) -> bool:
 
 def get_feature_cache_stats() -> dict:
     """Get aggregate feature-cache coverage statistics."""
-    with database.get_connection() as conn:
+    with get_connection() as conn:
         total_names = conn.execute("SELECT COUNT(*) FROM names").fetchone()[0]
 
         cursor = conn.execute("""

@@ -10,12 +10,12 @@ Handles:
 
 import logging
 import sqlite3
-from collections.abc import Iterator
-from contextlib import contextmanager
-from pathlib import Path
+from contextlib import AbstractContextManager
 
 from metaphone import doublemetaphone
 
+from st_name_ranking.persistence import connection as db_connection
+from st_name_ranking.persistence.connection import INITIAL_SCORE, MAX_SQL_PARAMS
 from st_name_ranking.persistence.database_io import export_database, import_database  # noqa: F401
 from st_name_ranking.persistence.feature_store import (  # noqa: F401
     CorruptFeatureCacheError,
@@ -44,59 +44,20 @@ from st_name_ranking.types import (
 
 logger = logging.getLogger(__name__)
 
-
-DB_PATH = Path("data/names.db")
-_INIT_STATE = {"db_initialized": False, "db_path": None}
-
-# Default rating for new names
-INITIAL_SCORE = 1500.0
-
-# SQLite parameter limit (safely below 999)
-MAX_SQL_PARAMS = 500
+DB_PATH = db_connection.DB_PATH
+_INIT_STATE = db_connection._INIT_STATE
 
 
 def reset_database_init_state() -> None:
     """Reset cached database-initialization state."""
-    _INIT_STATE["db_initialized"] = False
-    _INIT_STATE["db_path"] = None
+    db_connection.DB_PATH = DB_PATH
+    db_connection.reset_database_init_state()
 
 
-@contextmanager
-def get_connection(timeout: float = 30.0) -> Iterator[sqlite3.Connection]:
-    """Context manager for database connections with atomic transaction support.
-
-    Args:
-        timeout: Maximum time to wait for database locks (seconds)
-
-    Ensures:
-    - Atomic commits (all or nothing)
-    - Automatic rollback on error
-    - Long busy timeout for concurrent access
-    - WAL mode for better concurrent read/write
-    """
-    # Convert timeout to milliseconds for SQLite
-    timeout_ms = int(timeout * 1000)
-    conn = sqlite3.connect(DB_PATH, timeout=timeout)
-    conn.row_factory = sqlite3.Row
-
-    try:
-        # Enable WAL mode for better concurrent read/write performance
-        conn.execute("PRAGMA journal_mode=WAL")
-        # Set busy timeout to wait for locks (30 seconds)
-        conn.execute(f"PRAGMA busy_timeout={timeout_ms}")
-        # Use DEFERRED transaction (default) - allows reads without write lock
-        # Write lock acquired only when first write occurs
-
-        yield conn
-
-        # Commit only if no exception occurred
-        conn.commit()
-    except Exception:
-        # Rollback on any error to maintain atomicity
-        conn.rollback()
-        raise
-    finally:
-        conn.close()
+def get_connection(timeout: float = 30.0) -> AbstractContextManager[sqlite3.Connection]:
+    """Return a database connection using the facade's current DB_PATH."""
+    db_connection.DB_PATH = DB_PATH
+    return db_connection.get_connection(timeout)
 
 
 def _compute_phonetic_codes(name: str) -> tuple[str, str]:

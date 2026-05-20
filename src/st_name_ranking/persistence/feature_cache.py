@@ -4,7 +4,13 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from st_name_ranking.persistence import database
+from st_name_ranking.persistence.feature_store import (
+    get_cached_features,
+    get_feature_set_by_version,
+    get_or_create_feature_set,
+    set_cached_features,
+    set_cached_features_batch,
+)
 
 if TYPE_CHECKING:
     from st_name_ranking.types import FeatureValues
@@ -24,14 +30,14 @@ class FeatureCache:
         """Lazy-load or create the backing feature-set row."""
         if self._feature_set_id is None:
             if self._feature_names is None:
-                feature_set = database.get_feature_set_by_version(self._version)
+                feature_set = get_feature_set_by_version(self._version)
                 if feature_set is None:
                     msg = f"Feature set version '{self._version}' not found"
                     raise ValueError(msg)
                 self._feature_set_id = feature_set["id"]
                 self._feature_names = feature_set["feature_names"]
             else:
-                self._feature_set_id = database.get_or_create_feature_set(self._version, self._feature_names)
+                self._feature_set_id = get_or_create_feature_set(self._version, self._feature_names)
         return self._feature_set_id
 
     def get_features(self, name_id: int, feature_set_version: str | None = None) -> FeatureValues | None:
@@ -42,12 +48,12 @@ class FeatureCache:
             return self._local_cache[cache_key]
 
         if version != self._version:
-            feature_set = database.get_feature_set_by_version(version)
+            feature_set = get_feature_set_by_version(version)
             if feature_set is None:
                 return None
-            features = database.get_cached_features(name_id, feature_set["id"])
+            features = get_cached_features(name_id, feature_set["id"])
         else:
-            features = database.get_cached_features(name_id, self._get_feature_set_id())
+            features = get_cached_features(name_id, self._get_feature_set_id())
 
         if features is not None:
             self._local_cache[cache_key] = features
@@ -65,7 +71,7 @@ class FeatureCache:
         version = feature_set_version or self._version
 
         if version != self._version:
-            feature_set = database.get_feature_set_by_version(version)
+            feature_set = get_feature_set_by_version(version)
             if feature_set is None:
                 msg = f"Feature set version '{version}' not found"
                 raise ValueError(msg)
@@ -74,7 +80,7 @@ class FeatureCache:
             feature_set_id = self._get_feature_set_id()
 
         self._local_cache[(version, name_id)] = features_dict
-        database.set_cached_features(name_id, feature_set_id, features_dict)
+        set_cached_features(name_id, feature_set_id, features_dict)
 
     def set_features_batch(self, features_data: list[tuple[int, FeatureValues]]) -> int:
         """Cache computed features for multiple names."""
@@ -86,7 +92,7 @@ class FeatureCache:
 
         feature_set_id = self._get_feature_set_id()
         db_data = [(name_id, feature_set_id, features) for name_id, features in features_data]
-        return database.set_cached_features_batch(db_data)
+        return set_cached_features_batch(db_data)
 
     @property
     def feature_names(self) -> list[str]:
