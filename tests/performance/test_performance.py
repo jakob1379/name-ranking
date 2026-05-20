@@ -22,12 +22,10 @@ def test_binary_filter_performance(tmp_path):
     print_progress("Setting up isolated database for AppTest...")
     # Create isolated database to avoid lock contention
     test_db_path = tmp_path / "test_performance.db"
-    original_db_path = database.DB_PATH
+    original_db_path = database.get_db_path()
 
     try:
-        # Patch database to use temp path
-        database.DB_PATH = test_db_path
-        database.reset_database_init_state()
+        database.set_db_path(test_db_path)
 
         print_progress(f"Database path set to: {test_db_path}")
         print_progress("Starting AppTest.from_file...")
@@ -58,8 +56,7 @@ def test_binary_filter_performance(tmp_path):
 
     finally:
         # Restore original database path
-        database.DB_PATH = original_db_path
-        database.reset_database_init_state()
+        database.set_db_path(original_db_path)
         print_progress("Database path restored")
 
 
@@ -111,11 +108,11 @@ def test_database_operations_performance(tmp_path):
     """Test database operation performance."""
     print_progress("Starting test_database_operations_performance...")
 
-    from st_name_ranking.database import DB_PATH, get_connection, init_database
+    from st_name_ranking.database import get_connection, get_db_path, init_database
 
     # Create isolated database to avoid lock contention with other tests
     test_db_path = tmp_path / "test_perf_db.db"
-    original_db_path = DB_PATH
+    original_db_path = get_db_path()
 
     print_progress(f"Setting up isolated database: {test_db_path}")
 
@@ -123,8 +120,7 @@ def test_database_operations_performance(tmp_path):
         # Temporarily redirect database to isolated path
         import st_name_ranking.database as db_module
 
-        db_module.DB_PATH = test_db_path
-        db_module.reset_database_init_state()
+        db_module.set_db_path(test_db_path)
 
         # Ensure fresh database
         print_progress("Initializing database...")
@@ -167,8 +163,7 @@ def test_database_operations_performance(tmp_path):
         # Restore original database path
         import st_name_ranking.database as db_module
 
-        db_module.DB_PATH = original_db_path
-        db_module.reset_database_init_state()
+        db_module.set_db_path(original_db_path)
         print_progress("Database path restored")
 
 

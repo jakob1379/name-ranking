@@ -23,18 +23,13 @@ def mock_db_path(temp_db_path):
     """Mock the database path in st_name_ranking.database."""
     from st_name_ranking import database
 
-    original_path = database.DB_PATH
+    original_path = database.get_db_path()
 
-    # Patch the DB_PATH
-    database.DB_PATH = temp_db_path
-    # Reset initialization flag
-    database.reset_database_init_state()
+    database.set_db_path(temp_db_path)
 
     yield temp_db_path
 
-    # Restore original path
-    database.DB_PATH = original_path
-    database.reset_database_init_state()
+    database.set_db_path(original_path)
 
 
 @pytest.fixture

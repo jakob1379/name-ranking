@@ -67,10 +67,46 @@ class TestDatabaseInitialization:
 
         database.init_database()
 
-        assert database._INIT_STATE == {
+        assert {
             "db_initialized": True,
-            "db_path": database.DB_PATH,
-        }
+            "db_path": database.get_db_path(),
+        } == database._INIT_STATE
+
+    def test_set_db_path_resets_state_and_syncs_connection(self, tmp_path):
+        """set_db_path should update connection state and invalidate init status."""
+        from st_name_ranking.persistence import connection
+
+        original_path = database.get_db_path()
+        database._INIT_STATE["db_initialized"] = True
+        database._INIT_STATE["db_path"] = original_path
+        new_path = tmp_path / "alternate.db"
+
+        try:
+            database.set_db_path(new_path)
+
+            assert database.get_db_path() == new_path
+            assert connection.get_db_path() == new_path
+            assert database._INIT_STATE == {"db_initialized": False, "db_path": None}
+        finally:
+            database.set_db_path(original_path)
+
+    def test_legacy_db_path_assignment_syncs_through_get_db_path(self, tmp_path):
+        """Legacy direct DB_PATH assignment should still reset connection state on sync."""
+        from st_name_ranking.persistence import connection
+
+        original_path = database.get_db_path()
+        new_path = tmp_path / "legacy.db"
+
+        try:
+            database.DB_PATH = new_path
+            database._INIT_STATE["db_initialized"] = True
+            database._INIT_STATE["db_path"] = original_path
+
+            assert database.get_db_path() == new_path
+            assert connection.get_db_path() == new_path
+            assert database._INIT_STATE == {"db_initialized": False, "db_path": None}
+        finally:
+            database.set_db_path(original_path)
 
     def test_region_mapping_populated(self, mock_db_path):
         """Test that region_mapping table is populated with data."""

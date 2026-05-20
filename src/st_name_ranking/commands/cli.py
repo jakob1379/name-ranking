@@ -28,8 +28,8 @@ from st_name_ranking.active_learning.selection import (
 from st_name_ranking.classification.classify_origins import classify_all_names
 
 # Import database functions
+from st_name_ranking.persistence import database
 from st_name_ranking.persistence.database import (
-    DB_PATH,
     get_connection,
     get_stats,
     init_database,
@@ -158,7 +158,7 @@ def print_warning(message: str) -> None:
 
 def is_database_initialized() -> bool:
     """Check if the database exists and has the core schema."""
-    if not DB_PATH.exists():
+    if not database.get_db_path().exists():
         return False
 
     try:
@@ -717,17 +717,18 @@ def import_db(
 
     try:
         # Create backup of current database if it exists
-        if DB_PATH.exists():
+        db_path = database.get_db_path()
+        if db_path.exists():
             backup_timestamp = dt.datetime.now(dt.UTC).strftime("%Y%m%d_%H%M%S")
-            backup_path = DB_PATH.with_suffix(f".db.backup.{backup_timestamp}")
-            shutil.copy2(DB_PATH, backup_path)
+            backup_path = db_path.with_suffix(f".db.backup.{backup_timestamp}")
+            shutil.copy2(db_path, backup_path)
             print_success(f"Created backup: {backup_path.name}")
 
         # Copy new database
-        DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(source, DB_PATH)
+        db_path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, db_path)
         print_success(f"Imported database from {source.name}")
-        print_info(f"Database location: {DB_PATH}")
+        print_info(f"Database location: {db_path}")
 
         # Show stats
         console.print()

@@ -6,19 +6,20 @@ import shutil
 import sqlite3
 import tempfile
 
-from st_name_ranking.persistence.connection import DB_PATH, reset_database_init_state
+from st_name_ranking.persistence.connection import get_db_path, reset_database_init_state
 
 logger = logging.getLogger(__name__)
 
 
 def export_database() -> bytes:
     """Export the current SQLite database file as bytes."""
-    if not DB_PATH.exists():
-        _msg = f"Database file not found at {DB_PATH}"
+    db_path = get_db_path()
+    if not db_path.exists():
+        _msg = f"Database file not found at {db_path}"
         raise FileNotFoundError(_msg)
 
     try:
-        with DB_PATH.open("rb") as f:
+        with db_path.open("rb") as f:
             return f.read()
     except OSError as e:
         _msg = f"Failed to read database file: {e}"
@@ -40,15 +41,16 @@ def import_database(file_bytes: bytes, *, backup: bool = True) -> None:
         _msg = f"Uploaded file is not a valid SQLite database: {e}"
         raise ValueError(_msg) from e
 
-    if backup and DB_PATH.exists():
-        backup_path = DB_PATH.with_suffix(
+    db_path = get_db_path()
+    if backup and db_path.exists():
+        backup_path = db_path.with_suffix(
             f".db.backup.{dt.datetime.now(dt.UTC).strftime('%Y%m%d_%H%M%S')}",
         )
-        shutil.copy2(DB_PATH, backup_path)
+        shutil.copy2(db_path, backup_path)
         logger.info("Created backup of current database at %s", backup_path)
 
     try:
-        with DB_PATH.open("wb") as f:
+        with db_path.open("wb") as f:
             f.write(file_bytes)
     except OSError as e:
         _msg = f"Failed to write database file: {e}"

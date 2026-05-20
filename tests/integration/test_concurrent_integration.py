@@ -24,9 +24,7 @@ def _init_in_process(db_path_str):
     sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
     from st_name_ranking import database
 
-    # Set the database path
-    database.DB_PATH = Path(db_path_str)
-    database.reset_database_init_state()
+    database.set_db_path(Path(db_path_str))
 
     try:
         database.init_database()
@@ -46,8 +44,7 @@ def _vote_in_process(args):
     sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
     from st_name_ranking import database
 
-    database.DB_PATH = Path(db_path)
-    database.reset_database_init_state()
+    database.set_db_path(Path(db_path))
 
     try:
         for i in range(10):

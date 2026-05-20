@@ -174,9 +174,9 @@ from st_name_ranking import database
 from st_name_ranking.ui import render_tournament, render_binary_filter, render_similarity
 
 # Set test DB path
-database.DB_PATH = Path("{test_db_path}")
+database.set_db_path(Path("{test_db_path}"))
 database._INIT_STATE["db_initialized"] = True
-database._INIT_STATE["db_path"] = database.DB_PATH
+database._INIT_STATE["db_path"] = database.get_db_path()
 
 st.set_page_config(page_title="Name Ranker", layout="wide")
 st.title("Name Preference Ranker")
@@ -527,9 +527,9 @@ sys.path.insert(0, str(Path("{db_path}").parent.parent / "src"))
 
 from st_name_ranking import database
 
-database.DB_PATH = Path("{db_path}")
+database.set_db_path(Path("{db_path}"))
 database._INIT_STATE["db_initialized"] = True
-database._INIT_STATE["db_path"] = database.DB_PATH
+database._INIT_STATE["db_path"] = database.get_db_path()
 
 st.set_page_config(page_title="Test", layout="wide")
 
@@ -578,9 +578,9 @@ sys.path.insert(0, str(Path("{db_path}").parent.parent / "src"))
 
 from st_name_ranking import database
 
-database.DB_PATH = Path("{db_path}")
+database.set_db_path(Path("{db_path}"))
 database._INIT_STATE["db_initialized"] = True
-database._INIT_STATE["db_path"] = database.DB_PATH
+database._INIT_STATE["db_path"] = database.get_db_path()
 
 st.set_page_config(page_title="Test", layout="wide")
 
@@ -623,9 +623,9 @@ sys.path.insert(0, str(Path("{db_path}").parent.parent / "src"))
 
 from st_name_ranking import database
 
-database.DB_PATH = Path("{db_path}")
+database.set_db_path(Path("{db_path}"))
 database._INIT_STATE["db_initialized"] = True
-database._INIT_STATE["db_path"] = database.DB_PATH
+database._INIT_STATE["db_path"] = database.get_db_path()
 
 st.set_page_config(page_title="Test", layout="wide")
 
@@ -674,9 +674,9 @@ sys.path.insert(0, str(Path("{db_path}").parent.parent / "src"))
 from st_name_ranking import database
 from st_name_ranking.interface.app_actions import setup_session_state
 
-database.DB_PATH = Path("{db_path}")
+database.set_db_path(Path("{db_path}"))
 database._INIT_STATE["db_initialized"] = True
-database._INIT_STATE["db_path"] = database.DB_PATH
+database._INIT_STATE["db_path"] = database.get_db_path()
 
 st.set_page_config(page_title="Test", layout="wide")
 
@@ -753,9 +753,9 @@ sys.path.insert(0, str(Path("{db_path}").parent.parent / "src"))
 
 from st_name_ranking import database
 
-database.DB_PATH = Path("{db_path}")
+database.set_db_path(Path("{db_path}"))
 database._INIT_STATE["db_initialized"] = True
-database._INIT_STATE["db_path"] = database.DB_PATH
+database._INIT_STATE["db_path"] = database.get_db_path()
 
 st.set_page_config(page_title="Test", layout="wide")
 
@@ -960,9 +960,9 @@ sys.path.insert(0, str(Path("{db_path}").parent.parent / "src"))
 
 from st_name_ranking import database
 
-database.DB_PATH = Path("{db_path}")
+database.set_db_path(Path("{db_path}"))
 database._INIT_STATE["db_initialized"] = True
-database._INIT_STATE["db_path"] = database.DB_PATH
+database._INIT_STATE["db_path"] = database.get_db_path()
 
 st.set_page_config(page_title="Test", layout="wide")
 
@@ -998,9 +998,9 @@ sys.path.insert(0, str(Path("{db_path}").parent.parent / "src"))
 
 from st_name_ranking import database
 
-database.DB_PATH = Path("{db_path}")
+database.set_db_path(Path("{db_path}"))
 database._INIT_STATE["db_initialized"] = True
-database._INIT_STATE["db_path"] = database.DB_PATH
+database._INIT_STATE["db_path"] = database.get_db_path()
 
 st.set_page_config(page_title="Test", layout="wide")
 
@@ -1037,9 +1037,9 @@ sys.path.insert(0, str(Path("{db_path}").parent.parent / "src"))
 
 from st_name_ranking import database
 
-database.DB_PATH = Path("{db_path}")
+database.set_db_path(Path("{db_path}"))
 database._INIT_STATE["db_initialized"] = True
-database._INIT_STATE["db_path"] = database.DB_PATH
+database._INIT_STATE["db_path"] = database.get_db_path()
 
 st.set_page_config(page_title="Test", layout="wide")
 
@@ -1078,9 +1078,9 @@ sys.path.insert(0, str(Path("{db_path}").parent.parent / "src"))
 
 from st_name_ranking import database
 
-database.DB_PATH = Path("{db_path}")
+database.set_db_path(Path("{db_path}"))
 database._INIT_STATE["db_initialized"] = True
-database._INIT_STATE["db_path"] = database.DB_PATH
+database._INIT_STATE["db_path"] = database.get_db_path()
 
 st.set_page_config(page_title="Test", layout="wide")
 

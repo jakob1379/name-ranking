@@ -25,19 +25,17 @@ from st_name_ranking.model import BradleyTerryModel
 
 @pytest.fixture
 def temp_db():
-    """Create a temporary database file and patch DB_PATH."""
+    """Create a temporary database file and patch the active database path."""
     with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
         db_path = Path(f.name)
 
-    original_path = database.DB_PATH
-    database.DB_PATH = db_path
-    database.reset_database_init_state()
+    original_path = database.get_db_path()
+    database.set_db_path(db_path)
 
     yield db_path
 
     # Cleanup
-    database.DB_PATH = original_path
-    database.reset_database_init_state()
+    database.set_db_path(original_path)
     if db_path.exists():
         db_path.unlink()
 

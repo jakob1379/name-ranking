@@ -7,6 +7,7 @@ schema initialization plus the historical import surface during migration.
 import logging
 import sqlite3
 from contextlib import AbstractContextManager
+from pathlib import Path
 
 from metaphone import doublemetaphone
 
@@ -14,6 +15,7 @@ from st_name_ranking.persistence import (
     connection as db_connection,
 )
 from st_name_ranking.persistence import (
+    database_io,
     name_store,
     preference_stats_store,
     ratings_store,
@@ -21,7 +23,6 @@ from st_name_ranking.persistence import (
     settings_store,
     stats_store,
 )
-from st_name_ranking.persistence.database_io import export_database, import_database  # noqa: F401
 from st_name_ranking.persistence.feature_store import (  # noqa: F401
     CorruptFeatureCacheError,
     get_active_feature_set_version,
@@ -56,7 +57,21 @@ MAX_SQL_PARAMS = db_connection.MAX_SQL_PARAMS
 
 
 def _sync_connection_path() -> None:
-    db_connection.DB_PATH = DB_PATH
+    if db_connection.get_db_path() != DB_PATH:
+        db_connection.set_db_path(DB_PATH)
+
+
+def get_db_path() -> Path:
+    """Return the active SQLite database path."""
+    _sync_connection_path()
+    return db_connection.get_db_path()
+
+
+def set_db_path(path: str | Path) -> None:
+    """Set the active SQLite database path and reset initialization state."""
+    global DB_PATH  # noqa: PLW0603
+    DB_PATH = Path(path)
+    db_connection.set_db_path(DB_PATH)
 
 
 def reset_database_init_state() -> None:
@@ -69,6 +84,18 @@ def get_connection(timeout: float = 30.0) -> AbstractContextManager[sqlite3.Conn
     """Return a database connection using the facade's current DB_PATH."""
     _sync_connection_path()
     return db_connection.get_connection(timeout)
+
+
+def export_database() -> bytes:
+    """Export the current SQLite database file as bytes."""
+    _sync_connection_path()
+    return database_io.export_database()
+
+
+def import_database(file_bytes: bytes, *, backup: bool = True) -> None:
+    """Replace the current SQLite database with uploaded bytes."""
+    _sync_connection_path()
+    database_io.import_database(file_bytes, backup=backup)
 
 
 def _compute_phonetic_codes(name: str) -> tuple[str, str]:
@@ -261,12 +288,12 @@ def _ensure_seed_region_mapping(conn: sqlite3.Connection) -> None:
 
 def init_database() -> None:
     """Initialize database schema if it doesn't exist."""
-    _sync_connection_path()
-    if _INIT_STATE["db_initialized"] and _INIT_STATE["db_path"] == DB_PATH:
+    db_path = get_db_path()
+    if _INIT_STATE["db_initialized"] and _INIT_STATE["db_path"] == db_path:
         logger.debug("Database already initialized, skipping initialization")
         return
 
-    db_exists = DB_PATH.exists()
+    db_exists = db_path.exists()
 
     try:
         with get_connection() as conn:
@@ -279,7 +306,7 @@ def init_database() -> None:
                     table_exists = False
 
             if not db_exists:
-                logger.info("Creating new database at %s", DB_PATH)
+                logger.info("Creating new database at %s", db_path)
             elif not table_exists:
                 logger.info("Initializing database schema for existing file")
             else:
@@ -296,7 +323,7 @@ def init_database() -> None:
         raise
     else:
         _INIT_STATE["db_initialized"] = True
-        _INIT_STATE["db_path"] = DB_PATH
+        _INIT_STATE["db_path"] = db_path
 
 
 def get_unclassified_names(limit: int | None = None) -> list[UnclassifiedName]:

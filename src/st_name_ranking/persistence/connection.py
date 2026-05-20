@@ -23,11 +23,23 @@ def reset_database_init_state() -> None:
     _INIT_STATE["db_path"] = None
 
 
+def get_db_path() -> Path:
+    """Return the active SQLite database path."""
+    return DB_PATH
+
+
+def set_db_path(path: str | Path) -> None:
+    """Set the active SQLite database path and reset initialization state."""
+    global DB_PATH  # noqa: PLW0603
+    DB_PATH = Path(path)
+    reset_database_init_state()
+
+
 @contextmanager
 def get_connection(timeout: float = 30.0) -> Iterator[sqlite3.Connection]:
     """Context manager for database connections with atomic transactions."""
     timeout_ms = int(timeout * 1000)
-    conn = sqlite3.connect(DB_PATH, timeout=timeout)
+    conn = sqlite3.connect(get_db_path(), timeout=timeout)
     conn.row_factory = sqlite3.Row
 
     try:
