@@ -877,11 +877,12 @@ class TestConcurrentComparisonRecording:
 class TestUtilsConcurrency:
     """Tests for concurrent access to utility functions."""
 
-    def test_update_model_and_save_concurrent(self, initialized_db):
+    def test_record_comparison_instant_concurrent_model_updates(self, initialized_db):
         """
-        Multiple threads calling update_model_and_save should be safe.
+        Multiple threads recording comparisons should update model state safely.
         """
         from st_name_ranking import database, utils
+        from st_name_ranking.active_learning.lazy_updates import record_comparison_instant
         from st_name_ranking.features import FeatureExtractor
 
         # Initialize model first and verify the feature surface is available.
@@ -902,7 +903,7 @@ class TestUtilsConcurrency:
                 for i in range(10):
                     winner = names[i % len(names)]
                     loser = names[(i + 1) % len(names)]
-                    utils.update_model_and_save(winner, loser)
+                    record_comparison_instant(winner, loser, -1, blocking=True)
             except (RuntimeError, ValueError, sqlite3.Error) as e:
                 errors.append((thread_id, str(e)))
 
@@ -919,11 +920,12 @@ class TestUtilsConcurrency:
             result = cursor.fetchone()[0]
             assert result == "ok", f"Database integrity check failed: {result}"
 
-    def test_update_preference_and_save_concurrent(self, initialized_db):
+    def test_record_comparison_instant_concurrent_preferences(self, initialized_db):
         """
-        Multiple threads calling update_preference_and_save should be safe.
+        Multiple threads recording winner/loser preferences should be safe.
         """
         from st_name_ranking import database, utils
+        from st_name_ranking.active_learning.lazy_updates import record_comparison_instant
         from st_name_ranking.features import FeatureExtractor
 
         # Initialize and verify the feature surface is available.
@@ -937,14 +939,12 @@ class TestUtilsConcurrency:
             for name in names:
                 conn.execute("INSERT INTO names (name, gender) VALUES (?, ?)", (name, "Female"))
 
-        ratings = dict.fromkeys(names, 1500.0)
-
         errors = []
 
         def preference_worker(thread_id):
             try:
                 for i in range(5):
-                    utils.update_preference_and_save(ratings, "PrefA", "PrefB")
+                    record_comparison_instant("PrefA", "PrefB", -1, blocking=True)
             except (RuntimeError, ValueError, sqlite3.Error) as e:
                 errors.append((thread_id, str(e)))
 

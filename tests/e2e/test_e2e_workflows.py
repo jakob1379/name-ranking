@@ -9,6 +9,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from st_name_ranking.active_learning.lazy_updates import BOTH_DISLIKED_PREFERENCE, record_comparison_instant
 from st_name_ranking.data_loader import initialize_or_load_ratings
 from st_name_ranking.database import (
     get_connection,
@@ -21,12 +22,39 @@ from st_name_ranking.database import (
     update_name_origin,
 )
 from st_name_ranking.features import FeatureExtractor
-from st_name_ranking.utils import (
-    select_candidates,
-    update_preference_and_save,
-    update_preference_both_disliked_and_save,
-    update_preference_draw_and_save,
-)
+from st_name_ranking.utils import select_candidates
+
+
+def update_preference_and_save(ratings: dict[str, float], winner: str, loser: str) -> dict[str, float]:
+    """Test-only adapter for the removed compatibility wrapper."""
+    return _record_preference_and_refresh_ratings(ratings, winner, loser, -1)
+
+
+def update_preference_draw_and_save(ratings: dict[str, float], player_a: str, player_b: str) -> dict[str, float]:
+    """Test-only adapter for the removed compatibility wrapper."""
+    return _record_preference_and_refresh_ratings(ratings, player_a, player_b, 0)
+
+
+def update_preference_both_disliked_and_save(
+    ratings: dict[str, float],
+    player_a: str,
+    player_b: str,
+) -> dict[str, float]:
+    """Test-only adapter for the removed compatibility wrapper."""
+    return _record_preference_and_refresh_ratings(ratings, player_a, player_b, BOTH_DISLIKED_PREFERENCE)
+
+
+def _record_preference_and_refresh_ratings(
+    ratings: dict[str, float],
+    name_a: str,
+    name_b: str,
+    preference: int,
+) -> dict[str, float]:
+    status = record_comparison_instant(name_a, name_b, preference, blocking=True)
+    if not status.recorded:
+        return ratings.copy()
+    return {**ratings, **get_ratings()}
+
 
 # =============================================================================
 # E2E Workflow Tests

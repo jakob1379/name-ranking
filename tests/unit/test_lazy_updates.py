@@ -117,24 +117,6 @@ def test_update_model_sync_uses_both_disliked_update(monkeypatch):
     model.save_to_db.assert_called_once_with()
 
 
-def test_update_model_async_runs_worker_through_executor(monkeypatch):
-    executor = ImmediateExecutor()
-    model = Mock()
-    features_a = np.array([1.0, 0.0])
-    features_b = np.array([0.0, 1.0])
-
-    monkeypatch.setattr(lazy_updates, "get_thread_executor", Mock(return_value=executor))
-    monkeypatch.setattr(lazy_updates, "get_active_learning_model", Mock(return_value=model))
-    monkeypatch.setattr(lazy_updates, "get_name_features", Mock(side_effect=[features_a, features_b]))
-
-    lazy_updates.update_model_async("Anna", "Peter", -1)
-
-    assert len(executor.submissions) == 1
-    model.update.assert_called_once()
-    assert model.update.call_args.args == (features_a, features_b, -1)
-    model.save_to_db.assert_called_once_with()
-
-
 class FakeCursor:
     def __init__(self, rows):
         self._rows = rows

@@ -38,20 +38,6 @@ def get_thread_executor() -> ThreadPoolExecutor:
     return ThreadPoolExecutor(max_workers=2)
 
 
-def update_model_async(name_a: str, name_b: str, preference: int) -> None:
-    """Queue a model update in the background."""
-
-    def _update() -> None:
-        with _model_update_lock:
-            model = get_active_learning_model()
-            features_a = get_name_features(name_a)
-            features_b = get_name_features(name_b)
-            model.update(features_a, features_b, preference)
-            model.save_to_db()
-
-    get_thread_executor().submit(_update)
-
-
 def record_comparison_instant(
     name_a: str,
     name_b: str,
@@ -111,59 +97,6 @@ def _update_model_sync(name_a: str, name_b: str, preference: int) -> bool:
             return True
 
 
-def _compute_rating_for_name(name: str) -> float:
-    """Compute a display rating for one name from current model utility."""
-    model = get_active_learning_model()
-    features = get_name_features(name)
-    utility = model.get_utility(features.reshape(1, -1))[0]
-    return 1500 + utility * 500
-
-
-def update_model_and_save(winner: str, loser: str) -> bool:
-    """Update the model for a winner/loser preference and persist it."""
-    try:
-        model = get_active_learning_model()
-        features_a = get_name_features(winner)
-        features_b = get_name_features(loser)
-        model.update(features_a, features_b, -1)
-        model.save_to_db()
-    except (RuntimeError, ValueError, AttributeError):
-        logger.exception("Failed to update model")
-        return False
-    else:
-        return True
-
-
-def update_model_draw_and_save(player_a: str, player_b: str) -> bool:
-    """Update the model for an equal-preference vote and persist it."""
-    try:
-        model = get_active_learning_model()
-        features_a = get_name_features(player_a)
-        features_b = get_name_features(player_b)
-        model.update(features_a, features_b, 0)
-        model.save_to_db()
-    except (RuntimeError, ValueError, AttributeError):
-        logger.exception("Failed to update model for draw")
-        return False
-    else:
-        return True
-
-
-def update_model_both_disliked_and_save(player_a: str, player_b: str) -> bool:
-    """Update the model for a both-disliked vote and persist it."""
-    try:
-        model = get_active_learning_model()
-        features_a = get_name_features(player_a)
-        features_b = get_name_features(player_b)
-        model.update_both_disliked(features_a, features_b)
-        model.save_to_db()
-    except (RuntimeError, ValueError, AttributeError):
-        logger.exception("Failed to update model for both disliked")
-        return False
-    else:
-        return True
-
-
 def _update_ratings_from_model() -> bool:
     """Refresh stored display ratings from current model utilities."""
     try:
@@ -186,81 +119,3 @@ def _update_ratings_from_model() -> bool:
         return False
     else:
         return True
-
-
-def update_preference_and_save(
-    ratings: dict[str, float],
-    winner: str,
-    loser: str,
-    *,
-    blocking: bool = False,
-) -> dict[str, float]:
-    """Record a winner/loser preference and return updated display ratings."""
-    status = record_comparison_instant(winner, loser, -1, blocking=blocking)
-
-    if not blocking or not status.model_updated:
-        return ratings.copy()
-
-    try:
-        winner_rating = _compute_rating_for_name(winner)
-        loser_rating = _compute_rating_for_name(loser)
-        ratings[winner] = winner_rating
-        ratings[loser] = loser_rating
-        database.update_rating(winner, winner_rating)
-        database.update_rating(loser, loser_rating)
-        return ratings.copy()
-    except (RuntimeError, ValueError) as e:
-        logger.warning("Failed to compute updated ratings: %s", e)
-        return ratings.copy()
-
-
-def update_preference_draw_and_save(
-    ratings: dict[str, float],
-    player_a: str,
-    player_b: str,
-    *,
-    blocking: bool = False,
-) -> dict[str, float]:
-    """Record an equal-preference vote and return updated display ratings."""
-    status = record_comparison_instant(player_a, player_b, 0, blocking=blocking)
-
-    if not blocking or not status.model_updated:
-        return ratings.copy()
-
-    try:
-        rating_a = _compute_rating_for_name(player_a)
-        rating_b = _compute_rating_for_name(player_b)
-        ratings[player_a] = rating_a
-        ratings[player_b] = rating_b
-        database.update_rating(player_a, rating_a)
-        database.update_rating(player_b, rating_b)
-        return ratings.copy()
-    except (RuntimeError, ValueError) as e:
-        logger.warning("Failed to compute updated ratings: %s", e)
-        return ratings.copy()
-
-
-def update_preference_both_disliked_and_save(
-    ratings: dict[str, float],
-    player_a: str,
-    player_b: str,
-    *,
-    blocking: bool = False,
-) -> dict[str, float]:
-    """Record a both-disliked vote and return updated display ratings."""
-    status = record_comparison_instant(player_a, player_b, BOTH_DISLIKED_PREFERENCE, blocking=blocking)
-
-    if not blocking or not status.model_updated:
-        return ratings.copy()
-
-    try:
-        rating_a = _compute_rating_for_name(player_a)
-        rating_b = _compute_rating_for_name(player_b)
-        ratings[player_a] = rating_a
-        ratings[player_b] = rating_b
-        database.update_rating(player_a, rating_a)
-        database.update_rating(player_b, rating_b)
-        return ratings.copy()
-    except (RuntimeError, ValueError) as e:
-        logger.warning("Failed to compute updated ratings: %s", e)
-        return ratings.copy()

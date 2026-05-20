@@ -413,14 +413,16 @@ class TestConsistencyAndRecovery:
         initial_winner_rating = initial_ratings["Winner"]
         initial_loser_rating = initial_ratings["Loser"]
 
+        from st_name_ranking.active_learning.lazy_updates import record_comparison_instant
+
         # Simulate model update failure
-        with patch("st_name_ranking.utils.get_active_learning_model") as mock_get_model:
+        with patch("st_name_ranking.active_learning.lazy_updates.get_active_learning_model") as mock_get_model:
             mock_model = MagicMock()
             mock_model.update.side_effect = RuntimeError("Model update failed")
             mock_get_model.return_value = mock_model
 
             # Attempt update - should handle gracefully (function catches RuntimeError)
-            utils.update_model_and_save("Winner", "Loser")  # Should not raise
+            record_comparison_instant("Winner", "Loser", -1, blocking=True)  # Should not raise
 
         # Ratings should remain unchanged
         final_ratings = get_ratings()
