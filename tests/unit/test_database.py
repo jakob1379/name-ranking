@@ -608,6 +608,36 @@ class TestSyncOperations:
             assert result == 0  # inserted count
             # sync_names_with_submodule returns inserted count (int)
 
+    def test_sync_names_raises_when_git_commit_lookup_fails(self, mock_submodule_path, initialized_db):
+        """Failed git rev-parse should not be treated as an empty source version."""
+        from unittest.mock import patch
+
+        from st_name_ranking.database import sync_names_with_submodule
+
+        with patch("st_name_ranking.sync_store.subprocess.run") as mock_run:
+            mock_process = mock_run.return_value
+            mock_process.stdout = ""
+            mock_process.stderr = "not a git repository"
+            mock_process.returncode = 128
+
+            with pytest.raises(RuntimeError, match="Failed to get submodule commit hash"):
+                sync_names_with_submodule(submodule_path=mock_submodule_path)
+
+    def test_sync_names_raises_when_git_commit_lookup_is_empty(self, mock_submodule_path, initialized_db):
+        """An empty rev-parse stdout is not a valid commit hash."""
+        from unittest.mock import patch
+
+        from st_name_ranking.database import sync_names_with_submodule
+
+        with patch("st_name_ranking.sync_store.subprocess.run") as mock_run:
+            mock_process = mock_run.return_value
+            mock_process.stdout = "\n"
+            mock_process.stderr = ""
+            mock_process.returncode = 0
+
+            with pytest.raises(RuntimeError, match="empty stdout"):
+                sync_names_with_submodule(submodule_path=mock_submodule_path)
+
 
 class TestPhoneticOperations:
     """Tests for phonetic code computation and updates."""

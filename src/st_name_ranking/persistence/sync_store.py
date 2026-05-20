@@ -94,7 +94,16 @@ def _current_submodule_commit(submodule_path: Path) -> str:
         _msg = f"Failed to get submodule commit hash: {e}"
         raise RuntimeError(_msg) from e
     else:
+        if result.returncode != 0:
+            details = (result.stderr or result.stdout or "no output").strip()
+            _msg = f"Failed to get submodule commit hash (exit {result.returncode}): {details}"
+            raise RuntimeError(_msg)
+
         current_commit = result.stdout.strip()
+        if not current_commit:
+            _msg = "Failed to get submodule commit hash: git returned empty stdout"
+            raise RuntimeError(_msg)
+
         logger.debug("Submodule commit hash: %s", current_commit)
         return current_commit
 
