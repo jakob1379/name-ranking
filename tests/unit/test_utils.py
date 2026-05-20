@@ -445,8 +445,8 @@ class TestSelectCandidatesFallback:
     @patch("st_name_ranking.utils.phonetic_similarity")
     def test_fallback_empty_or_single_name(self, mock_phonetic_similarity, mock_get_comparison_count):
         """Test fallback with empty or single name list."""
-        assert utils._select_candidates_fallback([]) == ("", "")
-        assert utils._select_candidates_fallback(["Anna"]) == ("", "")
+        assert utils._select_candidates_fallback([]) is None
+        assert utils._select_candidates_fallback(["Anna"]) is None
         # No database or similarity calls
         mock_get_comparison_count.assert_not_called()
         mock_phonetic_similarity.assert_not_called()

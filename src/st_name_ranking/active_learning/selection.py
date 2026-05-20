@@ -89,8 +89,8 @@ class PairSelectionDependencies:
     model_provider: Callable[[], BradleyTerryModel] = get_active_learning_model
     features_provider: Callable[[list[str]], np.ndarray] = get_names_features
     comparison_count_provider: Callable[[str], int] = database.get_comparison_count
-    heuristic_pair_provider: Callable[[list[str]], tuple[str, str]] | None = None
-    single_pair_provider: Callable[[list[str], np.ndarray | None], tuple[str, str]] | None = None
+    heuristic_pair_provider: Callable[[list[str]], tuple[str, str] | None] | None = None
+    single_pair_provider: Callable[[list[str], np.ndarray | None], tuple[str, str] | None] | None = None
     warning_logger: Callable[..., None] = logger.warning
 
 
@@ -255,8 +255,11 @@ def _fallback_pairs(
 
     if batch_size > 1:
         if dependencies.single_pair_provider is not None:
-            pair = dependencies.single_pair_provider(names, features)
-            return [pair] if pair[0] else []
+            try:
+                pair = dependencies.single_pair_provider(names, features)
+            except ValueError:
+                return []
+            return [pair] if _has_pair(pair) else []
 
         pairs = select_candidate_pairs(
             names,
@@ -267,23 +270,27 @@ def _fallback_pairs(
         return pairs[:1]
 
     pair = _select_candidates_fallback(names, dependencies)
-    return [pair] if pair[0] else []
+    return [pair] if _has_pair(pair) else []
+
+
+def _has_pair(pair: tuple[str, str] | None) -> bool:
+    return pair is not None and bool(pair[0]) and bool(pair[1])
 
 
 def _select_candidates_fallback(
     names: list[str],
     dependencies: PairSelectionDependencies,
-) -> tuple[str, str]:
+) -> tuple[str, str] | None:
     if dependencies.heuristic_pair_provider is not None:
         return dependencies.heuristic_pair_provider(names)
 
     if len(names) < MIN_NAMES_FOR_PAIR_SELECTION:
-        return "", ""
+        return None
 
     rng = np.random.default_rng()
     utilities = {name: 1.0 / (dependencies.comparison_count_provider(name) + 1) for name in names}
     n_pairs = min(100, len(names) * (len(names) - 1) // 2)
-    best_pair = ("", "")
+    best_pair: tuple[str, str] | None = None
     best_score = -1.0
 
     for _ in range(n_pairs):
@@ -296,7 +303,7 @@ def _select_candidates_fallback(
             best_score = pair_score
             best_pair = (a, b)
 
-    if best_pair == ("", ""):
+    if best_pair is None:
         return select_random_pair(names)
 
     return best_pair

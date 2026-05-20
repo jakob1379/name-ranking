@@ -130,12 +130,12 @@ def _pair_selection_dependencies() -> PairSelectionDependencies:
     )
 
 
-def _select_candidates_fallback(names: list[str]) -> tuple[str, str]:
+def _select_candidates_fallback(names: list[str]) -> tuple[str, str] | None:
     """Fallback candidate selection using comparison counts and phonetic similarity.
     Used when active learning model fails.
     """
     if len(names) < MIN_NAMES_FOR_PAIR_SELECTION:
-        return "", ""
+        return None
     rng = np.random.default_rng()
 
     # Get comparison counts for names
@@ -150,7 +150,7 @@ def _select_candidates_fallback(names: list[str]) -> tuple[str, str]:
 
     # Evaluate pairs among names (limit to 100 random pairs for efficiency)
     n_pairs = min(100, len(names) * (len(names) - 1) // 2)
-    best_pair = ("", "")
+    best_pair: tuple[str, str] | None = None
     best_score = -1.0
 
     for _ in range(n_pairs):
@@ -165,8 +165,7 @@ def _select_candidates_fallback(names: list[str]) -> tuple[str, str]:
             best_score = pair_score
             best_pair = (a, b)
 
-    # Fallback to random if something went wrong
-    if best_pair == ("", ""):
+    if best_pair is None:
         return tuple(rng.choice(names, size=2, replace=False))
 
     return best_pair
