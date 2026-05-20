@@ -28,7 +28,7 @@ def strip_name_notes(name: str) -> str:
     return name.split(" - ", 1)[0].strip()
 
 
-def is_valid_name(name: str) -> bool:
+def is_valid_name(name: object) -> bool:
     """Return whether a value is a real name rather than a header or placeholder."""
     if not name or not isinstance(name, str):
         return False
