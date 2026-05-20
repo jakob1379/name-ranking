@@ -90,6 +90,28 @@ class TestDatabaseInitialization:
         finally:
             database.set_db_path(original_path)
 
+    def test_comparison_migration_probe_preserves_existing_comparisons(self, mock_db_path):
+        """Preference compatibility probing should not delete real comparison rows."""
+        database.init_database()
+
+        with database.get_connection() as conn:
+            conn.execute("INSERT INTO names (name) VALUES ('ProbeRealA'), ('ProbeRealB')")
+            name_a_id = conn.execute("SELECT id FROM names WHERE name = 'ProbeRealA'").fetchone()[0]
+            name_b_id = conn.execute("SELECT id FROM names WHERE name = 'ProbeRealB'").fetchone()[0]
+            conn.execute(
+                "INSERT INTO comparisons (name_a_id, name_b_id, preference) VALUES (?, ?, -1)",
+                (name_a_id, name_b_id),
+            )
+
+            database._migrate_comparisons_table_if_needed(conn)
+
+            comparison_count = conn.execute(
+                "SELECT COUNT(*) FROM comparisons WHERE name_a_id = ? AND name_b_id = ? AND preference = -1",
+                (name_a_id, name_b_id),
+            ).fetchone()[0]
+
+        assert comparison_count == 1
+
     def test_legacy_db_path_assignment_syncs_through_get_db_path(self, tmp_path):
         """Legacy direct DB_PATH assignment should still reset connection state on sync."""
         from st_name_ranking.persistence import connection

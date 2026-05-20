@@ -111,52 +111,70 @@ def update_phonetic_codes(limit: int | None = None, conn: sqlite3.Connection | N
 
 
 MIN_NAMES_FOR_COMPARISON_TEST = 2
+COMPARISON_PROBE_NAME_A = "__st_name_ranking_comparison_probe_a__"
+COMPARISON_PROBE_NAME_B = "__st_name_ranking_comparison_probe_b__"
+COMPARISON_PROBE_SAVEPOINT = "comparison_preference_probe"
 
 
-def _migrate_comparisons_table_if_needed(conn: sqlite3.Connection) -> None:
-    """Migrate comparisons table to support preference=2 (both disliked) if needed."""
-    cursor = conn.execute(f"SELECT id FROM names LIMIT {MIN_NAMES_FOR_COMPARISON_TEST}")
-    rows = cursor.fetchall()
-    if len(rows) < MIN_NAMES_FOR_COMPARISON_TEST:
-        conn.execute("INSERT OR IGNORE INTO names (name) VALUES ('__temp_a')")
-        conn.execute("INSERT OR IGNORE INTO names (name) VALUES ('__temp_b')")
-        cursor = conn.execute("SELECT id FROM names WHERE name IN ('__temp_a', '__temp_b')")
-        rows = cursor.fetchall()
-
-    id_a, id_b = rows[0][0], rows[1][0]
-
+def _comparison_table_supports_both_disliked(conn: sqlite3.Connection) -> bool:
+    """Probe preference=2 support without persisting rows or touching real comparisons."""
+    conn.execute(f"SAVEPOINT {COMPARISON_PROBE_SAVEPOINT}")
     try:
+        conn.execute(
+            "INSERT OR IGNORE INTO names (name) VALUES (?), (?)",
+            (COMPARISON_PROBE_NAME_A, COMPARISON_PROBE_NAME_B),
+        )
+        rows = conn.execute(
+            "SELECT id FROM names WHERE name IN (?, ?) ORDER BY name",
+            (COMPARISON_PROBE_NAME_A, COMPARISON_PROBE_NAME_B),
+        ).fetchall()
+        if len(rows) < MIN_NAMES_FOR_COMPARISON_TEST:
+            msg = "Failed to create comparison migration probe names"
+            raise RuntimeError(msg)
+
+        id_a, id_b = rows[0][0], rows[1][0]
         conn.execute(
             "INSERT INTO comparisons (name_a_id, name_b_id, preference) VALUES (?, ?, 2)",
             (id_a, id_b),
         )
-        conn.execute("DELETE FROM comparisons WHERE name_a_id = ? AND name_b_id = ?", (id_a, id_b))
-        logger.debug("Comparisons table already supports preference=2")
     except sqlite3.IntegrityError as e:
         if "CHECK" in str(e):
-            logger.info("Migrating comparisons table to support preference=2")
-            conn.execute("DROP TABLE IF EXISTS comparisons_new")
-            conn.execute("""
-                CREATE TABLE comparisons_new (
-                    id INTEGER PRIMARY KEY,
-                    name_a_id INTEGER NOT NULL REFERENCES names(id),
-                    name_b_id INTEGER NOT NULL REFERENCES names(id),
-                    preference INTEGER NOT NULL CHECK(preference IN (-1, 0, 1, 2)),
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    UNIQUE(name_a_id, name_b_id, preference)
-                )
-            """)
-            conn.execute("""
-                INSERT OR IGNORE INTO comparisons_new (name_a_id, name_b_id, preference, created_at)
-                SELECT name_a_id, name_b_id, preference, MAX(created_at) as created_at
-                FROM comparisons
-                GROUP BY name_a_id, name_b_id, preference
-            """)
-            conn.execute("DROP TABLE comparisons")
-            conn.execute("ALTER TABLE comparisons_new RENAME TO comparisons")
-            logger.info("Comparisons table migrated successfully")
+            return False
+        raise
     finally:
-        conn.execute("DELETE FROM names WHERE name IN ('__temp_a', '__temp_b')")
+        conn.execute(f"ROLLBACK TO SAVEPOINT {COMPARISON_PROBE_SAVEPOINT}")
+        conn.execute(f"RELEASE SAVEPOINT {COMPARISON_PROBE_SAVEPOINT}")
+
+    return True
+
+
+def _migrate_comparisons_table_if_needed(conn: sqlite3.Connection) -> None:
+    """Migrate comparisons table to support preference=2 (both disliked) if needed."""
+    if _comparison_table_supports_both_disliked(conn):
+        logger.debug("Comparisons table already supports preference=2")
+        return
+
+    logger.info("Migrating comparisons table to support preference=2")
+    conn.execute("DROP TABLE IF EXISTS comparisons_new")
+    conn.execute("""
+        CREATE TABLE comparisons_new (
+            id INTEGER PRIMARY KEY,
+            name_a_id INTEGER NOT NULL REFERENCES names(id),
+            name_b_id INTEGER NOT NULL REFERENCES names(id),
+            preference INTEGER NOT NULL CHECK(preference IN (-1, 0, 1, 2)),
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(name_a_id, name_b_id, preference)
+        )
+    """)
+    conn.execute("""
+        INSERT OR IGNORE INTO comparisons_new (name_a_id, name_b_id, preference, created_at)
+        SELECT name_a_id, name_b_id, preference, MAX(created_at) as created_at
+        FROM comparisons
+        GROUP BY name_a_id, name_b_id, preference
+    """)
+    conn.execute("DROP TABLE comparisons")
+    conn.execute("ALTER TABLE comparisons_new RENAME TO comparisons")
+    logger.info("Comparisons table migrated successfully")
 
 
 def _ensure_schema(conn: sqlite3.Connection) -> None:
