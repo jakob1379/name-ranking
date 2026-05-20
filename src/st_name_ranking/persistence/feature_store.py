@@ -1,13 +1,34 @@
 """Persistence helpers for feature-set and name-feature cache tables."""
 
+import importlib
 import json
 import logging
-from typing import Any
+import sqlite3
+from dataclasses import dataclass
+from datetime import UTC, datetime
+from typing import Any, Protocol
 
 from st_name_ranking.persistence import database
 from st_name_ranking.types import FeatureSetRecord, FeatureValues
 
 logger = logging.getLogger(__name__)
+
+
+class ProgressCallback(Protocol):
+    """Callable notified as feature-cache rebuilds advance."""
+
+    def __call__(self, current: int, total: int) -> None: ...
+
+
+@dataclass(frozen=True)
+class FeatureCacheRebuildResult:
+    """Summary of a feature-cache rebuild workflow."""
+
+    version: str
+    feature_names: list[str]
+    feature_set_id: int
+    processed: int
+    deleted: int = 0
 
 
 class CorruptFeatureCacheError(RuntimeError):
@@ -41,6 +62,48 @@ def get_or_create_feature_set(version: str, feature_names: list[str]) -> int:
         )
         logger.info("Created feature set version '%s' with %d features", version, len(feature_names))
         return cursor.lastrowid
+
+
+def create_active_feature_set(version: str, feature_names: list[str]) -> int:
+    """Create a new active feature-set row and deactivate older versions."""
+    with database.get_connection() as conn:
+        if not _table_exists(conn, "feature_sets"):
+            msg = "Database not initialized. Run 'st-name-ranking db init' first."
+            raise RuntimeError(msg)
+
+        conn.execute("UPDATE feature_sets SET is_active = 0")
+        cursor = conn.execute(
+            """
+            INSERT INTO feature_sets (version, feature_names_json, is_active)
+            VALUES (?, ?, 1)
+            """,
+            (version, json.dumps(feature_names)),
+        )
+        return cursor.lastrowid
+
+
+def rebuild_feature_cache(
+    *,
+    version: str | None = None,
+    batch_size: int = 100,
+    clear_existing: bool = True,
+    progress_callback: ProgressCallback | None = None,
+) -> FeatureCacheRebuildResult:
+    """Create an active feature set and cache current features for all names."""
+    extractor = _new_feature_extractor()
+    feature_names = extractor.get_feature_names()
+    feature_set_version = version or datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
+    deleted = clear_all_features() if clear_existing else 0
+    feature_set_id = create_active_feature_set(feature_set_version, feature_names)
+    processed = extract_and_cache_features(feature_set_id, batch_size=batch_size, progress_callback=progress_callback)
+
+    return FeatureCacheRebuildResult(
+        version=feature_set_version,
+        feature_names=feature_names,
+        feature_set_id=feature_set_id,
+        processed=processed,
+        deleted=deleted,
+    )
 
 
 def get_active_feature_set_version() -> str | None:
@@ -159,6 +222,123 @@ def set_cached_features_batch(
             inserted += len(chunk)
 
     return inserted
+
+
+def extract_and_cache_features(
+    feature_set_id: int,
+    batch_size: int = 100,
+    progress_callback: ProgressCallback | None = None,
+) -> int:
+    """Extract features for all names and cache them for a feature set."""
+    extractor = _new_feature_extractor()
+    feature_names = extractor.get_feature_names()
+
+    with database.get_connection() as conn:
+        cursor = conn.execute("""
+            SELECT id, name, gender, origin_region
+            FROM names
+            ORDER BY id
+        """)
+        names_data = cursor.fetchall()
+
+    total = len(names_data)
+    processed = 0
+
+    for i in range(0, total, batch_size):
+        batch = names_data[i : i + batch_size]
+        features_data: list[tuple[int, int, FeatureValues]] = []
+
+        for name_id, name, gender, origin_region in batch:
+            features = extractor.extract(name, gender, origin_region)
+            features_data.append(
+                (
+                    name_id,
+                    feature_set_id,
+                    {
+                        feature_name: float(value)
+                        for feature_name, value in zip(feature_names, features.tolist(), strict=True)
+                    },
+                ),
+            )
+
+        set_cached_features_batch(features_data)
+        processed += len(batch)
+        if progress_callback:
+            progress_callback(processed, total)
+
+    return processed
+
+
+def clear_all_features() -> int:
+    """Clear all cached name features and return the number of deleted rows."""
+    with database.get_connection() as conn:
+        if not _table_exists(conn, "name_features"):
+            return 0
+        cursor = conn.execute("DELETE FROM name_features")
+        return cursor.rowcount
+
+
+def has_feature_cache() -> bool:
+    """Return whether feature tables exist and contain cached rows."""
+    try:
+        with database.get_connection() as conn:
+            existing_tables = _existing_tables(conn, {"feature_sets", "name_features"})
+            if "feature_sets" not in existing_tables or "name_features" not in existing_tables:
+                return False
+
+            cursor = conn.execute("SELECT COUNT(*) FROM name_features LIMIT 1")
+            return cursor.fetchone()[0] > 0
+    except sqlite3.OperationalError:
+        logger.exception("Failed to inspect feature cache")
+        return False
+
+
+def get_feature_stats() -> dict[str, int | str | None]:
+    """Get feature-cache summary statistics for CLI/status output."""
+    with database.get_connection() as conn:
+        existing_tables = _existing_tables(conn, {"feature_sets", "name_features"})
+        if "feature_sets" not in existing_tables or "name_features" not in existing_tables:
+            return {
+                "feature_sets_count": 0,
+                "names_with_features": 0,
+                "active_version": None,
+            }
+
+        feature_sets_count = conn.execute("SELECT COUNT(*) FROM feature_sets").fetchone()[0]
+        names_with_features = conn.execute("SELECT COUNT(DISTINCT name_id) FROM name_features").fetchone()[0]
+        row = conn.execute(
+            """
+            SELECT version FROM feature_sets
+            WHERE is_active = 1
+            ORDER BY created_at DESC
+            LIMIT 1
+            """,
+        ).fetchone()
+
+        return {
+            "feature_sets_count": feature_sets_count,
+            "names_with_features": names_with_features,
+            "active_version": row[0] if row else None,
+        }
+
+
+def _existing_tables(conn: sqlite3.Connection, table_names: set[str]) -> set[str]:
+    placeholders = ", ".join(["?"] * len(table_names))
+    cursor = conn.execute(
+        f"SELECT name FROM sqlite_master WHERE type='table' AND name IN ({placeholders})",
+        tuple(table_names),
+    )
+    return {row[0] for row in cursor.fetchall()}
+
+
+def _table_exists(conn: sqlite3.Connection, table_name: str) -> bool:
+    cursor = conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table_name,))
+    return cursor.fetchone() is not None
+
+
+def _new_feature_extractor() -> Any:
+    features_module = importlib.import_module("st_name_ranking.learning.features")
+    return features_module.FeatureExtractor()
 
 
 def _decode_features_json(features_json: str, *, name_id: int, feature_set_id: int) -> FeatureValues:

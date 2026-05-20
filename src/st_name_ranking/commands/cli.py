@@ -7,7 +7,6 @@ and statistics.
 
 import datetime as dt
 import importlib
-import json
 import shutil
 import sqlite3
 import sys
@@ -28,9 +27,6 @@ from st_name_ranking.active_learning.selection import (
 # Import maintenance workflow implementations
 from st_name_ranking.classification.classify_origins import classify_all_names
 
-# Import features for extraction
-from st_name_ranking.learning.features import FeatureExtractor
-
 # Import database functions
 from st_name_ranking.persistence.database import (
     DB_PATH,
@@ -39,6 +35,7 @@ from st_name_ranking.persistence.database import (
     init_database,
     sync_names_with_submodule,
 )
+from st_name_ranking.persistence.feature_store import get_feature_stats, has_feature_cache, rebuild_feature_cache
 
 app = typer.Typer(
     help="Name Ranking Database Management CLI - Uses SQLite database",
@@ -55,7 +52,6 @@ def root_callback(ctx: typer.Context) -> None:
         raise typer.Exit(code=2)
 
 
-DB_NOT_INITIALIZED_ERROR = "Database not initialized. Run 'st-name-ranking db init' first."
 FORCE_DEFAULT = False
 SERVER_HEADLESS_DEFAULT = False
 
@@ -160,46 +156,6 @@ def print_warning(message: str) -> None:
     console.print(f"[yellow]⚠[/yellow] {message}")
 
 
-# ----------------------------------------------------------------------
-# Feature System Helpers
-# ----------------------------------------------------------------------
-
-
-def ensure_features_computed() -> bool:
-    """Check if features exist in the database.
-
-    Returns:
-        True if features exist, False otherwise.
-    """
-    try:
-        with get_connection() as conn:
-            cursor = conn.execute("SELECT COUNT(*) FROM name_features LIMIT 1")
-            count = cursor.fetchone()[0]
-            return count > 0
-    except sqlite3.OperationalError:
-        # Table doesn't exist yet
-        return False
-
-
-def has_feature_cache() -> bool:
-    """Check if feature tables exist and contain cached features."""
-    try:
-        with get_connection() as conn:
-            cursor = conn.execute(
-                "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('feature_sets', 'name_features')",
-            )
-            existing_tables = {row[0] for row in cursor.fetchall()}
-
-            if "feature_sets" not in existing_tables or "name_features" not in existing_tables:
-                return False
-
-            cursor = conn.execute("SELECT COUNT(*) FROM name_features LIMIT 1")
-            count = cursor.fetchone()[0]
-            return count > 0
-    except sqlite3.OperationalError:
-        return False
-
-
 def is_database_initialized() -> bool:
     """Check if the database exists and has the core schema."""
     if not DB_PATH.exists():
@@ -210,52 +166,6 @@ def is_database_initialized() -> bool:
             return table_exists(conn, "names")
     except sqlite3.OperationalError:
         return False
-
-
-def get_feature_stats() -> dict[str, Any]:
-    """Get feature system statistics.
-
-    Returns:
-        Dictionary with feature statistics.
-    """
-    with get_connection() as conn:
-        # Check if tables exist
-        cursor = conn.execute("""
-            SELECT name FROM sqlite_master
-            WHERE type='table' AND name IN ('feature_sets', 'name_features')
-        """)
-        existing_tables = {row[0] for row in cursor.fetchall()}
-
-        if "feature_sets" not in existing_tables or "name_features" not in existing_tables:
-            return {
-                "feature_sets_count": 0,
-                "names_with_features": 0,
-                "active_version": None,
-            }
-
-        # Get feature set count
-        cursor = conn.execute("SELECT COUNT(*) FROM feature_sets")
-        feature_sets_count = cursor.fetchone()[0]
-
-        # Get names with features
-        cursor = conn.execute("SELECT COUNT(DISTINCT name_id) FROM name_features")
-        names_with_features = cursor.fetchone()[0]
-
-        # Get active version
-        cursor = conn.execute("""
-            SELECT version FROM feature_sets
-            WHERE is_active = 1
-            ORDER BY created_at DESC
-            LIMIT 1
-        """)
-        row = cursor.fetchone()
-        active_version = row[0] if row else None
-
-        return {
-            "feature_sets_count": feature_sets_count,
-            "names_with_features": names_with_features,
-            "active_version": active_version,
-        }
 
 
 def table_exists(conn: sqlite3.Connection, table_name: str) -> bool:
@@ -270,113 +180,6 @@ def table_exists(conn: sqlite3.Connection, table_name: str) -> bool:
     """
     cursor = conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table_name,))
     return cursor.fetchone() is not None
-
-
-def create_feature_set(version: str, feature_names: list[str]) -> int:
-    """Create a new feature set and return its ID.
-
-    Args:
-        version: Feature set version identifier
-        feature_names: List of feature names
-
-    Returns:
-        The ID of the created feature set
-
-    Raises:
-        RuntimeError: If database tables don't exist (init not run)
-    """
-    with get_connection() as conn:
-        # Check if tables exist
-        if not table_exists(conn, "feature_sets"):
-            raise RuntimeError(DB_NOT_INITIALIZED_ERROR)
-
-        # Deactivate all existing feature sets
-        conn.execute("UPDATE feature_sets SET is_active = 0")
-
-        # Insert new feature set
-        cursor = conn.execute(
-            """
-            INSERT INTO feature_sets (version, feature_names_json, is_active)
-            VALUES (?, ?, 1)
-            """,
-            (version, json.dumps(feature_names)),
-        )
-        return cursor.lastrowid
-
-
-def extract_and_cache_features(
-    feature_set_id: int,
-    batch_size: int = 100,
-    progress_callback: Any | None = None,
-) -> int:
-    """Extract features for all names and cache them in the database.
-
-    Args:
-        feature_set_id: The ID of the feature set to use
-        batch_size: Number of names to process per batch
-        progress_callback: Optional callback function(current, total)
-
-    Returns:
-        Number of names processed
-    """
-    extractor = FeatureExtractor()
-    feature_names = extractor.get_feature_names()
-
-    with get_connection() as conn:
-        # Get all names with their metadata
-        cursor = conn.execute("""
-            SELECT id, name, gender, origin_region
-            FROM names
-            ORDER BY id
-        """)
-        names_data = cursor.fetchall()
-
-    total = len(names_data)
-    processed = 0
-
-    # Process in batches
-    for i in range(0, total, batch_size):
-        batch = names_data[i : i + batch_size]
-
-        with get_connection() as conn:
-            for name_id, name, gender, origin_region in batch:
-                # Extract features
-                features = extractor.extract(name, gender, origin_region)
-                features_dict = {
-                    feature_name: float(value)
-                    for feature_name, value in zip(feature_names, features.tolist(), strict=True)
-                }
-
-                # Insert into database
-                conn.execute(
-                    """
-                    INSERT OR REPLACE INTO name_features
-                    (name_id, feature_set_id, features_json, computed_at)
-                    VALUES (?, ?, ?, CURRENT_TIMESTAMP)
-                    """,
-                    (name_id, feature_set_id, json.dumps(features_dict)),
-                )
-
-        processed += len(batch)
-        if progress_callback:
-            progress_callback(processed, total)
-
-    return processed
-
-
-def clear_all_features() -> int:
-    """Clear all cached features from the database.
-
-    Returns:
-        Number of rows deleted
-    """
-    with get_connection() as conn:
-        # Check if table exists first
-        cursor = conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='name_features'")
-        if not cursor.fetchone():
-            return 0
-        cursor = conn.execute("DELETE FROM name_features")
-        return cursor.rowcount
 
 
 # ----------------------------------------------------------------------
@@ -430,26 +233,17 @@ def init(
     console.print("[bold blue]Computing Features[/bold blue]")
     console.print()
 
-    # Get feature set version based on current time
-    version = dt.datetime.now(dt.UTC).strftime("%Y%m%d_%H%M%S")
-
-    # Create feature set
-    extractor = FeatureExtractor()
-    feature_names = extractor.get_feature_names()
-    feature_set_id = create_feature_set(version, feature_names)
-    print_success(f"Created feature set version: {version}")
-
-    # Extract and cache features
     with Progress(console=console, transient=True) as progress:
         task = progress.add_task("Extracting features...", total=None)
 
         def update_progress(current: int, total: int) -> None:
             progress.update(task, total=total, completed=current)
 
-        processed = extract_and_cache_features(feature_set_id, batch_size=100, progress_callback=update_progress)
+        rebuild_result = rebuild_feature_cache(clear_existing=False, batch_size=100, progress_callback=update_progress)
 
-    print_success(f"Computed features for {processed} names")
-    print_info(f"Feature dimension: {len(feature_names)}")
+    print_success(f"Created feature set version: {rebuild_result.version}")
+    print_success(f"Computed features for {rebuild_result.processed} names")
+    print_info(f"Feature dimension: {len(rebuild_result.feature_names)}")
 
     if classify:
         console.print()
@@ -695,25 +489,6 @@ def features_rebuild(
             console.print("Rebuild cancelled.")
             raise typer.Abort
 
-    # Clear existing features
-    with Progress(
-        SpinnerColumn(),
-        TextColumn("[progress.description]{task.description}"),
-        console=console,
-    ) as progress:
-        task = progress.add_task("Clearing existing features...", total=None)
-        deleted = clear_all_features()
-        progress.update(task, completed=True)
-    print_success(f"Cleared {deleted} cached features")
-
-    # Create new feature set
-    version = dt.datetime.now(dt.UTC).strftime("%Y%m%d_%H%M%S")
-    extractor = FeatureExtractor()
-    feature_names = extractor.get_feature_names()
-    feature_set_id = create_feature_set(version, feature_names)
-    print_success(f"Created new feature set version: {version}")
-
-    # Extract and cache features
     console.print()
     console.print("[bold blue]Extracting Features[/bold blue]")
 
@@ -723,11 +498,13 @@ def features_rebuild(
         def update_progress(current: int, total: int) -> None:
             progress.update(task, total=total, completed=current)
 
-        processed = extract_and_cache_features(feature_set_id, batch_size=100, progress_callback=update_progress)
+        rebuild_result = rebuild_feature_cache(clear_existing=True, batch_size=100, progress_callback=update_progress)
 
-    print_success(f"Computed features for {processed} names")
-    print_info(f"Feature dimension: {len(feature_names)}")
-    print_info(f"Active feature set: {version}")
+    print_success(f"Cleared {rebuild_result.deleted} cached features")
+    print_success(f"Created new feature set version: {rebuild_result.version}")
+    print_success(f"Computed features for {rebuild_result.processed} names")
+    print_info(f"Feature dimension: {len(rebuild_result.feature_names)}")
+    print_info(f"Active feature set: {rebuild_result.version}")
 
 
 @features_app.command("status")
@@ -796,7 +573,7 @@ def model_status() -> None:
     console.print()
 
     # Check if features exist
-    if not ensure_features_computed():
+    if not has_feature_cache():
         print_warning("No features computed yet. Some model operations may fail.")
         print_info("Run 'st-name-ranking db features rebuild' to compute features.")
         console.print()
