@@ -1,6 +1,7 @@
 """Tests for st_name_ranking.database module."""
 
 import json
+from unittest.mock import patch
 
 import pytest
 
@@ -48,6 +49,28 @@ class TestDatabaseInitialization:
             cursor.execute("SELECT COUNT(*) FROM names")
             count = cursor.fetchone()[0]
             assert count == 0  # No names inserted yet
+
+    def test_init_database_resets_state_on_schema_failure(self, mock_db_path):
+        """Failed schema initialization should not poison future retries."""
+        database.reset_database_init_state()
+
+        with (
+            patch(
+                "st_name_ranking.database._insert_default_region_mapping",
+                side_effect=RuntimeError("schema failure"),
+            ),
+            pytest.raises(RuntimeError, match="schema failure"),
+        ):
+            database.init_database()
+
+        assert database._INIT_STATE == {"db_initialized": False, "db_path": None}
+
+        database.init_database()
+
+        assert database._INIT_STATE == {
+            "db_initialized": True,
+            "db_path": database.DB_PATH,
+        }
 
     def test_region_mapping_populated(self, mock_db_path):
         """Test that region_mapping table is populated with data."""

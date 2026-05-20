@@ -53,11 +53,9 @@ def real_db_path(temp_db_path):
     from st_name_ranking import database
 
     original_path = database.DB_PATH
-    original_initialized = getattr(database.init_database, "_initialized", False)
-
     # Set temp path and reset initialization
     database.DB_PATH = temp_db_path
-    database.init_database._initialized = False
+    database.reset_database_init_state()
 
     # Create data directory if needed
     temp_db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -66,8 +64,7 @@ def real_db_path(temp_db_path):
 
     # Restore original state
     database.DB_PATH = original_path
-    if original_initialized:
-        database.init_database._initialized = original_initialized
+    database.reset_database_init_state()
 
 
 @pytest.fixture

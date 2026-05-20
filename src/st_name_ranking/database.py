@@ -55,6 +55,12 @@ INITIAL_SCORE = 1500.0
 MAX_SQL_PARAMS = 500
 
 
+def reset_database_init_state() -> None:
+    """Reset cached database-initialization state."""
+    _INIT_STATE["db_initialized"] = False
+    _INIT_STATE["db_path"] = None
+
+
 @contextmanager
 def get_connection(timeout: float = 30.0) -> Iterator[sqlite3.Connection]:
     """Context manager for database connections with atomic transaction support.
@@ -224,38 +230,32 @@ def init_database() -> None:
         logger.debug("Database already initialized, skipping initialization")
         return
 
-    # Mark as initialized immediately to prevent race conditions
-    # If initialization fails, the app won't work anyway, so we don't need to retry
-    _INIT_STATE["db_initialized"] = True
-    _INIT_STATE["db_path"] = DB_PATH
-
     # Check if database file exists
     db_exists = DB_PATH.exists()
 
-    with get_connection() as conn:
-        # Check if names table exists to determine if database is already set up
-        table_exists = False
-        if db_exists:
-            try:
-                # Try to query the names table
-                conn.execute("SELECT 1 FROM names LIMIT 1").fetchone()
-                table_exists = True
-            except sqlite3.OperationalError:
-                # Table doesn't exist
-                table_exists = False
+    try:
+        with get_connection() as conn:
+            # Check if names table exists to determine if database is already set up
+            table_exists = False
+            if db_exists:
+                try:
+                    # Try to query the names table
+                    conn.execute("SELECT 1 FROM names LIMIT 1").fetchone()
+                    table_exists = True
+                except sqlite3.OperationalError:
+                    # Table doesn't exist
+                    table_exists = False
 
-        # Log appropriate message based on database state
-        if not db_exists:
-            logger.info("Creating new database at %s", DB_PATH)
-        elif not table_exists:
-            logger.info("Initializing database schema for existing file")
-        else:
-            logger.info("Using existing database, ensuring schema is up to date")
+            # Log appropriate message based on database state
+            if not db_exists:
+                logger.info("Creating new database at %s", DB_PATH)
+            elif not table_exists:
+                logger.info("Initializing database schema for existing file")
+            else:
+                logger.info("Using existing database, ensuring schema is up to date")
 
-        # Database is already marked as initialized to prevent race conditions
-
-        # Names table
-        conn.execute("""
+            # Names table
+            conn.execute("""
             CREATE TABLE IF NOT EXISTS names (
                 id INTEGER PRIMARY KEY,
                 name TEXT UNIQUE NOT NULL,
@@ -270,8 +270,8 @@ def init_database() -> None:
             )
         """)
 
-        # Ratings table
-        conn.execute("""
+            # Ratings table
+            conn.execute("""
             CREATE TABLE IF NOT EXISTS ratings (
                 name_id INTEGER PRIMARY KEY REFERENCES names(id)
                 ON DELETE CASCADE,
@@ -281,24 +281,24 @@ def init_database() -> None:
             )
         """)
 
-        # User settings table
-        conn.execute("""
+            # User settings table
+            conn.execute("""
             CREATE TABLE IF NOT EXISTS user_settings (
                 key TEXT PRIMARY KEY,
                 value TEXT NOT NULL
             )
         """)
 
-        # Region mapping table (nationality -> region)
-        conn.execute("""
+            # Region mapping table (nationality -> region)
+            conn.execute("""
             CREATE TABLE IF NOT EXISTS region_mapping (
                 nationality TEXT PRIMARY KEY,
                 region TEXT NOT NULL
             )
         """)
 
-        # Source versions table (submodule tracking)
-        conn.execute("""
+            # Source versions table (submodule tracking)
+            conn.execute("""
             CREATE TABLE IF NOT EXISTS source_versions (
                 id INTEGER PRIMARY KEY,
                 commit_hash TEXT NOT NULL,
@@ -306,8 +306,8 @@ def init_database() -> None:
             )
         """)
 
-        # Model state table for Bradley-Terry model
-        conn.execute("""
+            # Model state table for Bradley-Terry model
+            conn.execute("""
             CREATE TABLE IF NOT EXISTS model_state (
                 id INTEGER PRIMARY KEY,
                 feature_weights BLOB NOT NULL,
@@ -318,8 +318,8 @@ def init_database() -> None:
             )
         """)
 
-        # Comparisons table for tracking user preferences
-        conn.execute("""
+            # Comparisons table for tracking user preferences
+            conn.execute("""
             CREATE TABLE IF NOT EXISTS comparisons (
                 id INTEGER PRIMARY KEY,
                 name_a_id INTEGER NOT NULL REFERENCES names(id),
@@ -330,11 +330,11 @@ def init_database() -> None:
             )
         """)
 
-        # Migrate comparisons table to support preference=2 if needed
-        _migrate_comparisons_table_if_needed(conn)
+            # Migrate comparisons table to support preference=2 if needed
+            _migrate_comparisons_table_if_needed(conn)
 
-        # Feature sets table for tracking feature schema versions
-        conn.execute("""
+            # Feature sets table for tracking feature schema versions
+            conn.execute("""
             CREATE TABLE IF NOT EXISTS feature_sets (
                 id INTEGER PRIMARY KEY,
                 version TEXT UNIQUE NOT NULL,
@@ -344,8 +344,8 @@ def init_database() -> None:
             )
         """)
 
-        # Name features table for pre-computed features
-        conn.execute("""
+            # Name features table for pre-computed features
+            conn.execute("""
             CREATE TABLE IF NOT EXISTS name_features (
                 name_id INTEGER NOT NULL REFERENCES names(id) ON DELETE CASCADE,
                 feature_set_id INTEGER NOT NULL REFERENCES feature_sets(id) ON DELETE CASCADE,
@@ -355,65 +355,71 @@ def init_database() -> None:
             )
         """)
 
-        # Ensure phonetic columns exist (migration for existing databases)
-        cursor = conn.execute("PRAGMA table_info(names)")
-        columns = [row[1] for row in cursor.fetchall()]
-        if "phonetic_primary" not in columns:
-            conn.execute("ALTER TABLE names ADD COLUMN phonetic_primary TEXT")
-            logger.debug("Added phonetic_primary column")
-        if "phonetic_secondary" not in columns:
-            conn.execute("ALTER TABLE names ADD COLUMN phonetic_secondary TEXT")
-            logger.debug("Added phonetic_secondary column")
+            # Ensure phonetic columns exist (migration for existing databases)
+            cursor = conn.execute("PRAGMA table_info(names)")
+            columns = [row[1] for row in cursor.fetchall()]
+            if "phonetic_primary" not in columns:
+                conn.execute("ALTER TABLE names ADD COLUMN phonetic_primary TEXT")
+                logger.debug("Added phonetic_primary column")
+            if "phonetic_secondary" not in columns:
+                conn.execute("ALTER TABLE names ADD COLUMN phonetic_secondary TEXT")
+                logger.debug("Added phonetic_secondary column")
 
-        # Update phonetic codes for existing names if missing
-        update_phonetic_codes(conn=conn)
+            # Update phonetic codes for existing names if missing
+            update_phonetic_codes(conn=conn)
 
-        # Create indexes
-        conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_names_gender ON names(gender)",
-        )
-        conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_names_origin ON names(origin_region)",
-        )
-        conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_ratings_rating ON ratings(rating)",
-        )
-        conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_names_phonetic_primary ON names(phonetic_primary)",
-        )
-        conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_names_phonetic_secondary ON names(phonetic_secondary)",
-        )
-        conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_comparisons_name_a ON comparisons(name_a_id)",
-        )
-        conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_comparisons_name_b ON comparisons(name_b_id)",
-        )
-        conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_comparisons_created ON comparisons(created_at)",
-        )
-        conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_model_state_updated ON model_state(last_updated)",
-        )
-        conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_feature_sets_version ON feature_sets(version)",
-        )
-        conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_feature_sets_active ON feature_sets(is_active)",
-        )
-        conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_name_features_lookup ON name_features(name_id, feature_set_id)",
-        )
-        conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_name_features_computed ON name_features(computed_at)",
-        )
+            # Create indexes
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_names_gender ON names(gender)",
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_names_origin ON names(origin_region)",
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_ratings_rating ON ratings(rating)",
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_names_phonetic_primary ON names(phonetic_primary)",
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_names_phonetic_secondary ON names(phonetic_secondary)",
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_comparisons_name_a ON comparisons(name_a_id)",
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_comparisons_name_b ON comparisons(name_b_id)",
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_comparisons_created ON comparisons(created_at)",
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_model_state_updated ON model_state(last_updated)",
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_feature_sets_version ON feature_sets(version)",
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_feature_sets_active ON feature_sets(is_active)",
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_name_features_lookup ON name_features(name_id, feature_set_id)",
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_name_features_computed ON name_features(computed_at)",
+            )
 
-        # Insert default region mapping if empty
-        if conn.execute("SELECT COUNT(*) FROM region_mapping").fetchone()[0] == 0:
-            _insert_default_region_mapping(conn)
+            # Insert default region mapping if empty
+            if conn.execute("SELECT COUNT(*) FROM region_mapping").fetchone()[0] == 0:
+                _insert_default_region_mapping(conn)
 
-        logger.info("Database schema verified successfully")
+            logger.info("Database schema verified successfully")
+    except Exception:
+        reset_database_init_state()
+        raise
+    else:
+        _INIT_STATE["db_initialized"] = True
+        _INIT_STATE["db_path"] = DB_PATH
 
 
 def _insert_default_region_mapping(conn: sqlite3.Connection) -> None:
@@ -907,10 +913,6 @@ def update_ratings_batch_values(ratings_dict: dict[str, float]) -> list[str]:
             )
 
     return missing_names
-
-
-# Alias for backward compatibility with tests
-update_rating_value = update_rating
 
 
 def record_comparison(name_a: str, name_b: str, preference: int) -> None:

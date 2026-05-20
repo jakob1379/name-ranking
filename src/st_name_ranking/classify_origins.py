@@ -23,6 +23,7 @@ from st_name_ranking.database import (
 )
 from st_name_ranking.origin_classifier import (
     OriginResult,
+    reset_classifier_cache,
 )
 from st_name_ranking.origin_classifier import (
     get_classifier as get_origin_classifier,
@@ -86,6 +87,13 @@ def _get_reference_names() -> dict[str, tuple[str, float, str, str]]:
         _get_reference_names._cache = {}
 
     return _get_reference_names._cache
+
+
+def reset_reference_cache() -> None:
+    """Clear cached reference data and classifier instances."""
+    if hasattr(_get_reference_names, "_cache"):
+        delattr(_get_reference_names, "_cache")
+    reset_classifier_cache()
 
 
 def classify_batch(names_batch: list, batch_size: int = 100) -> int:
@@ -165,6 +173,8 @@ def classify_all_names(
         batch_classified = classify_batch(batch, batch_size)
         classified += batch_classified
         processed += len(batch)
+        if batch_classified:
+            reset_reference_cache()
 
         # Call progress callback if provided
         if progress_callback:

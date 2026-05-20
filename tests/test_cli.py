@@ -39,13 +39,13 @@ def mock_db_path(temp_db_path):
     # Patch the DB_PATH
     database.DB_PATH = temp_db_path
     # Reset initialization flag
-    database._initialized = False
+    database.reset_database_init_state()
 
     yield temp_db_path
 
     # Restore original path
     database.DB_PATH = original_path
-    database._initialized = False
+    database.reset_database_init_state()
 
 
 @pytest.fixture

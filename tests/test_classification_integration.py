@@ -755,9 +755,7 @@ class TestClassifyOriginsIntegration:
                 ("CachedName", "Male", "Nordic", 0.9, "KSTNM", "KSTNM"),
             )
 
-        # Clear any existing cache
-        if hasattr(classify_origins._get_reference_names, "_cache"):
-            delattr(classify_origins._get_reference_names, "_cache")
+        classify_origins.reset_reference_cache()
 
         # First call should populate cache
         ref1 = classify_origins._get_reference_names()

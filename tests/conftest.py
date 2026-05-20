@@ -28,13 +28,13 @@ def mock_db_path(temp_db_path):
     # Patch the DB_PATH
     database.DB_PATH = temp_db_path
     # Reset initialization flag
-    database.init_database._initialized = False
+    database.reset_database_init_state()
 
     yield temp_db_path
 
     # Restore original path
     database.DB_PATH = original_path
-    database.init_database._initialized = False
+    database.reset_database_init_state()
 
 
 @pytest.fixture
@@ -128,7 +128,7 @@ def mock_classifier():
     from st_name_ranking import origin_classifier
 
     # Clear singleton cache to ensure fresh classifier
-    origin_classifier._CLASSIFIER_CACHE.clear()
+    origin_classifier.reset_classifier_cache()
 
     # The classifier expects a callable that returns (region, confidence) tuple
     mock_instance = MagicMock(return_value=("European", 0.85))

@@ -26,7 +26,7 @@ def _init_in_process(db_path_str):
 
     # Set the database path
     database.DB_PATH = Path(db_path_str)
-    database._initialized = False
+    database.reset_database_init_state()
 
     try:
         database.init_database()
@@ -47,7 +47,7 @@ def _vote_in_process(args):
     from st_name_ranking import database
 
     database.DB_PATH = Path(db_path)
-    database._initialized = False
+    database.reset_database_init_state()
 
     try:
         for i in range(10):
@@ -70,7 +70,7 @@ class TestConcurrentDatabaseInitialization:
         from st_name_ranking import database
 
         # Reset initialization flag
-        database._initialized = False
+        database.reset_database_init_state()
 
         results = []
         errors = []

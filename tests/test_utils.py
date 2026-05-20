@@ -528,14 +528,14 @@ class TestUpdatePreferenceAndSave:
         assert result == ratings
         assert result is not ratings
 
-    @patch("st_name_ranking.model_service.database.update_rating_value")
+    @patch("st_name_ranking.model_service.database.update_rating")
     @patch("st_name_ranking.model_service._compute_rating_for_name")
     @patch("st_name_ranking.model_service.record_comparison_instant")
     def test_blocking_update_refreshes_ratings(
         self,
         mock_record_comparison,
         mock_compute_rating,
-        mock_update_rating_value,
+        mock_update_rating,
     ):
         ratings = {"Anna": 1500.0, "Peter": 1500.0}
         mock_compute_rating.side_effect = [1516.0, 1484.0]
@@ -545,18 +545,18 @@ class TestUpdatePreferenceAndSave:
         mock_record_comparison.assert_called_once_with("Anna", "Peter", -1, blocking=True)
         mock_compute_rating.assert_any_call("Anna")
         mock_compute_rating.assert_any_call("Peter")
-        mock_update_rating_value.assert_any_call("Anna", 1516.0)
-        mock_update_rating_value.assert_any_call("Peter", 1484.0)
+        mock_update_rating.assert_any_call("Anna", 1516.0)
+        mock_update_rating.assert_any_call("Peter", 1484.0)
         assert result == {"Anna": 1516.0, "Peter": 1484.0}
 
-    @patch("st_name_ranking.model_service.database.update_rating_value")
+    @patch("st_name_ranking.model_service.database.update_rating")
     @patch("st_name_ranking.model_service._compute_rating_for_name")
     @patch("st_name_ranking.model_service.record_comparison_instant")
     def test_blocking_update_compute_failure(
         self,
         mock_record_comparison,
         mock_compute_rating,
-        mock_update_rating_value,
+        mock_update_rating,
     ):
         ratings = {"Anna": 1500.0, "Peter": 1500.0}
         mock_compute_rating.side_effect = RuntimeError("Computation error")
@@ -566,7 +566,7 @@ class TestUpdatePreferenceAndSave:
         mock_record_comparison.assert_called_once_with("Anna", "Peter", -1, blocking=True)
         assert result == ratings
         assert result is not ratings
-        mock_update_rating_value.assert_not_called()
+        mock_update_rating.assert_not_called()
 
 
 class TestRecordComparisonInstant:
@@ -597,14 +597,14 @@ class TestRecordComparisonInstant:
 class TestUpdatePreferenceDrawAndSave:
     """Tests for update_preference_draw_and_save function (uses Bradley-Terry model)."""
 
-    @patch("st_name_ranking.model_service.database.update_rating_value")
+    @patch("st_name_ranking.model_service.database.update_rating")
     @patch("st_name_ranking.model_service._compute_rating_for_name")
     @patch("st_name_ranking.model_service.record_comparison_instant")
     def test_successful_update(
         self,
         mock_record_comparison,
         mock_compute_rating,
-        mock_update_rating_value,
+        mock_update_rating,
     ):
         """Test successful draw update and save."""
         ratings = {"Anna": 1500.0, "Peter": 1500.0}
@@ -619,20 +619,20 @@ class TestUpdatePreferenceDrawAndSave:
         mock_compute_rating.assert_any_call("Anna")
         mock_compute_rating.assert_any_call("Peter")
         # Check database updates
-        assert mock_update_rating_value.call_count == 2
-        mock_update_rating_value.assert_any_call("Anna", 1492.0)
-        mock_update_rating_value.assert_any_call("Peter", 1508.0)
+        assert mock_update_rating.call_count == 2
+        mock_update_rating.assert_any_call("Anna", 1492.0)
+        mock_update_rating.assert_any_call("Peter", 1508.0)
         # Check returned ratings
         assert result == {"Anna": 1492.0, "Peter": 1508.0}
 
-    @patch("st_name_ranking.model_service.database.update_rating_value")
+    @patch("st_name_ranking.model_service.database.update_rating")
     @patch("st_name_ranking.model_service._compute_rating_for_name")
     @patch("st_name_ranking.model_service.record_comparison_instant")
     def test_save_failure(
         self,
         mock_record_comparison,
         mock_compute_rating,
-        mock_update_rating_value,
+        mock_update_rating,
     ):
         """Test when ratings computation fails."""
         ratings = {"Anna": 1500.0, "Peter": 1500.0}
@@ -645,21 +645,21 @@ class TestUpdatePreferenceDrawAndSave:
         mock_record_comparison.assert_called_once_with("Anna", "Peter", 0, blocking=True)
         # compute_rating was called (and failed)
         assert mock_compute_rating.call_count == 1
-        # database.update_rating_value should NOT be called
-        assert mock_update_rating_value.call_count == 0
+        # database.update_rating should NOT be called
+        assert mock_update_rating.call_count == 0
 
 
 class TestUpdatePreferenceDownAndSave:
     """Tests for update_preference_down_and_save function (uses Bradley-Terry model)."""
 
-    @patch("st_name_ranking.model_service.database.update_rating_value")
+    @patch("st_name_ranking.model_service.database.update_rating")
     @patch("st_name_ranking.model_service._compute_rating_for_name")
     @patch("st_name_ranking.model_service.record_comparison_instant")
     def test_successful_update(
         self,
         mock_record_comparison,
         mock_compute_rating,
-        mock_update_rating_value,
+        mock_update_rating,
     ):
         """Test successful down update and save."""
         ratings = {"Anna": 1500.0, "Peter": 1500.0}
@@ -674,20 +674,20 @@ class TestUpdatePreferenceDownAndSave:
         mock_compute_rating.assert_any_call("Anna")
         mock_compute_rating.assert_any_call("Peter")
         # Check database updates
-        assert mock_update_rating_value.call_count == 2
-        mock_update_rating_value.assert_any_call("Anna", 1480.0)
-        mock_update_rating_value.assert_any_call("Peter", 1470.0)
+        assert mock_update_rating.call_count == 2
+        mock_update_rating.assert_any_call("Anna", 1480.0)
+        mock_update_rating.assert_any_call("Peter", 1470.0)
         # Check returned ratings
         assert result == {"Anna": 1480.0, "Peter": 1470.0}
 
-    @patch("st_name_ranking.model_service.database.update_rating_value")
+    @patch("st_name_ranking.model_service.database.update_rating")
     @patch("st_name_ranking.model_service._compute_rating_for_name")
     @patch("st_name_ranking.model_service.record_comparison_instant")
     def test_save_failure(
         self,
         mock_record_comparison,
         mock_compute_rating,
-        mock_update_rating_value,
+        mock_update_rating,
     ):
         """Test when ratings computation fails."""
         ratings = {"Anna": 1500.0, "Peter": 1500.0}
@@ -700,8 +700,8 @@ class TestUpdatePreferenceDownAndSave:
         mock_record_comparison.assert_called_once_with("Anna", "Peter", 2, blocking=True)
         # compute_rating was called (and failed)
         assert mock_compute_rating.call_count == 1
-        # database.update_rating_value should NOT be called
-        assert mock_update_rating_value.call_count == 0
+        # database.update_rating should NOT be called
+        assert mock_update_rating.call_count == 0
 
 
 class TestGetNameFeatures:

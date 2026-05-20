@@ -15,7 +15,7 @@ from st_name_ranking.database import (
     get_connection,
     init_database,
     record_comparison,
-    update_rating_value,
+    update_rating,
     update_ratings_batch,
     update_ratings_batch_values,
 )
@@ -31,13 +31,13 @@ def temp_db():
 
     original_path = database.DB_PATH
     database.DB_PATH = db_path
-    database.init_database._initialized = False
+    database.reset_database_init_state()
 
     yield db_path
 
     # Cleanup
     database.DB_PATH = original_path
-    database.init_database._initialized = False
+    database.reset_database_init_state()
     if db_path.exists():
         db_path.unlink()
 
@@ -143,8 +143,8 @@ class TestFullPreferenceWorkflow:
         emma_rating = 1500 + emma_utility * 500
         liam_rating = 1500 + liam_utility * 500
 
-        update_rating_value("Emma", emma_rating)
-        update_rating_value("Liam", liam_rating)
+        update_rating("Emma", emma_rating)
+        update_rating("Liam", liam_rating)
 
         # Step 6: Record comparison in database
         record_comparison("Emma", "Liam", preference=-1)
@@ -825,7 +825,7 @@ class TestEndToEndWorkflow:
 
         # Save ratings to database
         for name, rating in final_ratings.items():
-            update_rating_value(name, rating)
+            update_rating(name, rating)
 
         # Verify ratings in database
         with get_connection() as conn:

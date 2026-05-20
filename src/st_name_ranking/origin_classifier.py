@@ -534,14 +534,30 @@ class OriginClassifier:
         return results
 
 
-_CLASSIFIER_CACHE: dict[str, OriginClassifier] = {}
+ReferenceCacheKey = tuple[str, int, int]
+
+_CLASSIFIER_CACHE: dict[ReferenceCacheKey, OriginClassifier] = {}
+
+
+def _reference_cache_key(
+    reference_names: dict[str, tuple[str, float, str, str]] | None,
+) -> ReferenceCacheKey:
+    """Return the classifier-cache key for a reference-name set."""
+    if reference_names is None:
+        return ("none", 0, 0)
+    return ("reference_names", id(reference_names), len(reference_names))
+
+
+def reset_classifier_cache() -> None:
+    """Clear cached classifier instances."""
+    _CLASSIFIER_CACHE.clear()
 
 
 def get_classifier(
     reference_names: dict[str, tuple[str, float, str, str]] | None = None,
 ) -> OriginClassifier:
-    """Get singleton classifier instance."""
-    cache_key = "default"
+    """Get a classifier instance for the supplied reference-name set."""
+    cache_key = _reference_cache_key(reference_names)
     if cache_key not in _CLASSIFIER_CACHE:
         _CLASSIFIER_CACHE[cache_key] = OriginClassifier(reference_names)
     return _CLASSIFIER_CACHE[cache_key]

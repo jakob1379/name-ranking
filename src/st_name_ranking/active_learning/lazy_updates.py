@@ -206,8 +206,8 @@ def update_preference_and_save(
         loser_rating = _compute_rating_for_name(loser)
         ratings[winner] = winner_rating
         ratings[loser] = loser_rating
-        database.update_rating_value(winner, winner_rating)
-        database.update_rating_value(loser, loser_rating)
+        database.update_rating(winner, winner_rating)
+        database.update_rating(loser, loser_rating)
         return ratings.copy()
     except (RuntimeError, ValueError) as e:
         logger.warning("Failed to compute updated ratings: %s", e)
@@ -232,8 +232,8 @@ def update_preference_draw_and_save(
         rating_b = _compute_rating_for_name(player_b)
         ratings[player_a] = rating_a
         ratings[player_b] = rating_b
-        database.update_rating_value(player_a, rating_a)
-        database.update_rating_value(player_b, rating_b)
+        database.update_rating(player_a, rating_a)
+        database.update_rating(player_b, rating_b)
         return ratings.copy()
     except (RuntimeError, ValueError) as e:
         logger.warning("Failed to compute updated ratings: %s", e)
@@ -258,8 +258,8 @@ def update_preference_down_and_save(
         rating_b = _compute_rating_for_name(player_b)
         ratings[player_a] = rating_a
         ratings[player_b] = rating_b
-        database.update_rating_value(player_a, rating_a)
-        database.update_rating_value(player_b, rating_b)
+        database.update_rating(player_a, rating_a)
+        database.update_rating(player_b, rating_b)
         return ratings.copy()
     except (RuntimeError, ValueError) as e:
         logger.warning("Failed to compute updated ratings: %s", e)

@@ -54,6 +54,5 @@ def import_database(file_bytes: bytes, *, backup: bool = True) -> None:
         _msg = f"Failed to write database file: {e}"
         raise OSError(_msg) from e
 
-    database._INIT_STATE["db_initialized"] = False
-    database._INIT_STATE["db_path"] = None
+    database.reset_database_init_state()
     logger.info("Database imported successfully")

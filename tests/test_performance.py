@@ -27,7 +27,7 @@ def test_binary_filter_performance(tmp_path):
     try:
         # Patch database to use temp path
         database.DB_PATH = test_db_path
-        database._initialized = False
+        database.reset_database_init_state()
 
         print_progress(f"Database path set to: {test_db_path}")
         print_progress("Starting AppTest.from_file...")
@@ -59,7 +59,7 @@ def test_binary_filter_performance(tmp_path):
     finally:
         # Restore original database path
         database.DB_PATH = original_db_path
-        database._initialized = False
+        database.reset_database_init_state()
         print_progress("Database path restored")
 
 
@@ -124,7 +124,7 @@ def test_database_operations_performance(tmp_path):
         import st_name_ranking.database as db_module
 
         db_module.DB_PATH = test_db_path
-        db_module._initialized = False
+        db_module.reset_database_init_state()
 
         # Ensure fresh database
         print_progress("Initializing database...")
@@ -168,7 +168,7 @@ def test_database_operations_performance(tmp_path):
         import st_name_ranking.database as db_module
 
         db_module.DB_PATH = original_db_path
-        db_module._initialized = False
+        db_module.reset_database_init_state()
         print_progress("Database path restored")
 
 

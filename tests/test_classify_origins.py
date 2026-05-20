@@ -13,19 +13,35 @@ class TestOriginClassifierFactory:
 
     def setup_method(self):
         """Clear classifier cache before each test."""
-        origin_classifier._CLASSIFIER_CACHE.clear()
+        origin_classifier.reset_classifier_cache()
 
     def test_get_classifier_caches_hierarchical_classifier(self):
         """Test successful hierarchical classifier caching."""
+        reference_names: dict[str, tuple[str, float, str, str]] = {}
         with patch("st_name_ranking.origin_classifier.OriginClassifier") as mock_cls:
-            classifier = origin_classifier.get_classifier(reference_names={})
+            classifier = origin_classifier.get_classifier(reference_names=reference_names)
             assert classifier == mock_cls.return_value
 
             # Second call should return cached classifier
-            classifier2 = origin_classifier.get_classifier(reference_names={})
+            classifier2 = origin_classifier.get_classifier(reference_names=reference_names)
             assert classifier2 == classifier
 
-            mock_cls.assert_called_once_with({})
+            mock_cls.assert_called_once_with(reference_names)
+
+    def test_get_classifier_uses_distinct_reference_set_cache_keys(self):
+        """Different reference-name dictionaries should not share stale classifier state."""
+        first_reference_set = {"Anna": ("Nordic", 0.9, "AN", "")}
+        second_reference_set = {"Maria": ("European", 0.8, "MR", "")}
+
+        with patch("st_name_ranking.origin_classifier.OriginClassifier") as mock_cls:
+            mock_cls.side_effect = [object(), object()]
+            first_classifier = origin_classifier.get_classifier(first_reference_set)
+            second_classifier = origin_classifier.get_classifier(second_reference_set)
+
+        assert first_classifier is not second_classifier
+        assert mock_cls.call_count == 2
+        mock_cls.assert_any_call(first_reference_set)
+        mock_cls.assert_any_call(second_reference_set)
 
     def test_get_classifier_uses_origin_classifier_boundary(self):
         """Test factory construction errors surface from origin_classifier directly."""
