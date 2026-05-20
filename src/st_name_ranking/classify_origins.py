@@ -1,7 +1,5 @@
-"""Compatibility alias for :mod:`st_name_ranking.classification.classify_origins`."""
+"""Deprecated alias for :mod:`st_name_ranking.classification.classify_origins`."""
 
-import sys
+from st_name_ranking._compat import install_deprecated_module_alias
 
-from st_name_ranking.classification import classify_origins as _classify_origins
-
-sys.modules[__name__] = _classify_origins
+install_deprecated_module_alias(__name__, "st_name_ranking.classification.classify_origins", remove_in="0.3.0")

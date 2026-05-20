@@ -1,9 +1,5 @@
-"""Compatibility alias for :mod:`st_name_ranking.active_learning.queue`."""
+"""Deprecated alias for :mod:`st_name_ranking.active_learning.queue`."""
 
-from __future__ import annotations
+from st_name_ranking._compat import install_deprecated_module_alias
 
-import sys
-
-from st_name_ranking.active_learning import queue as _queue
-
-sys.modules[__name__] = _queue
+install_deprecated_module_alias(__name__, "st_name_ranking.active_learning.queue", remove_in="0.3.0")

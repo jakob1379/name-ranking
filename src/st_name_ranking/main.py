@@ -1,10 +1,10 @@
-"""Compatibility alias for :mod:`st_name_ranking.interface.main`."""
+"""Deprecated alias for :mod:`st_name_ranking.interface.main`."""
 
-import sys
-
-from st_name_ranking.interface import main as _main
-
-sys.modules[__name__] = _main
+from st_name_ranking._compat import install_deprecated_module_alias
 
 if __name__ == "__main__":
-    _main.main()
+    from st_name_ranking.interface.main import main
+
+    main()
+else:
+    install_deprecated_module_alias(__name__, "st_name_ranking.interface.main", remove_in="0.3.0")

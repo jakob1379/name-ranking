@@ -1,7 +1,5 @@
-"""Compatibility alias for :mod:`st_name_ranking.learning.features`."""
+"""Deprecated alias for :mod:`st_name_ranking.learning.features`."""
 
-import sys
+from st_name_ranking._compat import install_deprecated_module_alias
 
-from st_name_ranking.learning import features as _features
-
-sys.modules[__name__] = _features
+install_deprecated_module_alias(__name__, "st_name_ranking.learning.features", remove_in="0.3.0")

@@ -1,7 +1,5 @@
-"""Compatibility alias for :mod:`st_name_ranking.persistence.feature_store`."""
+"""Deprecated alias for :mod:`st_name_ranking.persistence.feature_store`."""
 
-import sys
+from st_name_ranking._compat import install_deprecated_module_alias
 
-from st_name_ranking.persistence import feature_store as _feature_store
-
-sys.modules[__name__] = _feature_store
+install_deprecated_module_alias(__name__, "st_name_ranking.persistence.feature_store", remove_in="0.3.0")

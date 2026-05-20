@@ -1,7 +1,5 @@
-"""Compatibility alias for :mod:`st_name_ranking.persistence.database`."""
+"""Deprecated alias for :mod:`st_name_ranking.persistence.database`."""
 
-import sys
+from st_name_ranking._compat import install_deprecated_module_alias
 
-from st_name_ranking.persistence import database as _database
-
-sys.modules[__name__] = _database
+install_deprecated_module_alias(__name__, "st_name_ranking.persistence.database", remove_in="0.3.0")

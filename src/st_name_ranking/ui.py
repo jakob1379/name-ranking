@@ -1,7 +1,5 @@
-"""Compatibility alias for :mod:`st_name_ranking.interface.ui`."""
+"""Deprecated alias for :mod:`st_name_ranking.interface.ui`."""
 
-import sys
+from st_name_ranking._compat import install_deprecated_module_alias
 
-from st_name_ranking.interface import ui as _ui
-
-sys.modules[__name__] = _ui
+install_deprecated_module_alias(__name__, "st_name_ranking.interface.ui", remove_in="0.3.0")

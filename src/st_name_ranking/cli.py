@@ -1,7 +1,5 @@
-"""Compatibility alias for :mod:`st_name_ranking.commands.cli`."""
+"""Deprecated alias for :mod:`st_name_ranking.commands.cli`."""
 
-import sys
+from st_name_ranking._compat import install_deprecated_module_alias
 
-from st_name_ranking.commands import cli as _cli
-
-sys.modules[__name__] = _cli
+install_deprecated_module_alias(__name__, "st_name_ranking.commands.cli", remove_in="0.3.0")

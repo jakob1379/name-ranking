@@ -23,7 +23,7 @@ from st_name_ranking.active_learning.selection import (
 from st_name_ranking.active_learning.selection import (
     select_random_pair as _select_random_pair,
 )
-from st_name_ranking.app_actions import (
+from st_name_ranking.interface.app_actions import (
     pull_submodule_updates,
     setup_session_state,
     sync_names_from_submodule,

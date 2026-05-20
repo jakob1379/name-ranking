@@ -1,9 +1,5 @@
-"""Compatibility alias for :mod:`st_name_ranking.active_learning.lazy_updates`."""
+"""Deprecated alias for :mod:`st_name_ranking.active_learning.lazy_updates`."""
 
-from __future__ import annotations
+from st_name_ranking._compat import install_deprecated_module_alias
 
-import sys
-
-from st_name_ranking.active_learning import lazy_updates as _lazy_updates
-
-sys.modules[__name__] = _lazy_updates
+install_deprecated_module_alias(__name__, "st_name_ranking.active_learning.lazy_updates", remove_in="0.3.0")
