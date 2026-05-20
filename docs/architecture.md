@@ -149,6 +149,7 @@ Stores 5 core tables:
 - `db features status`: Show feature cache status
 - `db model status`: Show active learning model status
 - `db model reset`: Reinitialize active learning model
+- `db origins classify`: Classify unclassified name origins
 - `db import`: Import database from file
 
 ## Data Flow

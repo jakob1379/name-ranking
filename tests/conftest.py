@@ -125,11 +125,10 @@ def mock_submodule_path(tmp_path):
 @pytest.fixture
 def mock_classifier():
     """Mock the ethnidata classifier to avoid missing database file."""
-    from st_name_ranking import classify_origins, origin_classifier
+    from st_name_ranking import origin_classifier
 
     # Clear singleton cache to ensure fresh classifier
     origin_classifier._CLASSIFIER_CACHE.clear()
-    classify_origins.get_classifier._cache = None
 
     # The classifier expects a callable that returns (region, confidence) tuple
     mock_instance = MagicMock(return_value=("European", 0.85))

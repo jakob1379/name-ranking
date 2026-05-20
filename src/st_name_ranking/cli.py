@@ -25,6 +25,9 @@ from st_name_ranking.active_learning.selection import (
     get_active_learning_model,
 )
 
+# Import maintenance workflow implementations
+from st_name_ranking.classify_origins import classify_all_names
+
 # Import database functions
 from st_name_ranking.database import (
     DB_PATH,
@@ -67,6 +70,29 @@ FORCE_OPTION = typer.Option(
     "-f",
     help="Skip confirmation prompt",
 )
+CLASSIFY_OPTION = typer.Option(
+    "--classify",
+    help="Classify unclassified origins after initialization",
+)
+ORIGIN_LIMIT_OPTION = typer.Option(
+    "--limit",
+    "-l",
+    help="Maximum number of unclassified names to classify",
+)
+ORIGIN_BATCH_SIZE_OPTION = typer.Option(
+    "--batch-size",
+    "-b",
+    min=1,
+    help="Number of names to classify per batch",
+)
+ORIGIN_STATS_ONLY_OPTION = typer.Option(
+    "--stats-only",
+    help="Print origin classification stats without running classification",
+)
+ORIGIN_SHOW_STATS_OPTION = typer.Option(
+    "--show-stats",
+    help="Print origin classification stats after classification",
+)
 SERVER_PORT_OPTION = typer.Option(
     "--server.port",
     help="Port for the Streamlit server",
@@ -90,10 +116,15 @@ model_app = typer.Typer(
     help="Active learning model management commands",
     name="model",
 )
+origins_app = typer.Typer(
+    help="Origin classification maintenance commands",
+    name="origins",
+)
 
 # Register subcommand groups
 db_app.add_typer(features_app)
 db_app.add_typer(model_app)
+db_app.add_typer(origins_app)
 app.add_typer(db_app)
 
 # ----------------------------------------------------------------------
@@ -354,7 +385,10 @@ def clear_all_features() -> int:
 
 
 @db_app.command("init")
-def init() -> None:
+def init(
+    *,
+    classify: Annotated[bool, CLASSIFY_OPTION] = False,
+) -> None:
     """Initialize the name ranking database.
 
     This command:
@@ -416,6 +450,10 @@ def init() -> None:
 
     print_success(f"Computed features for {processed} names")
     print_info(f"Feature dimension: {len(feature_names)}")
+
+    if classify:
+        console.print()
+        _run_origin_classification(limit=None, batch_size=100)
 
     # Show final statistics
     console.print()
@@ -514,7 +552,9 @@ def _print_model_table() -> None:
 
 def _print_origin_distribution(stats: Any) -> None:
     """Print origin distribution statistics."""
-    if stats.origin_distribution:
+    origin_distribution = _stat(stats, "origin_distribution")
+    total_names = int(_stat(stats, "total_names"))
+    if origin_distribution:
         dist_table = Table(
             title="Origin Distribution",
             show_header=True,
@@ -525,11 +565,11 @@ def _print_origin_distribution(stats: Any) -> None:
         dist_table.add_column("Percentage", justify="right")
 
         for region, count in sorted(
-            stats.origin_distribution.items(),
+            origin_distribution.items(),
             key=lambda x: x[1],
             reverse=True,
         ):
-            percentage = count / stats.total_names * 100
+            percentage = count / total_names * 100
             dist_table.add_row(
                 region,
                 str(count),
@@ -539,6 +579,100 @@ def _print_origin_distribution(stats: Any) -> None:
         console.print(dist_table)
     else:
         print_info("No origin classification data available.")
+
+
+# ----------------------------------------------------------------------
+# Origin Classification Subcommands
+# ----------------------------------------------------------------------
+
+
+def _stat(stats: Any, name: str) -> Any:
+    """Read a statistic from either the current dataclass or legacy dict shape."""
+    if isinstance(stats, dict):
+        return stats[name]
+    return getattr(stats, name)
+
+
+def _print_origin_classification_stats(label: str = "Origin Classification Statistics") -> None:
+    """Print focused origin classification statistics."""
+    stats = get_stats()
+    total = int(_stat(stats, "total_names"))
+    classified = int(_stat(stats, "classified_names"))
+    unclassified = int(_stat(stats, "unclassified_names"))
+
+    table = Table(title=label, show_header=False, box=None)
+    table.add_column("Metric", style="cyan")
+    table.add_column("Value", style="bold")
+    table.add_row("Total names", str(total))
+    if total > 0:
+        table.add_row("Classified names", f"{classified} ({classified / total * 100:.1f}%)")
+        table.add_row("Unclassified names", f"{unclassified} ({unclassified / total * 100:.1f}%)")
+    else:
+        table.add_row("Classified names", "0 (0.0%)")
+        table.add_row("Unclassified names", "0 (0.0%)")
+    console.print(table)
+
+    _print_origin_distribution(stats)
+
+
+def _run_origin_classification(
+    limit: int | None,
+    batch_size: int,
+    *,
+    show_stats: bool = False,
+    stats_only: bool = False,
+) -> int:
+    """Run the canonical origin-classification maintenance workflow."""
+    console.print("[bold blue]Processing Data Enrichment[/bold blue]")
+    console.print()
+
+    if stats_only:
+        _print_origin_classification_stats()
+        return 0
+
+    try:
+        classified = classify_all_names(limit, batch_size)
+    except ImportError as err:
+        print_error(f"Origin classification dependency unavailable: {err}")
+        raise typer.Exit(code=1) from err
+    except (RuntimeError, ValueError) as err:
+        print_error(f"Origin classification failed: {err}")
+        raise typer.Exit(code=1) from err
+
+    print_success(f"Classified {classified} names")
+
+    if show_stats:
+        console.print()
+        _print_origin_classification_stats("Origin Classification Statistics")
+
+    return classified
+
+
+@origins_app.command("classify")
+def origins_classify(
+    *,
+    limit: Annotated[int | None, ORIGIN_LIMIT_OPTION] = None,
+    batch_size: Annotated[int, ORIGIN_BATCH_SIZE_OPTION] = 100,
+    show_stats: Annotated[bool, ORIGIN_SHOW_STATS_OPTION] = False,
+    stats_only: Annotated[bool, ORIGIN_STATS_ONLY_OPTION] = False,
+) -> None:
+    """Classify unclassified name origins."""
+    _run_origin_classification(
+        limit=limit,
+        batch_size=batch_size,
+        show_stats=show_stats,
+        stats_only=stats_only,
+    )
+
+
+@app.command("process", hidden=True)
+def process(
+    *,
+    limit: Annotated[int | None, ORIGIN_LIMIT_OPTION] = None,
+    batch_size: Annotated[int, ORIGIN_BATCH_SIZE_OPTION] = 100,
+) -> None:
+    """Compatibility alias for `st-name-ranking db origins classify`."""
+    _run_origin_classification(limit=limit, batch_size=batch_size)
 
 
 # ----------------------------------------------------------------------

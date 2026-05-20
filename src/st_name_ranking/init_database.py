@@ -71,7 +71,7 @@ def main() -> None:
             print(
                 "✗ ethnidata not installed. Install with: pip install ethnidata",
             )
-            print("  Or run later: python classify_origins.py")
+            print("  Or run later: st-name-ranking db origins classify")
         except (RuntimeError, ValueError) as e:
             print(f"✗ Classification failed: {e}")
 

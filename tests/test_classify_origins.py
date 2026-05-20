@@ -1,5 +1,6 @@
 """Tests for st_name_ranking.classify_origins module."""
 
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -7,32 +8,30 @@ import pytest
 from st_name_ranking import classify_origins, origin_classifier
 
 
-class TestGetClassifier:
-    """Tests for get_classifier function."""
+class TestOriginClassifierFactory:
+    """Tests for the canonical origin_classifier factory used by classify_origins."""
 
     def setup_method(self):
         """Clear classifier cache before each test."""
-        classify_origins.get_classifier._cache = None
+        origin_classifier._CLASSIFIER_CACHE.clear()
 
-    def test_get_classifier_success(self):
-        """Test successful classifier loading."""
-        # Mock ethnidata import
-        mock_n2n = MagicMock()
-        with patch("ethnidata.EthniData", return_value=mock_n2n):
-            classifier = classify_origins.get_classifier()
-            assert classifier == mock_n2n
+    def test_get_classifier_caches_hierarchical_classifier(self):
+        """Test successful hierarchical classifier caching."""
+        with patch("st_name_ranking.origin_classifier.OriginClassifier") as mock_cls:
+            classifier = origin_classifier.get_classifier(reference_names={})
+            assert classifier == mock_cls.return_value
 
             # Second call should return cached classifier
-            with patch("ethnidata.EthniData") as mock_ctor:
-                classifier2 = classify_origins.get_classifier()
-                assert classifier2 == mock_n2n
+            classifier2 = origin_classifier.get_classifier(reference_names={})
+            assert classifier2 == classifier
 
-                mock_ctor.assert_not_called()
+            mock_cls.assert_called_once_with({})
 
-    def test_get_classifier_import_error(self):
-        """Test when ethnidata is not installed."""
-        with patch("ethnidata.EthniData", side_effect=ImportError), pytest.raises(ImportError):
-            classify_origins.get_classifier()
+    def test_get_classifier_uses_origin_classifier_boundary(self):
+        """Test factory construction errors surface from origin_classifier directly."""
+        with patch("st_name_ranking.origin_classifier.OriginClassifier", side_effect=ImportError):
+            with pytest.raises(ImportError):
+                origin_classifier.get_classifier(reference_names={})
 
 
 class TestGetRegionForNationality:
@@ -206,7 +205,6 @@ class TestClassifyAllNames:
         # Note: classify_all_names uses logging, not Streamlit toast
         # Original test expected toast but it's not implemented
 
-    @pytest.mark.skip(reason="Test relies on outdated mocking")
     @patch("st_name_ranking.classify_origins.get_unclassified_names")
     @patch(
         "st_name_ranking.classify_origins.st",
@@ -220,14 +218,11 @@ class TestClassifyAllNames:
     ):
         """Test when ethnidata is not installed."""
         mock_get_unclassified.return_value = [
-            {"id": 1, "name": "Anna"},
-            {"id": 2, "name": "Peter"},
+            SimpleNamespace(id=1, name="Anna"),
+            SimpleNamespace(id=2, name="Peter"),
         ]
 
-        with patch(
-            "st_name_ranking.classify_origins.get_classifier",
-            side_effect=ImportError,
-        ):
+        with patch("st_name_ranking.classify_origins.get_origin_classifier", side_effect=ImportError):
             result = classify_origins.classify_all_names()
 
             assert result == 0

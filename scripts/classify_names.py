@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Parameterized driver for origin classification batches."""
+"""Developer wrapper for `st-name-ranking db origins classify`.
+
+Use the CLI command for durable maintenance workflows. This script remains for
+local runtime estimates and preset wrappers under `scripts/`.
+"""
 
 import argparse
 import logging
@@ -7,42 +11,11 @@ import sys
 import time
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Any
 
 
 def _ensure_src_path() -> None:
     src_path = Path(__file__).parent.parent / "src"
     sys.path.insert(0, str(src_path))
-
-
-def _print_stats(label: str) -> None:
-    from st_name_ranking.database import get_stats
-
-    stats = get_stats()
-    total = _stat(stats, "total_names")
-    classified = _stat(stats, "classified_names")
-    unclassified = _stat(stats, "unclassified_names")
-    origin_distribution = _stat(stats, "origin_distribution")
-
-    print(label)
-    print(f"  Total names: {total}")
-    if total > 0:
-        print(f"  Classified: {classified} ({classified / total * 100:.1f}%)")
-    else:
-        print("  Classified: 0 (0.0%)")
-    print(f"  Unclassified: {unclassified}")
-
-    if origin_distribution:
-        print("  Origin distribution:")
-        for region, count in origin_distribution.items():
-            percentage = count / total * 100 if total > 0 else 0.0
-            print(f"    {region}: {count} ({percentage:.1f}%)")
-
-
-def _stat(stats: object, name: str) -> Any:
-    if isinstance(stats, dict):
-        return stats[name]
-    return getattr(stats, name)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -62,15 +35,17 @@ def main(argv: Sequence[str] | None = None) -> int:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
     _ensure_src_path()
 
-    from st_name_ranking.classify_origins import classify_all_names
+    from st_name_ranking.cli import _print_origin_classification_stats, _run_origin_classification
     from st_name_ranking.database import get_stats
 
     print(f"=== {args.title} ===")
 
     stats_before = get_stats()
-    unclassified = _stat(stats_before, "unclassified_names")
+    unclassified = (
+        stats_before["unclassified_names"] if isinstance(stats_before, dict) else stats_before.unclassified_names
+    )
     if args.show_stats or args.stats_only:
-        _print_stats("Before classification:")
+        _print_origin_classification_stats("Before classification:")
 
     if args.stats_only:
         return 0
@@ -87,7 +62,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     print("Starting classification...")
     start = time.time()
     try:
-        classified = classify_all_names(limit=args.limit, batch_size=args.batch_size)
+        classified = _run_origin_classification(
+            limit=args.limit,
+            batch_size=args.batch_size,
+            show_stats=False,
+        )
     except KeyboardInterrupt:
         print("\nClassification interrupted by user.")
         return 1
@@ -102,7 +81,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         print(f"Rate: {classified / elapsed:.1f} names/second")
 
     if args.show_stats:
-        _print_stats("\nAfter classification:")
+        _print_origin_classification_stats("After classification:")
 
     return 0
 

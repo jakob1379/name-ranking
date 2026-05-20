@@ -1,24 +1,23 @@
 #!/usr/bin/env python3
-"""Classify name origins using ethnidata package.
+"""Batch orchestration for hierarchical name-origin classification.
 
-This script:
+This implementation module:
 1. Gets unclassified names from database
-2. Uses ethnidata to predict nationality
-3. Maps nationality to region using region_mapping table
+2. Delegates single-name classification to origin_classifier
+3. Maps classifier output to stored origin fields
 4. Updates database with region and confidence
 5. Handles batch processing with progress reporting
+
+The canonical maintenance entrypoint is:
+    st-name-ranking db origins classify
 """
 
-import argparse
 import logging
 import sqlite3
-import sys
 import time
-from collections.abc import Callable
 
 from st_name_ranking.database import (
     get_names_with_origins,
-    get_stats,
     get_unclassified_names,
     update_name_origin,
 )
@@ -33,34 +32,6 @@ logger = logging.getLogger(__name__)
 
 # Minimum confidence threshold for classification results
 MIN_CONFIDENCE_THRESHOLD = 0.1
-
-Classifier = Callable[[str], OriginResult | None]
-
-
-def get_classifier() -> Classifier:
-    """Get or create the ethnidata classifier (lazy load).
-
-    Returns:
-        Function that takes a name and returns (region, confidence) or None.
-
-    Raises:
-        ImportError: If ethnidata package is not installed.
-    """
-    if getattr(get_classifier, "_cache", None) is not None:
-        return get_classifier._cache
-
-    try:
-        from ethnidata import EthniData  # noqa: PLC0415
-
-        get_classifier._cache = EthniData()
-    except ImportError as err:
-        _msg = "ethnidata not installed. Install with: pip install ethnidata"
-        raise ImportError(_msg) from err
-    except (OSError, FileNotFoundError) as err:
-        _msg = f"ethnidata data files missing or broken: {err}"
-        raise ImportError(_msg) from err
-    logger.debug("Initialized ethnidata classifier")
-    return get_classifier._cache
 
 
 def classify_name(name: str) -> OriginResult | None:
@@ -228,51 +199,3 @@ def classify_all_names(
     )
 
     return classified
-
-
-def main() -> None:
-    """Command-line interface."""
-    parser = argparse.ArgumentParser(description="Classify name origins")
-    parser.add_argument(
-        "--limit",
-        type=int,
-        help="Limit number of names to classify (for testing)",
-    )
-    parser.add_argument(
-        "--batch-size",
-        type=int,
-        default=100,
-        help="Batch size for processing (default: 100)",
-    )
-    parser.add_argument(
-        "--stats",
-        action="store_true",
-        help="Show classification statistics only",
-    )
-
-    args = parser.parse_args()
-
-    if args.stats:
-        stats = get_stats()
-        total = stats["total_names"]
-        classified = stats["classified_names"]
-        print("Classification Statistics:")
-        print(f"  Total names: {total}")
-        print(f"  Classified: {classified} ({classified / total * 100:.1f}%)")
-        print(f"  Unclassified: {total - classified}")
-        return
-
-    try:
-        classify_all_names(args.limit, args.batch_size)
-    except ImportError:
-        print("\n❌ ethnidata is not installed.")
-        print("Install it with: pip install ethnidata")
-        print("Or add to pyproject.toml dependencies:")
-        print(
-            '  dependencies = [\n    ...\n    "ethnidata>=4.1.1",\n    ...\n  ]',
-        )
-        sys.exit(1)
-
-
-if __name__ == "__main__":
-    main()
