@@ -40,11 +40,11 @@ def mock_db_path(temp_db_path):
 @pytest.fixture
 def initialized_db(mock_db_path):
     """Initialize a fresh database with schema."""
-    from st_name_ranking import utils
+    from st_name_ranking.active_learning import selection
     from st_name_ranking.database import get_connection, init_database
 
     # Clear feature extractor cache to prevent stale data between tests
-    utils.get_feature_extractor._cache = None
+    selection.get_feature_extractor._cache = None
 
     init_database()
 

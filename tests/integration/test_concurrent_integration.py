@@ -660,21 +660,21 @@ class TestSingletonRaceConditions:
         Demonstrate that model singleton has race condition.
 
         WARNING: This test documents a known issue - the singleton pattern
-        in utils.py is not thread-safe. Multiple threads can create
+        in active_learning.selection is not thread-safe. Multiple threads can create
         separate model instances simultaneously.
         """
-        from st_name_ranking import utils
+        from st_name_ranking.active_learning import selection
 
         # Reset singleton
-        utils._model = None
-        utils._feature_extractor = None
+        selection.get_active_learning_model._cache = None
+        selection.get_feature_extractor._cache = None
 
         models = []
         errors = []
 
         def get_model_worker():
             try:
-                model = utils.get_active_learning_model()
+                model = selection.get_active_learning_model()
                 models.append(id(model))
             except (RuntimeError, ValueError, AttributeError) as e:
                 errors.append(str(e))
@@ -703,17 +703,17 @@ class TestSingletonRaceConditions:
         """
         Feature extractor singleton should be thread-safe.
         """
-        from st_name_ranking import utils
+        from st_name_ranking.active_learning import selection
 
         # Reset singleton
-        utils._feature_extractor = None
+        selection.get_feature_extractor._cache = None
 
         extractors = []
         errors = []
 
         def get_extractor_worker():
             try:
-                extractor = utils.get_feature_extractor()
+                extractor = selection.get_feature_extractor()
                 extractors.append(id(extractor))
             except (RuntimeError, ValueError, AttributeError) as e:
                 errors.append(str(e))
@@ -881,14 +881,14 @@ class TestUtilsConcurrency:
         """
         Multiple threads recording comparisons should update model state safely.
         """
-        from st_name_ranking import database, utils
+        from st_name_ranking import database
         from st_name_ranking.active_learning.lazy_updates import record_comparison_instant
         from st_name_ranking.features import FeatureExtractor
 
         # Initialize model first and verify the feature surface is available.
         extractor = FeatureExtractor()
         assert extractor.get_feature_names()
-        utils.get_active_learning_model()
+        selection.get_active_learning_model()
 
         # Insert test names
         names = ["ModelA", "ModelB", "ModelC", "ModelD"]
@@ -924,14 +924,14 @@ class TestUtilsConcurrency:
         """
         Multiple threads recording winner/loser preferences should be safe.
         """
-        from st_name_ranking import database, utils
+        from st_name_ranking import database
         from st_name_ranking.active_learning.lazy_updates import record_comparison_instant
         from st_name_ranking.features import FeatureExtractor
 
         # Initialize and verify the feature surface is available.
         extractor = FeatureExtractor()
         assert extractor.get_feature_names()
-        utils.get_active_learning_model()
+        selection.get_active_learning_model()
 
         # Insert test names
         names = ["PrefA", "PrefB"]

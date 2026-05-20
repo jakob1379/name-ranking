@@ -98,13 +98,14 @@ def select_candidates(
     names: list[str],
     features: np.ndarray | None = None,
     sample_size: int | None = None,
+    dependencies: PairSelectionDependencies | None = None,
 ) -> tuple[str, str]:
     """Select one active-learning candidate pair.
 
     sample_size limits model ranking to a random subset; None uses
     DEFAULT_PAIR_SAMPLE_SIZE capped to the number of candidate names.
     """
-    pair = try_select_candidates(names, features, sample_size)
+    pair = try_select_candidates(names, features, sample_size, dependencies)
     if pair is None:
         msg = f"Need at least {MIN_NAMES_FOR_PAIR_SELECTION} names"
         raise ValueError(msg)
@@ -115,12 +116,14 @@ def try_select_candidates(
     names: list[str],
     features: np.ndarray | None = None,
     sample_size: int | None = None,
+    dependencies: PairSelectionDependencies | None = None,
 ) -> tuple[str, str] | None:
     """Select one candidate pair, or return None when no pair is available."""
     pairs = select_candidate_pairs(
         names,
         features,
         PairSelectionOptions(batch_size=1, sample_size=sample_size),
+        dependencies,
     )
     return pairs[0] if pairs else None
 
@@ -279,8 +282,9 @@ def _has_pair(pair: tuple[str, str] | None) -> bool:
 
 def _select_candidates_fallback(
     names: list[str],
-    dependencies: PairSelectionDependencies,
+    dependencies: PairSelectionDependencies | None = None,
 ) -> tuple[str, str] | None:
+    dependencies = dependencies or PairSelectionDependencies()
     if dependencies.heuristic_pair_provider is not None:
         return dependencies.heuristic_pair_provider(names)
 

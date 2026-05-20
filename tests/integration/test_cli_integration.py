@@ -546,7 +546,7 @@ class TestCLIModelCommands:
 
     def test_model_status_shows_feature_dimensions(self, initialized_real_db, cli_runner):
         """Test that model-status shows correct feature dimensions."""
-        from st_name_ranking.utils import get_active_learning_model
+        from st_name_ranking.active_learning.selection import get_active_learning_model
 
         # Initialize a model to get feature dimensions
         model = get_active_learning_model()
@@ -577,11 +577,11 @@ class TestCLIModelCommands:
 
     def test_model_reset_clears_model_state(self, initialized_real_db, cli_runner):
         """Test that model-reset actually clears model state in database."""
-        from st_name_ranking import database, utils
-        from st_name_ranking.features import FeatureExtractor
+        from st_name_ranking import database
 
         # First, add some training data to the model
-        from st_name_ranking.utils import get_active_learning_model
+        from st_name_ranking.active_learning.selection import get_active_learning_model
+        from st_name_ranking.features import FeatureExtractor
 
         model = get_active_learning_model()
         extractor = FeatureExtractor()
@@ -609,7 +609,7 @@ class TestCLIModelCommands:
                 assert db_samples >= 1, "Model should have training samples in DB"
 
         # Clear the global singleton to simulate fresh process
-        utils.get_active_learning_model._cache = None
+        selection.get_active_learning_model._cache = None
 
         # Run model-reset (automatically confirms in test)
         result = cli_runner.invoke(app, ["model-reset"], input="y\n")
@@ -862,7 +862,7 @@ class TestDatabaseStateVerification:
 
     def test_model_state_persistence(self, initialized_real_db, cli_runner):
         """Verify that model state is persisted in database."""
-        from st_name_ranking.utils import get_active_learning_model
+        from st_name_ranking.active_learning.selection import get_active_learning_model
 
         # Get initial model and save state
         model = get_active_learning_model()

@@ -3,7 +3,7 @@
 Tests the integration between:
 - features.py: FeatureExtractor class
 - model.py: BradleyTerryModel class
-- utils.py: get_name_features(), get_names_features()
+- active_learning.selection: get_name_features(), get_names_features()
 
 Critical paths tested:
 1. Feature extraction produces valid input for model
@@ -16,10 +16,10 @@ Critical paths tested:
 import numpy as np
 import pytest
 
+from st_name_ranking.active_learning.selection import get_name_features, get_names_features
 from st_name_ranking.database import get_connection
 from st_name_ranking.features import FeatureExtractor, extract_all_features, extract_suffix_features
 from st_name_ranking.model import BradleyTerryModel
-from st_name_ranking.utils import get_name_features, get_names_features
 
 # -----------------------------------------------------------------------------
 # Test Fixtures

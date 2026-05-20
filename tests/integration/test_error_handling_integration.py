@@ -10,7 +10,7 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 
-from st_name_ranking import database, utils
+from st_name_ranking import database
 from st_name_ranking.model import BradleyTerryModel
 
 
@@ -192,8 +192,8 @@ class TestEmptyDatabaseEdgeCases:
 
     def test_handles_empty_database(self, mock_db_path):
         """With no names, strict candidate selection should report absence."""
+        from st_name_ranking.active_learning.selection import select_candidates
         from st_name_ranking.database import init_database
-        from st_name_ranking.utils import select_candidates
 
         # Initialize empty database
         init_database()
@@ -203,8 +203,8 @@ class TestEmptyDatabaseEdgeCases:
 
     def test_single_name_no_pairs(self, mock_db_path):
         """With one name, can't form comparison pairs."""
+        from st_name_ranking.active_learning.selection import select_candidates
         from st_name_ranking.database import get_connection, init_database
-        from st_name_ranking.utils import select_candidates
 
         # Initialize and insert single name
         init_database()
@@ -499,11 +499,11 @@ class TestRaceConditions:
     def test_model_singleton_concurrent_access(self, initialized_db):
         """Model singleton should handle concurrent access."""
         # Reset model singleton
-        utils._model = None
+        selection.get_active_learning_model._cache = None
 
         # Multiple calls to get_active_learning_model should return same instance
-        model1 = utils.get_active_learning_model()
-        model2 = utils.get_active_learning_model()
+        model1 = selection.get_active_learning_model()
+        model2 = selection.get_active_learning_model()
 
         assert model1 is model2, "Should return same model instance"
 
@@ -599,8 +599,8 @@ class TestBoundaryConditions:
 
     def test_select_candidates_with_same_name_filtered_out(self, initialized_db):
         """select_candidates should never return the same name twice."""
+        from st_name_ranking.active_learning.selection import select_candidates
         from st_name_ranking.database import get_connection
-        from st_name_ranking.utils import select_candidates
 
         # Insert names
         with get_connection() as conn:

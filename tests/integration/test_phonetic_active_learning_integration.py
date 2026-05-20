@@ -10,6 +10,11 @@ from unittest.mock import patch
 import numpy as np
 
 from st_name_ranking import database
+from st_name_ranking.active_learning.selection import (
+    get_feature_extractor,
+    select_candidate_batch,
+    select_candidates,
+)
 from st_name_ranking.model import (
     BradleyTerryModel,
     _get_phonetic_codes_cached,
@@ -20,11 +25,6 @@ from st_name_ranking.phonetic_similarity import (
     batch_compute_phonetic_codes,
 )
 from st_name_ranking.types import NamePair
-from st_name_ranking.utils import (
-    get_feature_extractor,
-    select_candidate_batch,
-    select_candidates,
-)
 
 
 class TestPhoneticGrouping:
@@ -420,7 +420,7 @@ class TestBatchSelection:
 
         # Use the utils function for batch selection
         # Mock the model to avoid database dependencies in feature extraction
-        with patch("st_name_ranking.utils.get_active_learning_model") as mock_get_model:
+        with patch("st_name_ranking.active_learning.selection.get_active_learning_model") as mock_get_model:
             mock_model = mock_get_model.return_value
             mock_model.select_top_k_pairs.return_value = [
                 NamePair(idx_a=0, idx_b=2, name_a="Anna", name_b="Peter"),
@@ -463,7 +463,7 @@ class TestBatchSelection:
 
         # Test with different batch sizes
         for batch_size in [1, 2, 3]:
-            with patch("st_name_ranking.utils.get_active_learning_model") as mock_get_model:
+            with patch("st_name_ranking.active_learning.selection.get_active_learning_model") as mock_get_model:
                 mock_model = mock_get_model.return_value
                 # Return batch_size unique pairs
                 mock_pairs = [
@@ -678,7 +678,7 @@ class TestUtilsIntegration:
         names = ["Anna", "Peter"]
 
         # Force model to fail by mocking
-        with patch("st_name_ranking.utils.get_active_learning_model") as mock_get_model:
+        with patch("st_name_ranking.active_learning.selection.get_active_learning_model") as mock_get_model:
             mock_get_model.side_effect = RuntimeError("Model failure")
 
             # Should fallback to basic selection

@@ -10,6 +10,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from st_name_ranking.active_learning.lazy_updates import BOTH_DISLIKED_PREFERENCE, record_comparison_instant
+from st_name_ranking.active_learning.selection import select_candidates
 from st_name_ranking.data_loader import initialize_or_load_ratings
 from st_name_ranking.database import (
     get_connection,
@@ -22,7 +23,6 @@ from st_name_ranking.database import (
     update_name_origin,
 )
 from st_name_ranking.features import FeatureExtractor
-from st_name_ranking.utils import select_candidates
 
 
 def update_preference_and_save(ratings: dict[str, float], winner: str, loser: str) -> dict[str, float]:
@@ -571,7 +571,7 @@ class TestSessionPersistence:
 
     def test_model_state_persisted(self, persistence_db):
         """Test that model state is persisted and can be reloaded."""
-        from st_name_ranking.utils import get_active_learning_model
+        from st_name_ranking.active_learning.selection import get_active_learning_model
 
         names = get_names_by_gender()
         all_names = names.get("All", [])
@@ -592,10 +592,10 @@ class TestSessionPersistence:
         # Simulate fresh model load
         with patch.dict("sys.modules", {"streamlit": MagicMock()}):
             # Reset model cache
-            import st_name_ranking.utils as utils_module
+            import st_name_ranking.active_learning.selection as selection_module
             from st_name_ranking.model import initialize_model_if_needed
 
-            utils_module._model = None
+            selection_module.get_active_learning_model._cache = None
 
             # Create new feature extractor to get feature names
             extractor = FeatureExtractor()

@@ -672,7 +672,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path("{db_path}").parent.parent / "src"))
 
 from st_name_ranking import database
-from st_name_ranking.utils import setup_session_state
+from st_name_ranking.interface.app_actions import setup_session_state
 
 database.DB_PATH = Path("{db_path}")
 database._INIT_STATE["db_initialized"] = True
