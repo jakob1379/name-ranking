@@ -7,6 +7,7 @@ import logging
 import secrets
 import sqlite3
 import time
+from dataclasses import dataclass
 from datetime import UTC, datetime
 
 import streamlit as st
@@ -23,6 +24,10 @@ from st_name_ranking.persistence.database import initialize_ratings
 logger = logging.getLogger(__name__)
 DEFAULT_TOURNAMENT_SAMPLE_SIZE: int | None = None
 logger.setLevel(logging.INFO)
+TAB_NAME_FILTER = "Name Filter"
+TAB_TOURNAMENT = "Tournament"
+TAB_RANKINGS = "Rankings"
+TAB_SIMILARITY = "Similarity Search"
 
 # Configure logging - suppress debug noise
 logging.getLogger("watchdog").setLevel(logging.WARNING)
@@ -36,6 +41,12 @@ if not root_logger.handlers:
         level=logging.INFO,
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     )
+
+
+@dataclass(frozen=True)
+class ActiveTabRender:
+    renderer: str
+    names: list[str]
 
 
 @st.dialog("⚠️ Confirm Reset Ratings", width="small")
@@ -476,55 +487,75 @@ def resolve_tournament_sample_size(filtered_count: int) -> int:
 
 def render_tab_selector() -> None:
     if "active_tab" not in st.session_state:
-        st.session_state.active_tab = "Name Filter"
+        st.session_state.active_tab = TAB_NAME_FILTER
 
     col1, col2, col3, col4 = st.columns(4)
     with col1:
         if st.button(
             "📋 Name Filter",
             width="stretch",
-            type="primary" if st.session_state.active_tab == "Name Filter" else "secondary",
+            type="primary" if st.session_state.active_tab == TAB_NAME_FILTER else "secondary",
         ):
-            st.session_state.active_tab = "Name Filter"
+            st.session_state.active_tab = TAB_NAME_FILTER
             st.rerun()
     with col2:
         if st.button(
             "🏆 Tournament",
             width="stretch",
-            type="primary" if st.session_state.active_tab == "Tournament" else "secondary",
+            type="primary" if st.session_state.active_tab == TAB_TOURNAMENT else "secondary",
         ):
-            st.session_state.active_tab = "Tournament"
+            st.session_state.active_tab = TAB_TOURNAMENT
             st.rerun()
     with col3:
         if st.button(
             "🏅 Rankings",
             width="stretch",
-            type="primary" if st.session_state.active_tab == "Rankings" else "secondary",
+            type="primary" if st.session_state.active_tab == TAB_RANKINGS else "secondary",
         ):
-            st.session_state.active_tab = "Rankings"
+            st.session_state.active_tab = TAB_RANKINGS
             st.rerun()
     with col4:
         if st.button(
             "🔍 Similarity Search",
             width="stretch",
-            type="primary" if st.session_state.active_tab == "Similarity Search" else "secondary",
+            type="primary" if st.session_state.active_tab == TAB_SIMILARITY else "secondary",
         ):
-            st.session_state.active_tab = "Similarity Search"
+            st.session_state.active_tab = TAB_SIMILARITY
             st.rerun()
+
+
+def resolve_active_tab_render(
+    active_tab: str,
+    filtered_names: list[str],
+    filtered_names_included: list[str],
+) -> ActiveTabRender:
+    if active_tab == TAB_NAME_FILTER:
+        return ActiveTabRender("binary_filter", filtered_names)
+    if active_tab == TAB_TOURNAMENT:
+        return ActiveTabRender("tournament", filtered_names_included)
+    if active_tab == TAB_RANKINGS:
+        return ActiveTabRender("rankings", filtered_names_included)
+    return ActiveTabRender("similarity", filtered_names_included)
 
 
 def _render_active_tab(filtered_names: list[str], filtered_names_included: list[str]) -> None:
     render_tab_selector()
     st.divider()
 
-    if st.session_state.active_tab == "Name Filter":
-        render_binary_filter(filtered_names)
-    elif st.session_state.active_tab == "Tournament":
-        render_tournament(filtered_names_included)
-    elif st.session_state.active_tab == "Rankings":
-        render_rankings(filtered_names_included)
-    else:  # Similarity Search
-        render_similarity(filtered_names_included)
+    tab_render = resolve_active_tab_render(
+        st.session_state.active_tab,
+        filtered_names,
+        filtered_names_included,
+    )
+
+    if tab_render.renderer == "binary_filter":
+        render_binary_filter(tab_render.names)
+    elif tab_render.renderer == "tournament":
+        render_tournament(tab_render.names)
+    elif tab_render.renderer == "rankings":
+        render_rankings(tab_render.names)
+    else:
+        render_similarity(tab_render.names)
 
 
 def main() -> None:
