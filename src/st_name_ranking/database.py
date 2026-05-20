@@ -224,6 +224,128 @@ def _migrate_comparisons_table_if_needed(conn: sqlite3.Connection) -> None:
         conn.execute("DELETE FROM names WHERE name IN ('__temp_a', '__temp_b')")
 
 
+def _ensure_schema(conn: sqlite3.Connection) -> None:
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS names (
+            id INTEGER PRIMARY KEY,
+            name TEXT UNIQUE NOT NULL,
+            gender TEXT CHECK(gender IN ('Male', 'Female', 'Unisex')),
+            origin_region TEXT,
+            origin_confidence REAL,
+            origin_classified_at TIMESTAMP,
+            phonetic_primary TEXT,
+            phonetic_secondary TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS ratings (
+            name_id INTEGER PRIMARY KEY REFERENCES names(id)
+            ON DELETE CASCADE,
+            rating REAL NOT NULL DEFAULT 1500.0,
+            matches INTEGER DEFAULT 0,
+            last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS user_settings (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS region_mapping (
+            nationality TEXT PRIMARY KEY,
+            region TEXT NOT NULL
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS source_versions (
+            id INTEGER PRIMARY KEY,
+            commit_hash TEXT NOT NULL,
+            synced_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS model_state (
+            id INTEGER PRIMARY KEY,
+            feature_weights BLOB NOT NULL,
+            uncertainty_matrix BLOB NOT NULL,
+            training_samples INTEGER DEFAULT 0,
+            feature_names_json TEXT NOT NULL,
+            last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS comparisons (
+            id INTEGER PRIMARY KEY,
+            name_a_id INTEGER NOT NULL REFERENCES names(id),
+            name_b_id INTEGER NOT NULL REFERENCES names(id),
+            preference INTEGER NOT NULL CHECK(preference IN (-1, 0, 1)),
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(name_a_id, name_b_id, preference)
+        )
+    """)
+    _migrate_comparisons_table_if_needed(conn)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS feature_sets (
+            id INTEGER PRIMARY KEY,
+            version TEXT UNIQUE NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            feature_names_json TEXT NOT NULL,
+            is_active BOOLEAN DEFAULT 0
+        )
+    """)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS name_features (
+            name_id INTEGER NOT NULL REFERENCES names(id) ON DELETE CASCADE,
+            feature_set_id INTEGER NOT NULL REFERENCES feature_sets(id) ON DELETE CASCADE,
+            features_json TEXT NOT NULL,
+            computed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (name_id, feature_set_id)
+        )
+    """)
+
+
+def _ensure_name_phonetic_columns(conn: sqlite3.Connection) -> None:
+    cursor = conn.execute("PRAGMA table_info(names)")
+    columns = [row[1] for row in cursor.fetchall()]
+    if "phonetic_primary" not in columns:
+        conn.execute("ALTER TABLE names ADD COLUMN phonetic_primary TEXT")
+        logger.debug("Added phonetic_primary column")
+    if "phonetic_secondary" not in columns:
+        conn.execute("ALTER TABLE names ADD COLUMN phonetic_secondary TEXT")
+        logger.debug("Added phonetic_secondary column")
+
+    update_phonetic_codes(conn=conn)
+
+
+def _ensure_indexes(conn: sqlite3.Connection) -> None:
+    index_statements = (
+        "CREATE INDEX IF NOT EXISTS idx_names_gender ON names(gender)",
+        "CREATE INDEX IF NOT EXISTS idx_names_origin ON names(origin_region)",
+        "CREATE INDEX IF NOT EXISTS idx_ratings_rating ON ratings(rating)",
+        "CREATE INDEX IF NOT EXISTS idx_names_phonetic_primary ON names(phonetic_primary)",
+        "CREATE INDEX IF NOT EXISTS idx_names_phonetic_secondary ON names(phonetic_secondary)",
+        "CREATE INDEX IF NOT EXISTS idx_comparisons_name_a ON comparisons(name_a_id)",
+        "CREATE INDEX IF NOT EXISTS idx_comparisons_name_b ON comparisons(name_b_id)",
+        "CREATE INDEX IF NOT EXISTS idx_comparisons_created ON comparisons(created_at)",
+        "CREATE INDEX IF NOT EXISTS idx_model_state_updated ON model_state(last_updated)",
+        "CREATE INDEX IF NOT EXISTS idx_feature_sets_version ON feature_sets(version)",
+        "CREATE INDEX IF NOT EXISTS idx_feature_sets_active ON feature_sets(is_active)",
+        "CREATE INDEX IF NOT EXISTS idx_name_features_lookup ON name_features(name_id, feature_set_id)",
+        "CREATE INDEX IF NOT EXISTS idx_name_features_computed ON name_features(computed_at)",
+    )
+    for statement in index_statements:
+        conn.execute(statement)
+
+
+def _ensure_seed_region_mapping(conn: sqlite3.Connection) -> None:
+    if conn.execute("SELECT COUNT(*) FROM region_mapping").fetchone()[0] == 0:
+        _insert_default_region_mapping(conn)
+
+
 def init_database() -> None:
     """Initialize database schema if it doesn't exist."""
     if _INIT_STATE["db_initialized"] and _INIT_STATE["db_path"] == DB_PATH:
@@ -254,164 +376,10 @@ def init_database() -> None:
             else:
                 logger.info("Using existing database, ensuring schema is up to date")
 
-            # Names table
-            conn.execute("""
-            CREATE TABLE IF NOT EXISTS names (
-                id INTEGER PRIMARY KEY,
-                name TEXT UNIQUE NOT NULL,
-                gender TEXT CHECK(gender IN ('Male', 'Female', 'Unisex')),
-                origin_region TEXT,
-                origin_confidence REAL,
-                origin_classified_at TIMESTAMP,
-                phonetic_primary TEXT,
-                phonetic_secondary TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
-
-            # Ratings table
-            conn.execute("""
-            CREATE TABLE IF NOT EXISTS ratings (
-                name_id INTEGER PRIMARY KEY REFERENCES names(id)
-                ON DELETE CASCADE,
-                rating REAL NOT NULL DEFAULT 1500.0,
-                matches INTEGER DEFAULT 0,
-                last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
-
-            # User settings table
-            conn.execute("""
-            CREATE TABLE IF NOT EXISTS user_settings (
-                key TEXT PRIMARY KEY,
-                value TEXT NOT NULL
-            )
-        """)
-
-            # Region mapping table (nationality -> region)
-            conn.execute("""
-            CREATE TABLE IF NOT EXISTS region_mapping (
-                nationality TEXT PRIMARY KEY,
-                region TEXT NOT NULL
-            )
-        """)
-
-            # Source versions table (submodule tracking)
-            conn.execute("""
-            CREATE TABLE IF NOT EXISTS source_versions (
-                id INTEGER PRIMARY KEY,
-                commit_hash TEXT NOT NULL,
-                synced_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
-
-            # Model state table for Bradley-Terry model
-            conn.execute("""
-            CREATE TABLE IF NOT EXISTS model_state (
-                id INTEGER PRIMARY KEY,
-                feature_weights BLOB NOT NULL,
-                uncertainty_matrix BLOB NOT NULL,
-                training_samples INTEGER DEFAULT 0,
-                feature_names_json TEXT NOT NULL,
-                last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
-
-            # Comparisons table for tracking user preferences
-            conn.execute("""
-            CREATE TABLE IF NOT EXISTS comparisons (
-                id INTEGER PRIMARY KEY,
-                name_a_id INTEGER NOT NULL REFERENCES names(id),
-                name_b_id INTEGER NOT NULL REFERENCES names(id),
-                preference INTEGER NOT NULL CHECK(preference IN (-1, 0, 1)),
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                UNIQUE(name_a_id, name_b_id, preference)  -- Prevent duplicate comparisons
-            )
-        """)
-
-            # Migrate comparisons table to support preference=2 if needed
-            _migrate_comparisons_table_if_needed(conn)
-
-            # Feature sets table for tracking feature schema versions
-            conn.execute("""
-            CREATE TABLE IF NOT EXISTS feature_sets (
-                id INTEGER PRIMARY KEY,
-                version TEXT UNIQUE NOT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                feature_names_json TEXT NOT NULL,
-                is_active BOOLEAN DEFAULT 0
-            )
-        """)
-
-            # Name features table for pre-computed features
-            conn.execute("""
-            CREATE TABLE IF NOT EXISTS name_features (
-                name_id INTEGER NOT NULL REFERENCES names(id) ON DELETE CASCADE,
-                feature_set_id INTEGER NOT NULL REFERENCES feature_sets(id) ON DELETE CASCADE,
-                features_json TEXT NOT NULL,
-                computed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                PRIMARY KEY (name_id, feature_set_id)
-            )
-        """)
-
-            # Ensure phonetic columns exist (migration for existing databases)
-            cursor = conn.execute("PRAGMA table_info(names)")
-            columns = [row[1] for row in cursor.fetchall()]
-            if "phonetic_primary" not in columns:
-                conn.execute("ALTER TABLE names ADD COLUMN phonetic_primary TEXT")
-                logger.debug("Added phonetic_primary column")
-            if "phonetic_secondary" not in columns:
-                conn.execute("ALTER TABLE names ADD COLUMN phonetic_secondary TEXT")
-                logger.debug("Added phonetic_secondary column")
-
-            # Update phonetic codes for existing names if missing
-            update_phonetic_codes(conn=conn)
-
-            # Create indexes
-            conn.execute(
-                "CREATE INDEX IF NOT EXISTS idx_names_gender ON names(gender)",
-            )
-            conn.execute(
-                "CREATE INDEX IF NOT EXISTS idx_names_origin ON names(origin_region)",
-            )
-            conn.execute(
-                "CREATE INDEX IF NOT EXISTS idx_ratings_rating ON ratings(rating)",
-            )
-            conn.execute(
-                "CREATE INDEX IF NOT EXISTS idx_names_phonetic_primary ON names(phonetic_primary)",
-            )
-            conn.execute(
-                "CREATE INDEX IF NOT EXISTS idx_names_phonetic_secondary ON names(phonetic_secondary)",
-            )
-            conn.execute(
-                "CREATE INDEX IF NOT EXISTS idx_comparisons_name_a ON comparisons(name_a_id)",
-            )
-            conn.execute(
-                "CREATE INDEX IF NOT EXISTS idx_comparisons_name_b ON comparisons(name_b_id)",
-            )
-            conn.execute(
-                "CREATE INDEX IF NOT EXISTS idx_comparisons_created ON comparisons(created_at)",
-            )
-            conn.execute(
-                "CREATE INDEX IF NOT EXISTS idx_model_state_updated ON model_state(last_updated)",
-            )
-            conn.execute(
-                "CREATE INDEX IF NOT EXISTS idx_feature_sets_version ON feature_sets(version)",
-            )
-            conn.execute(
-                "CREATE INDEX IF NOT EXISTS idx_feature_sets_active ON feature_sets(is_active)",
-            )
-            conn.execute(
-                "CREATE INDEX IF NOT EXISTS idx_name_features_lookup ON name_features(name_id, feature_set_id)",
-            )
-            conn.execute(
-                "CREATE INDEX IF NOT EXISTS idx_name_features_computed ON name_features(computed_at)",
-            )
-
-            # Insert default region mapping if empty
-            if conn.execute("SELECT COUNT(*) FROM region_mapping").fetchone()[0] == 0:
-                _insert_default_region_mapping(conn)
+            _ensure_schema(conn)
+            _ensure_name_phonetic_columns(conn)
+            _ensure_indexes(conn)
+            _ensure_seed_region_mapping(conn)
 
             logger.info("Database schema verified successfully")
     except Exception:

@@ -264,7 +264,7 @@ def render_tournament(names: list[str]) -> None:
         avg_refill_ms = float(queue_stats.get("avg_refill_ms", 0.0))
         refill_added = int(queue_stats.get("last_refill_added", 0))
         current_queue_size = int(queue_stats.get("queue_size", 0))
-        target_queue_size = int(queue_stats.get("target_size", target_size))
+        target_queue_size = int(queue_stats.get("target_size", manager.target_size))
 
         if last_refill_ms <= FAST_REFILL_THRESHOLD_MS:
             latency_indicator = "🟢"
@@ -412,28 +412,26 @@ def render_tournament(names: list[str]) -> None:
 
     log_timing("After button creation")
 
-    # Handle votes with instant async model updates for UI feedback
-    vote_handled = False
-    next_pair = None
+    def handle_vote(*, preference: int, timing_label: str) -> None:
+        log_timing(f"{timing_label} clicked - handling")
+        next_pair = _record_vote_and_get_next_pair(names, manager, preference)
+        update_display(next_pair[0], next_pair[1], st.session_state.ratings)
+
+    vote_action: tuple[int, str] | None = None
 
     if vote_a_clicked:
-        log_timing("Vote A clicked - handling")
-        vote_handled = True
-        next_pair = _record_vote_and_get_next_pair(names, manager, -1)
+        vote_action = (-1, "Vote A")
     elif vote_b_clicked:
-        vote_handled = True
-        next_pair = _record_vote_and_get_next_pair(names, manager, 1)
+        vote_action = (1, "Vote B")
     elif draw_clicked:
-        vote_handled = True
-        next_pair = _record_vote_and_get_next_pair(names, manager, 0)
+        vote_action = (0, "Draw")
     elif down_clicked:
-        vote_handled = True
-        next_pair = _record_vote_and_get_next_pair(names, manager, 2)
+        vote_action = (2, "Down")
 
     # Update session state and UI instantly after vote (no rerun needed)
-    if vote_handled and next_pair:
-        # Update UI instantly with st.fragment placeholder updates
-        update_display(next_pair[0], next_pair[1], st.session_state.ratings)
+    if vote_action is not None:
+        preference, timing_label = vote_action
+        handle_vote(preference=preference, timing_label=timing_label)
 
     # Render display with current candidates (will reflect any updates above)
     update_display(st.session_state.candidate_a, st.session_state.candidate_b, st.session_state.ratings)
