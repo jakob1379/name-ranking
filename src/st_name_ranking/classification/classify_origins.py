@@ -28,6 +28,7 @@ from st_name_ranking.persistence.database import (
     get_unclassified_names,
     update_name_origin,
 )
+from st_name_ranking.types import UnclassifiedName
 
 logger = logging.getLogger(__name__)
 
@@ -96,7 +97,7 @@ def reset_reference_cache() -> None:
     reset_classifier_cache()
 
 
-def classify_batch(names_batch: list, batch_size: int = 100) -> int:
+def classify_batch(names_batch: list[UnclassifiedName], batch_size: int = 100) -> int:
     """Classify a batch of names using ethnidata.
     Returns number of successfully classified names.
     """
