@@ -2,8 +2,10 @@
 
 import json
 import logging
+from typing import Any
 
 from st_name_ranking.persistence import database
+from st_name_ranking.types import FeatureSetRecord, FeatureValues
 
 logger = logging.getLogger(__name__)
 
@@ -56,7 +58,7 @@ def get_active_feature_set_version() -> str | None:
         return row[0] if row else None
 
 
-def get_feature_set_by_version(version: str) -> dict | None:
+def get_feature_set_by_version(version: str) -> FeatureSetRecord | None:
     """Get feature-set details by version."""
     with database.get_connection() as conn:
         cursor = conn.execute(
@@ -71,10 +73,11 @@ def get_feature_set_by_version(version: str) -> dict | None:
         if not row:
             return None
 
+        feature_names = json.loads(row[2])
         return {
             "id": row[0],
             "version": row[1],
-            "feature_names": json.loads(row[2]),
+            "feature_names": [str(name) for name in feature_names],
             "is_active": bool(row[3]),
             "created_at": row[4],
         }
@@ -83,12 +86,12 @@ def get_feature_set_by_version(version: str) -> dict | None:
 def get_cached_features_batch(
     name_ids: list[int],
     feature_set_id: int,
-) -> dict[int, dict]:
+) -> dict[int, FeatureValues]:
     """Get cached feature dictionaries for multiple names."""
     if not name_ids:
         return {}
 
-    result = {}
+    result: dict[int, FeatureValues] = {}
     chunk_size = database.MAX_SQL_PARAMS // 2
 
     with database.get_connection() as conn:
@@ -111,7 +114,7 @@ def get_cached_features_batch(
     return result
 
 
-def get_cached_features(name_id: int, feature_set_id: int) -> dict | None:
+def get_cached_features(name_id: int, feature_set_id: int) -> FeatureValues | None:
     """Get cached features for a single name."""
     with database.get_connection() as conn:
         cursor = conn.execute(
@@ -133,7 +136,7 @@ def get_cached_features(name_id: int, feature_set_id: int) -> dict | None:
 
 
 def set_cached_features_batch(
-    features_data: list[tuple[int, int, dict]],
+    features_data: list[tuple[int, int, FeatureValues]],
 ) -> int:
     """Cache computed features for multiple names."""
     if not features_data:
@@ -158,9 +161,9 @@ def set_cached_features_batch(
     return inserted
 
 
-def _decode_features_json(features_json: str, *, name_id: int, feature_set_id: int) -> dict:
+def _decode_features_json(features_json: str, *, name_id: int, feature_set_id: int) -> FeatureValues:
     try:
-        return json.loads(features_json)
+        decoded: dict[str, Any] = json.loads(features_json)
     except json.JSONDecodeError as e:
         logger.exception(
             "Corrupt JSON in name_features for name_id=%s, feature_set_id=%s",
@@ -168,12 +171,13 @@ def _decode_features_json(features_json: str, *, name_id: int, feature_set_id: i
             feature_set_id,
         )
         raise CorruptFeatureCacheError(name_id=name_id, feature_set_id=feature_set_id, cause=e) from e
+    return {str(name): float(value) for name, value in decoded.items()}
 
 
 def set_cached_features(
     name_id: int,
     feature_set_id: int,
-    features: dict,
+    features: FeatureValues,
 ) -> None:
     """Cache computed features for a single name."""
     with database.get_connection() as conn:

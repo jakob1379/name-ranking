@@ -2,7 +2,12 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from st_name_ranking.persistence import database
+
+if TYPE_CHECKING:
+    from st_name_ranking.types import FeatureValues
 
 
 class FeatureCache:
@@ -13,7 +18,7 @@ class FeatureCache:
         self._version = feature_set_version
         self._feature_set_id: int | None = None
         self._feature_names = feature_names
-        self._local_cache: dict[int, dict] = {}
+        self._local_cache: dict[int, FeatureValues] = {}
 
     def _get_feature_set_id(self) -> int:
         """Lazy-load or create the backing feature-set row."""
@@ -29,7 +34,7 @@ class FeatureCache:
                 self._feature_set_id = database.get_or_create_feature_set(self._version, self._feature_names)
         return self._feature_set_id
 
-    def get_features(self, name_id: int, feature_set_version: str | None = None) -> dict | None:
+    def get_features(self, name_id: int, feature_set_version: str | None = None) -> FeatureValues | None:
         """Get cached features or return None if not computed."""
         if name_id in self._local_cache:
             return self._local_cache[name_id]
@@ -52,7 +57,7 @@ class FeatureCache:
         self,
         name_id: int,
         *,
-        features_dict: dict,
+        features_dict: FeatureValues,
         feature_set_version: str | None = None,
     ) -> None:
         """Cache computed features for one name."""
@@ -70,7 +75,7 @@ class FeatureCache:
         self._local_cache[name_id] = features_dict
         database.set_cached_features(name_id, feature_set_id, features_dict)
 
-    def set_features_batch(self, features_data: list[tuple[int, dict]]) -> int:
+    def set_features_batch(self, features_data: list[tuple[int, FeatureValues]]) -> int:
         """Cache computed features for multiple names."""
         if not features_data:
             return 0

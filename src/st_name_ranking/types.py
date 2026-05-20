@@ -4,7 +4,7 @@ This module provides structured type definitions to replace raw dicts and tuples
 throughout the codebase, improving type safety and code clarity.
 """
 
-from typing import NamedTuple
+from typing import NamedTuple, TypedDict
 
 
 class UnclassifiedName(NamedTuple):
@@ -45,6 +45,19 @@ class PhoneticCodes(NamedTuple):
 
     primary: str
     secondary: str
+
+
+FeatureValues = dict[str, float]
+
+
+class FeatureSetRecord(TypedDict):
+    """Feature-set schema row decoded from database JSON."""
+
+    id: int
+    version: str
+    feature_names: list[str]
+    is_active: bool
+    created_at: str
 
 
 class SimilarityScore(NamedTuple):
