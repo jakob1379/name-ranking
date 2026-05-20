@@ -214,6 +214,13 @@ def _record_vote_and_get_next_pair(names: list[str], manager: Any, preference: i
         st.toast("👎 you disliked both!", duration="long")
 
     result = record_tournament_vote(names, manager, candidate_a, candidate_b, preference)
+    if not result.update_status.recorded:
+        current_pair = result.previous_pair
+        error = result.update_status.error or "unknown error"
+        st.toast(f"Vote was not saved: {error}", icon="❌", duration="long")
+        logger.warning("Tournament vote was not saved; keeping current pair: %s", error)
+        return current_pair
+
     next_pair = result.next_pair
     set_current_pair(next_pair)
     logger.debug("Next tournament pair (%s): %s vs %s", result.pair_source, next_pair[0], next_pair[1])

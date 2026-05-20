@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 MIN_NAMES_FOR_TOURNAMENT = 2
 
-PairSource = Literal["queue", "random"]
+PairSource = Literal["queue", "random", "unchanged"]
 
 
 @dataclass(frozen=True)
@@ -68,6 +68,20 @@ def record_tournament_vote(
 ) -> VoteResult:
     """Record a vote and return the next tournament pair."""
     update_status = record_comparison_instant(candidate_a, candidate_b, preference)
+    previous_pair = (candidate_a, candidate_b)
+    if not update_status.recorded:
+        logger.warning(
+            "Tournament vote for (%s, %s) was not recorded; keeping current pair: %s",
+            candidate_a,
+            candidate_b,
+            update_status.error,
+        )
+        return VoteResult(
+            previous_pair=previous_pair,
+            next_pair=previous_pair,
+            pair_source="unchanged",
+            update_status=update_status,
+        )
 
     next_pair, source = _select_next_pair(names, manager)
     logger.debug(
@@ -80,7 +94,7 @@ def record_tournament_vote(
     )
 
     return VoteResult(
-        previous_pair=(candidate_a, candidate_b),
+        previous_pair=previous_pair,
         next_pair=next_pair,
         pair_source=source,
         update_status=update_status,
