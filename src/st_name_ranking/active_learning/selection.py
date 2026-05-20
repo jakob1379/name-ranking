@@ -38,42 +38,42 @@ class PairSelectionOptions:
     fallback: str = "heuristic"
 
 
-def get_active_learning_model() -> BradleyTerryModel:
-    """Get or initialize the active learning model."""
-    if get_active_learning_model._cache is None:
+def get_or_initialize_active_learning_model() -> BradleyTerryModel:
+    """Return the cached active-learning model, initializing it when needed."""
+    if get_or_initialize_active_learning_model._cache is None:
         with _ACTIVE_LEARNING_STATE_LOCK:
-            if get_active_learning_model._cache is None:
-                extractor = get_feature_extractor()
+            if get_or_initialize_active_learning_model._cache is None:
+                extractor = get_or_create_feature_extractor()
                 feature_names = extractor.get_feature_names()
-                get_active_learning_model._cache = initialize_model_if_needed(feature_names)
-    return get_active_learning_model._cache
+                get_or_initialize_active_learning_model._cache = initialize_model_if_needed(feature_names)
+    return get_or_initialize_active_learning_model._cache
 
 
-get_active_learning_model._cache = None
+get_or_initialize_active_learning_model._cache = None
 
 
-def get_feature_extractor() -> FeatureExtractor:
-    """Get or initialize the feature extractor."""
-    if get_feature_extractor._cache is None:
+def get_or_create_feature_extractor() -> FeatureExtractor:
+    """Return the cached feature extractor, creating it when needed."""
+    if get_or_create_feature_extractor._cache is None:
         with _ACTIVE_LEARNING_STATE_LOCK:
-            if get_feature_extractor._cache is None:
-                get_feature_extractor._cache = FeatureExtractor()
-    return get_feature_extractor._cache
+            if get_or_create_feature_extractor._cache is None:
+                get_or_create_feature_extractor._cache = FeatureExtractor()
+    return get_or_create_feature_extractor._cache
 
 
-get_feature_extractor._cache = None
+get_or_create_feature_extractor._cache = None
 
 
 def reset_active_learning_state() -> None:
     """Clear active-learning singletons in one synchronized lifecycle step."""
     with _ACTIVE_LEARNING_STATE_LOCK:
-        get_active_learning_model._cache = None
-        get_feature_extractor._cache = None
+        get_or_initialize_active_learning_model._cache = None
+        get_or_create_feature_extractor._cache = None
 
 
 def get_name_features(name: str) -> np.ndarray:
     """Extract features for a name by querying gender and origin from database."""
-    extractor = get_feature_extractor()
+    extractor = get_or_create_feature_extractor()
 
     with database.get_connection() as conn:
         cursor = conn.execute(
@@ -88,7 +88,7 @@ def get_name_features(name: str) -> np.ndarray:
 
 def get_names_features(names: list[str]) -> np.ndarray:
     """Extract features for multiple names in batch."""
-    extractor = get_feature_extractor()
+    extractor = get_or_create_feature_extractor()
     details = database.get_name_details_batch(names)
     genders = [detail.gender for detail in details]
     origins = [detail.origin_region for detail in details]
@@ -99,7 +99,7 @@ def get_names_features(names: list[str]) -> np.ndarray:
 class PairSelectionDependencies:
     """Injectable dependencies for compatibility wrappers and tests."""
 
-    model_provider: Callable[[], BradleyTerryModel] = get_active_learning_model
+    model_provider: Callable[[], BradleyTerryModel] = get_or_initialize_active_learning_model
     features_provider: Callable[[list[str]], np.ndarray] = get_names_features
     comparison_count_provider: Callable[[str], int] = database.get_comparison_count
     heuristic_pair_provider: Callable[[list[str]], tuple[str, str] | None] | None = None

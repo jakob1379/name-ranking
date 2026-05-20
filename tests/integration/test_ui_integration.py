@@ -1688,7 +1688,7 @@ class TestUIIntegration:
 
         with (
             patch("st_name_ranking.ui.st", mock_st),
-            patch("st_name_ranking.ui.get_active_learning_model", return_value=mock_model),
+            patch("st_name_ranking.ui.get_or_initialize_active_learning_model", return_value=mock_model),
             patch("st_name_ranking.ui.get_names_features", return_value=features),
         ):
             ui.render_rankings(names)

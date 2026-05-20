@@ -585,8 +585,8 @@ class TestGetNameFeatures:
     """Tests for get_name_features function."""
 
     @patch("st_name_ranking.active_learning.selection.database.get_connection")
-    @patch("st_name_ranking.active_learning.selection.get_feature_extractor")
-    def test_name_found_in_database(self, mock_get_feature_extractor, mock_get_connection):
+    @patch("st_name_ranking.active_learning.selection.get_or_create_feature_extractor")
+    def test_name_found_in_database(self, mock_get_or_create_feature_extractor, mock_get_connection):
         """Test when name is found in database."""
         # Mock database connection and cursor
         mock_conn = MagicMock()
@@ -600,7 +600,7 @@ class TestGetNameFeatures:
         # Mock feature extractor
         mock_extractor = MagicMock()
         mock_extractor.extract.return_value = np.array([1.0, 2.0, 3.0])
-        mock_get_feature_extractor.return_value = mock_extractor
+        mock_get_or_create_feature_extractor.return_value = mock_extractor
 
         result = selection.get_name_features("Anna")
 
@@ -615,8 +615,8 @@ class TestGetNameFeatures:
         np.testing.assert_array_equal(result, np.array([1.0, 2.0, 3.0]))
 
     @patch("st_name_ranking.active_learning.selection.database.get_connection")
-    @patch("st_name_ranking.active_learning.selection.get_feature_extractor")
-    def test_name_not_found_in_database(self, mock_get_feature_extractor, mock_get_connection):
+    @patch("st_name_ranking.active_learning.selection.get_or_create_feature_extractor")
+    def test_name_not_found_in_database(self, mock_get_or_create_feature_extractor, mock_get_connection):
         """Test when name is not found in database (should use None, None)."""
         mock_conn = MagicMock()
         mock_cursor = MagicMock()
@@ -628,7 +628,7 @@ class TestGetNameFeatures:
 
         mock_extractor = MagicMock()
         mock_extractor.extract.return_value = np.array([0.0, 0.0, 0.0])
-        mock_get_feature_extractor.return_value = mock_extractor
+        mock_get_or_create_feature_extractor.return_value = mock_extractor
 
         result = selection.get_name_features("UnknownName")
 

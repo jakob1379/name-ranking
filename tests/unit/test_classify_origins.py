@@ -16,55 +16,55 @@ class TestOriginClassifierFactory:
         """Clear classifier cache before each test."""
         origin_classifier.reset_classifier_cache()
 
-    def test_get_classifier_caches_hierarchical_classifier(self):
+    def test_get_or_create_classifier_caches_hierarchical_classifier(self):
         """Test successful hierarchical classifier caching."""
         reference_names: dict[str, tuple[str, float, str, str]] = {}
         with patch("st_name_ranking.origin_classifier.OriginClassifier") as mock_cls:
-            classifier = origin_classifier.get_classifier(reference_names=reference_names)
+            classifier = origin_classifier.get_or_create_classifier(reference_names=reference_names)
             assert classifier == mock_cls.return_value
 
             # Second call should return cached classifier
-            classifier2 = origin_classifier.get_classifier(reference_names=reference_names)
+            classifier2 = origin_classifier.get_or_create_classifier(reference_names=reference_names)
             assert classifier2 == classifier
 
             mock_cls.assert_called_once_with(reference_names)
 
-    def test_get_classifier_uses_distinct_reference_set_cache_keys(self):
+    def test_get_or_create_classifier_uses_distinct_reference_set_cache_keys(self):
         """Different reference-name dictionaries should not share stale classifier state."""
         first_reference_set = {"Anna": ("Nordic", 0.9, "AN", "")}
         second_reference_set = {"Maria": ("European", 0.8, "MR", "")}
 
         with patch("st_name_ranking.origin_classifier.OriginClassifier") as mock_cls:
             mock_cls.side_effect = [object(), object()]
-            first_classifier = origin_classifier.get_classifier(first_reference_set)
-            second_classifier = origin_classifier.get_classifier(second_reference_set)
+            first_classifier = origin_classifier.get_or_create_classifier(first_reference_set)
+            second_classifier = origin_classifier.get_or_create_classifier(second_reference_set)
 
         assert first_classifier is not second_classifier
         assert mock_cls.call_count == 2
         mock_cls.assert_any_call(first_reference_set)
         mock_cls.assert_any_call(second_reference_set)
 
-    def test_get_classifier_reuses_cache_for_equivalent_reference_data(self):
+    def test_get_or_create_classifier_reuses_cache_for_equivalent_reference_data(self):
         """Equivalent reference data should share a classifier regardless of dict identity."""
         first_reference_set = {"Anna": ("Nordic", 0.9, "AN", "")}
         second_reference_set = {"Anna": ("Nordic", 0.9, "AN", "")}
 
         with patch("st_name_ranking.origin_classifier.OriginClassifier") as mock_cls:
-            first_classifier = origin_classifier.get_classifier(first_reference_set)
-            second_classifier = origin_classifier.get_classifier(second_reference_set)
+            first_classifier = origin_classifier.get_or_create_classifier(first_reference_set)
+            second_classifier = origin_classifier.get_or_create_classifier(second_reference_set)
 
         assert first_classifier is second_classifier
         mock_cls.assert_called_once_with(first_reference_set)
 
-    def test_get_classifier_cache_key_tracks_in_place_reference_mutation(self):
+    def test_get_or_create_classifier_cache_key_tracks_in_place_reference_mutation(self):
         """Mutating reference content should not reuse a stale classifier for the same dict."""
         reference_set = {"Anna": ("Nordic", 0.9, "AN", "")}
 
         with patch("st_name_ranking.origin_classifier.OriginClassifier") as mock_cls:
             mock_cls.side_effect = [object(), object()]
-            first_classifier = origin_classifier.get_classifier(reference_set)
+            first_classifier = origin_classifier.get_or_create_classifier(reference_set)
             reference_set["Anna"] = ("European", 0.8, "MR", "")
-            second_classifier = origin_classifier.get_classifier(reference_set)
+            second_classifier = origin_classifier.get_or_create_classifier(reference_set)
 
         assert first_classifier is not second_classifier
         assert mock_cls.call_count == 2
@@ -81,11 +81,11 @@ class TestOriginClassifierFactory:
 
         assert classifier.reference_names == {"Anna": ("Nordic", 0.9, "AN", "")}
 
-    def test_get_classifier_uses_origin_classifier_boundary(self):
+    def test_get_or_create_classifier_uses_origin_classifier_boundary(self):
         """Test factory construction errors surface from origin_classifier directly."""
         with patch("st_name_ranking.origin_classifier.OriginClassifier", side_effect=ImportError):
             with pytest.raises(ImportError):
-                origin_classifier.get_classifier(reference_names={})
+                origin_classifier.get_or_create_classifier(reference_names={})
 
 
 class TestGetRegionForNationality:
@@ -288,7 +288,7 @@ class TestClassifyAllNames:
             SimpleNamespace(id=2, name="Peter"),
         ]
 
-        with patch("st_name_ranking.classify_origins.get_origin_classifier", side_effect=ImportError):
+        with patch("st_name_ranking.classify_origins.get_or_create_classifier", side_effect=ImportError):
             result = classify_origins.classify_all_names()
 
             assert result == 0

@@ -18,10 +18,8 @@ import time
 
 from st_name_ranking.classification.origin_classifier import (
     OriginResult,
+    get_or_create_classifier,
     reset_classifier_cache,
-)
-from st_name_ranking.classification.origin_classifier import (
-    get_classifier as get_origin_classifier,
 )
 from st_name_ranking.persistence.database import (
     get_names_with_origins,
@@ -43,7 +41,7 @@ def classify_name(name: str) -> OriginResult | None:
     try:
         # Get reference names from already classified names in database
         reference_names = _get_reference_names()
-        classifier = get_origin_classifier(reference_names)
+        classifier = get_or_create_classifier(reference_names)
 
         region, confidence = classifier.classify(name)
 

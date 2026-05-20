@@ -132,7 +132,7 @@ def test_update_model_sync_uses_both_disliked_update(monkeypatch):
     features_a = np.array([1.0, 0.0])
     features_b = np.array([0.0, 1.0])
 
-    monkeypatch.setattr(lazy_updates, "get_active_learning_model", Mock(return_value=model))
+    monkeypatch.setattr(lazy_updates, "get_or_initialize_active_learning_model", Mock(return_value=model))
     monkeypatch.setattr(lazy_updates, "get_name_features", Mock(side_effect=[features_a, features_b]))
 
     updated = lazy_updates._update_model_sync(
@@ -177,7 +177,7 @@ def test_update_ratings_from_model_writes_batch_ratings(monkeypatch):
     features = np.array([[1.0, 0.0], [0.0, 1.0]])
     update_batch = Mock()
 
-    monkeypatch.setattr(lazy_updates, "get_active_learning_model", Mock(return_value=model))
+    monkeypatch.setattr(lazy_updates, "get_or_initialize_active_learning_model", Mock(return_value=model))
     monkeypatch.setattr(
         lazy_updates.database,
         "get_connection",

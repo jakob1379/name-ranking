@@ -21,7 +21,7 @@ from rich.table import Table
 
 # Import model functions
 from st_name_ranking.active_learning.selection import (
-    get_active_learning_model,
+    get_or_initialize_active_learning_model,
 )
 
 # Import maintenance workflow implementations
@@ -327,7 +327,7 @@ def _print_feature_table(feature_stats: dict[str, Any], total_names: int) -> Non
 def _print_model_table() -> None:
     """Print active learning model status table."""
     try:
-        model = get_active_learning_model()
+        model = get_or_initialize_active_learning_model()
         state = model.state
 
         model_table = Table(title="Model Status", show_header=False, box=None)
@@ -579,7 +579,7 @@ def model_status() -> None:
         console.print()
 
     try:
-        model = get_active_learning_model()
+        model = get_or_initialize_active_learning_model()
 
         # Get model state
         state = model.state
@@ -628,7 +628,7 @@ def model_reset() -> None:
             conn.execute("DELETE FROM model_state WHERE id = 1")
 
         # Reinitialize model
-        model = get_active_learning_model()
+        model = get_or_initialize_active_learning_model()
         model.save_to_db()
 
         print_success("Model reset successfully. New model initialized.")

@@ -94,7 +94,7 @@ def test_active_learning_singletons_initialize_once_under_concurrency(monkeypatc
     def get_model_worker():
         try:
             barrier.wait()
-            models.append(selection.get_active_learning_model())
+            models.append(selection.get_or_initialize_active_learning_model())
         except Exception as exc:
             errors.append(exc)
 
@@ -114,10 +114,10 @@ def test_active_learning_singletons_initialize_once_under_concurrency(monkeypatc
 
 
 def test_reset_active_learning_state_clears_model_and_extractor_caches():
-    selection.get_active_learning_model._cache = object()
-    selection.get_feature_extractor._cache = object()
+    selection.get_or_initialize_active_learning_model._cache = object()
+    selection.get_or_create_feature_extractor._cache = object()
 
     selection.reset_active_learning_state()
 
-    assert selection.get_active_learning_model._cache is None
-    assert selection.get_feature_extractor._cache is None
+    assert selection.get_or_initialize_active_learning_model._cache is None
+    assert selection.get_or_create_feature_extractor._cache is None

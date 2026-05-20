@@ -414,7 +414,9 @@ class TestConsistencyAndRecovery:
         from st_name_ranking.active_learning.lazy_updates import record_comparison_instant
 
         # Simulate model update failure
-        with patch("st_name_ranking.active_learning.lazy_updates.get_active_learning_model") as mock_get_model:
+        with patch(
+            "st_name_ranking.active_learning.lazy_updates.get_or_initialize_active_learning_model",
+        ) as mock_get_model:
             mock_model = MagicMock()
             mock_model.update.side_effect = RuntimeError("Model update failed")
             mock_get_model.return_value = mock_model
@@ -501,9 +503,9 @@ class TestRaceConditions:
         # Reset model singleton
         selection.reset_active_learning_state()
 
-        # Multiple calls to get_active_learning_model should return same instance
-        model1 = selection.get_active_learning_model()
-        model2 = selection.get_active_learning_model()
+        # Multiple calls to get_or_initialize_active_learning_model should return same instance
+        model1 = selection.get_or_initialize_active_learning_model()
+        model2 = selection.get_or_initialize_active_learning_model()
 
         assert model1 is model2, "Should return same model instance"
 

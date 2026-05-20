@@ -246,7 +246,7 @@ print(f"P(A ≻ B) = {prob:.3f}")
 ### Alternative Models
 
 1. Implement new model class with same interface
-2. Update `get_active_learning_model()` factory
+2. Update `get_or_initialize_active_learning_model()` factory
 3. Maintain backward compatibility
 
 ### Custom Active Learning Strategies

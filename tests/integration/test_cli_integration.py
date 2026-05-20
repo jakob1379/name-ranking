@@ -543,10 +543,10 @@ class TestCLIModelCommands:
 
     def test_model_status_shows_feature_dimensions(self, initialized_real_db, cli_runner):
         """Test that model-status shows correct feature dimensions."""
-        from st_name_ranking.active_learning.selection import get_active_learning_model
+        from st_name_ranking.active_learning.selection import get_or_initialize_active_learning_model
 
         # Initialize a model to get feature dimensions
-        model = get_active_learning_model()
+        model = get_or_initialize_active_learning_model()
         expected_dim = model.state.feature_dim
         expected_samples = model.state.training_samples
 
@@ -577,10 +577,10 @@ class TestCLIModelCommands:
         from st_name_ranking import database
 
         # First, add some training data to the model
-        from st_name_ranking.active_learning.selection import get_active_learning_model
+        from st_name_ranking.active_learning.selection import get_or_initialize_active_learning_model
         from st_name_ranking.features import FeatureExtractor
 
-        model = get_active_learning_model()
+        model = get_or_initialize_active_learning_model()
         extractor = FeatureExtractor()
 
         # Get features for a couple of names
@@ -859,10 +859,10 @@ class TestDatabaseStateVerification:
 
     def test_model_state_persistence(self, initialized_real_db, cli_runner):
         """Verify that model state is persisted in database."""
-        from st_name_ranking.active_learning.selection import get_active_learning_model
+        from st_name_ranking.active_learning.selection import get_or_initialize_active_learning_model
 
         # Get initial model and save state
-        model = get_active_learning_model()
+        model = get_or_initialize_active_learning_model()
         model.save_to_db()
 
         # Verify state is in database

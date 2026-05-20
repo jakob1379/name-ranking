@@ -663,7 +663,7 @@ class TestSingletonLifecycle:
 
         def get_model_worker():
             try:
-                model = selection.get_active_learning_model()
+                model = selection.get_or_initialize_active_learning_model()
                 models.append(id(model))
             except (RuntimeError, ValueError, AttributeError) as e:
                 errors.append(str(e))
@@ -694,7 +694,7 @@ class TestSingletonLifecycle:
 
         def get_extractor_worker():
             try:
-                extractor = selection.get_feature_extractor()
+                extractor = selection.get_or_create_feature_extractor()
                 extractors.append(id(extractor))
             except (RuntimeError, ValueError, AttributeError) as e:
                 errors.append(str(e))
@@ -869,7 +869,7 @@ class TestUtilsConcurrency:
         # Initialize model first and verify the feature surface is available.
         extractor = FeatureExtractor()
         assert extractor.get_feature_names()
-        selection.get_active_learning_model()
+        selection.get_or_initialize_active_learning_model()
 
         # Insert test names
         names = ["ModelA", "ModelB", "ModelC", "ModelD"]
@@ -912,7 +912,7 @@ class TestUtilsConcurrency:
         # Initialize and verify the feature surface is available.
         extractor = FeatureExtractor()
         assert extractor.get_feature_names()
-        selection.get_active_learning_model()
+        selection.get_or_initialize_active_learning_model()
 
         # Insert test names
         names = ["PrefA", "PrefB"]

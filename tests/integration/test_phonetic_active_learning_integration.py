@@ -11,7 +11,7 @@ import numpy as np
 
 from st_name_ranking import database
 from st_name_ranking.active_learning.selection import (
-    get_feature_extractor,
+    get_or_create_feature_extractor,
     select_candidate_batch,
     select_candidates,
 )
@@ -236,7 +236,7 @@ class TestActiveLearningPhoneticDiversity:
         names = ["Anna", "Anne", "Annie", "Peter", "Petra", "Jens", "Jonas", "Lars"]
 
         # Get features using the actual feature extractor
-        extractor = get_feature_extractor()
+        extractor = get_or_create_feature_extractor()
         feature_names = extractor.get_feature_names()
 
         # Create model with actual feature names
@@ -313,7 +313,7 @@ class TestActiveLearningPhoneticDiversity:
         assert len(pairs) == 0, "Should return empty when only one cluster"
 
         # But model.select_pair should still work (fallback)
-        extractor = get_feature_extractor()
+        extractor = get_or_create_feature_extractor()
         feature_names = extractor.get_feature_names()
         model = BradleyTerryModel(feature_names, prior_variance=1.0)
         model.rng = np.random.default_rng(42)
@@ -360,7 +360,7 @@ class TestThompsonSampling:
         names = ["Anna", "Peter", "Jens", "Lars"]
 
         # Get features first to determine feature dimension
-        extractor = get_feature_extractor()
+        extractor = get_or_create_feature_extractor()
         feature_names = extractor.get_feature_names()
 
         # Create model with high uncertainty (prior only, no training)
@@ -420,7 +420,9 @@ class TestBatchSelection:
 
         # Use the utils function for batch selection
         # Mock the model to avoid database dependencies in feature extraction
-        with patch("st_name_ranking.active_learning.selection.get_active_learning_model") as mock_get_model:
+        with patch(
+            "st_name_ranking.active_learning.selection.get_or_initialize_active_learning_model",
+        ) as mock_get_model:
             mock_model = mock_get_model.return_value
             mock_model.select_top_k_pairs.return_value = [
                 NamePair(idx_a=0, idx_b=2, name_a="Anna", name_b="Peter"),
@@ -463,7 +465,9 @@ class TestBatchSelection:
 
         # Test with different batch sizes
         for batch_size in [1, 2, 3]:
-            with patch("st_name_ranking.active_learning.selection.get_active_learning_model") as mock_get_model:
+            with patch(
+                "st_name_ranking.active_learning.selection.get_or_initialize_active_learning_model",
+            ) as mock_get_model:
                 mock_model = mock_get_model.return_value
                 # Return batch_size unique pairs
                 mock_pairs = [
@@ -642,7 +646,7 @@ class TestUtilsIntegration:
         names = ["Anna", "Peter", "Jens", "Lars", "Ole"]
 
         # Get features for these names
-        extractor = get_feature_extractor()
+        extractor = get_or_create_feature_extractor()
         features = extractor.batch_extract(
             names,
             ["Female", "Male", "Male", "Male", "Male"],
@@ -678,7 +682,9 @@ class TestUtilsIntegration:
         names = ["Anna", "Peter"]
 
         # Force model to fail by mocking
-        with patch("st_name_ranking.active_learning.selection.get_active_learning_model") as mock_get_model:
+        with patch(
+            "st_name_ranking.active_learning.selection.get_or_initialize_active_learning_model",
+        ) as mock_get_model:
             mock_get_model.side_effect = RuntimeError("Model failure")
 
             # Should fallback to basic selection

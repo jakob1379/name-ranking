@@ -29,7 +29,7 @@ class TestClassifyAllNamesIntegration:
         mock_classifier = MagicMock()
         mock_classifier.classify.return_value = ("Nordic", 0.9)
 
-        with patch("st_name_ranking.classify_origins.get_origin_classifier") as mock_get:
+        with patch("st_name_ranking.classify_origins.get_or_create_classifier") as mock_get:
             mock_get.return_value = mock_classifier
 
             # Call classify_all_names with limit=1

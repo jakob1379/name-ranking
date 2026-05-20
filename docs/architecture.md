@@ -420,7 +420,7 @@ $ uv run st-name-ranking db features rebuild
 ### Alternative Models
 
 1. Implement new model class with same interface
-2. Update `get_active_learning_model()` factory function
+2. Update `get_or_initialize_active_learning_model()` factory function
 3. Maintain backward compatibility
 
 ### UI Enhancements

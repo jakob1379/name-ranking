@@ -561,10 +561,10 @@ def reset_classifier_cache() -> None:
     _CLASSIFIER_CACHE.clear()
 
 
-def get_classifier(
+def get_or_create_classifier(
     reference_names: ReferenceNames | None = None,
 ) -> OriginClassifier:
-    """Get a classifier instance for the supplied reference-name set."""
+    """Return the cached classifier for a reference-name set, creating it when needed."""
     cache_key = _reference_cache_key(reference_names)
     if cache_key not in _CLASSIFIER_CACHE:
         _CLASSIFIER_CACHE[cache_key] = OriginClassifier(reference_names)

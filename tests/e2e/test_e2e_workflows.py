@@ -571,14 +571,14 @@ class TestSessionPersistence:
 
     def test_model_state_persisted(self, persistence_db):
         """Test that model state is persisted and can be reloaded."""
-        from st_name_ranking.active_learning.selection import get_active_learning_model
+        from st_name_ranking.active_learning.selection import get_or_initialize_active_learning_model
 
         names = get_names_by_gender()
         all_names = names.get("All", [])
         ratings = initialize_or_load_ratings(all_names)
 
         # Get initial model and cast votes
-        model = get_active_learning_model()
+        model = get_or_initialize_active_learning_model()
         initial_training_samples = model.state.training_samples
 
         ratings = update_preference_and_save(ratings, "Emma", "Liam")

@@ -11,7 +11,7 @@ class TestOriginClassifierIntegration:
     """Integration tests for origin classifier."""
 
     @pytest.mark.skip(reason="Complex mocking broken - needs proper mock configuration")
-    def test_get_classifier_with_mocked_dependencies(self, initialized_db):
+    def test_get_or_create_classifier_with_mocked_dependencies(self, initialized_db):
         """Test getting classifier with mocked external dependencies."""
         # Mock ethnidata and ethnicolr imports
         mock_ethnidata = MagicMock()
@@ -29,7 +29,7 @@ class TestOriginClassifierIntegration:
                 "ethnicolr": mock_ethnicolr,
             },
         ):
-            classifier = origin_classifier.get_classifier(reference_names={})
+            classifier = origin_classifier.get_or_create_classifier(reference_names={})
             assert classifier is not None
 
             # Test classification with a name
@@ -158,13 +158,13 @@ class TestOriginClassifierIntegration:
         assert region is None
         assert confidence == 0.0
 
-    def test_get_classifier_without_ethnidata(self, initialized_db):
+    def test_get_or_create_classifier_without_ethnidata(self, initialized_db):
         """Test classifier when ethnidata is not installed."""
         from unittest.mock import patch
 
         # Patch ethnidata classifier to simulate missing package
         with patch("st_name_ranking.origin_classifier._create_ethnidata_classifier", return_value=None):
-            classifier = origin_classifier.get_classifier(reference_names={})
+            classifier = origin_classifier.get_or_create_classifier(reference_names={})
             # Should still return a classifier (using rule-based and phonetic)
             assert classifier is not None
 

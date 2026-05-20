@@ -683,7 +683,7 @@ class TestErrorHandling:
 class TestClassifyOriginsIntegration:
     """Test integration with the classify_origins module."""
 
-    def test_get_classifier_with_fake_ethnidata(self, initialized_db, monkeypatch):
+    def test_get_or_create_classifier_with_fake_ethnidata(self, initialized_db, monkeypatch):
         """Test getting classifier with fake ethnidata."""
         fake_ethnidata = FakeEthniData()
 

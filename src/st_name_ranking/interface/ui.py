@@ -13,8 +13,8 @@ from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
 
 from st_name_ranking.active_learning.selection import (
-    get_active_learning_model,
     get_names_features,
+    get_or_initialize_active_learning_model,
 )
 from st_name_ranking.interface.filter_state import (
     FilterCounts,
@@ -466,7 +466,7 @@ def _build_rankings_dataframe(
     base_df = pl.DataFrame({"Name": ordered_names, "Rating": ordered_ratings})
 
     try:
-        model = get_active_learning_model()
+        model = get_or_initialize_active_learning_model()
         feature_names = list(model.feature_names)
         feature_matrix = get_names_features(ordered_names)
         top_feature_count = min(6, len(feature_names))
@@ -494,7 +494,7 @@ def _compute_landscape(
     random_state: int,
 ) -> tuple[pl.DataFrame, np.ndarray, list[str], str]:
     ratings_dict = dict(ratings_pairs)
-    model = get_active_learning_model()
+    model = get_or_initialize_active_learning_model()
     feature_names = list(model.feature_names)
     feature_matrix = get_names_features(list(sorted_names))
     scaled_features = StandardScaler().fit_transform(feature_matrix)
@@ -686,7 +686,7 @@ def _render_landscape_chart(landscape_df: pl.DataFrame) -> None:
 
 
 def _render_global_predictors(feature_names: list[str]) -> None:
-    model = get_active_learning_model()
+    model = get_or_initialize_active_learning_model()
     global_rows = build_global_predictor_rows(feature_names, model.state.weight_mean)
 
     st.markdown("**Global predictors**")
@@ -726,7 +726,7 @@ def _render_cluster_profiles(
     feature_matrix: np.ndarray,
     feature_names: list[str],
 ) -> None:
-    model = get_active_learning_model()
+    model = get_or_initialize_active_learning_model()
     cluster_profiles = build_cluster_profiles(
         ClusterProfileInputs(
             landscape_df=landscape_df,

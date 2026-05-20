@@ -9,9 +9,9 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 
 from st_name_ranking.active_learning.selection import (
-    get_active_learning_model,
     get_name_features,
     get_names_features,
+    get_or_initialize_active_learning_model,
 )
 from st_name_ranking.persistence import database
 
@@ -84,7 +84,7 @@ def _update_model_sync(name_a: str, name_b: str, preference: int) -> bool:
     """Update the preference model while holding the model update lock."""
     with _model_update_lock:
         try:
-            model = get_active_learning_model()
+            model = get_or_initialize_active_learning_model()
             features_a = get_name_features(name_a)
             features_b = get_name_features(name_b)
 
@@ -104,7 +104,7 @@ def _update_model_sync(name_a: str, name_b: str, preference: int) -> bool:
 def _update_ratings_from_model() -> bool:
     """Refresh stored display ratings from current model utilities."""
     try:
-        model = get_active_learning_model()
+        model = get_or_initialize_active_learning_model()
 
         with database.get_connection() as conn:
             cursor = conn.execute("SELECT name FROM names")
