@@ -20,6 +20,11 @@ from rich.panel import Panel
 from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.table import Table
 
+# Import model functions
+from st_name_ranking.active_learning.selection import (
+    get_active_learning_model,
+)
+
 # Import database functions
 from st_name_ranking.database import (
     DB_PATH,
@@ -31,11 +36,6 @@ from st_name_ranking.database import (
 
 # Import features for extraction
 from st_name_ranking.features import FeatureExtractor
-
-# Import model functions
-from st_name_ranking.pair_selection import (
-    get_active_learning_model,
-)
 
 app = typer.Typer(
     help="Name Ranking Database Management CLI - Uses SQLite database",

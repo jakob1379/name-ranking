@@ -18,6 +18,7 @@ from metaphone import doublemetaphone
 
 from st_name_ranking.database_io import export_database, import_database  # noqa: F401
 from st_name_ranking.feature_store import (  # noqa: F401
+    CorruptFeatureCacheError,
     get_active_feature_set_version,
     get_cached_features,
     get_cached_features_batch,

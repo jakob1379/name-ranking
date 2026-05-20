@@ -9,9 +9,9 @@ from typing import Literal
 
 import streamlit as st
 
-from st_name_ranking.background_queue import QueueManager, get_queue_manager, get_queue_manager_stats
-from st_name_ranking.model_service import record_comparison_instant
-from st_name_ranking.pair_selection import select_random_pair
+from st_name_ranking.active_learning.lazy_updates import ModelUpdateStatus, record_comparison_instant
+from st_name_ranking.active_learning.queue import QueueManager, get_queue_manager, get_queue_manager_stats
+from st_name_ranking.active_learning.selection import select_random_pair
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +38,7 @@ class VoteResult:
     previous_pair: tuple[str, str]
     next_pair: tuple[str, str]
     pair_source: PairSource
+    update_status: ModelUpdateStatus
 
 
 def prepare_tournament_round(names: list[str], sample_size: int) -> TournamentRound:
@@ -64,7 +65,7 @@ def record_tournament_vote(
     preference: int,
 ) -> VoteResult:
     """Record a vote and advance session state to the next tournament pair."""
-    record_comparison_instant(candidate_a, candidate_b, preference)
+    update_status = record_comparison_instant(candidate_a, candidate_b, preference)
 
     next_pair, source = _select_next_pair(names, manager)
     st.session_state.candidate_a, st.session_state.candidate_b = next_pair
@@ -81,6 +82,7 @@ def record_tournament_vote(
         previous_pair=(candidate_a, candidate_b),
         next_pair=next_pair,
         pair_source=source,
+        update_status=update_status,
     )
 
 

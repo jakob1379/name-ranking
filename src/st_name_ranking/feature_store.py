@@ -8,6 +8,17 @@ from st_name_ranking import database
 logger = logging.getLogger(__name__)
 
 
+class CorruptFeatureCacheError(RuntimeError):
+    """Raised when cached feature JSON cannot be decoded."""
+
+    def __init__(self, *, name_id: int, feature_set_id: int, cause: json.JSONDecodeError) -> None:
+        self.name_id = name_id
+        self.feature_set_id = feature_set_id
+        super().__init__(
+            f"Corrupt feature cache row for name_id={name_id}, feature_set_id={feature_set_id}: {cause.msg}",
+        )
+
+
 def get_or_create_feature_set(version: str, feature_names: list[str]) -> int:
     """Get a feature-set ID, creating the row when needed."""
     with database.get_connection() as conn:
@@ -91,10 +102,11 @@ def get_cached_features_batch(
             """
             cursor = conn.execute(query, [feature_set_id, *chunk])
             for row in cursor:
-                try:
-                    result[row[0]] = json.loads(row[1])
-                except json.JSONDecodeError:
-                    logger.warning("Invalid JSON in name_features for name_id=%s", row[0])
+                result[row[0]] = _decode_features_json(
+                    row[1],
+                    name_id=row[0],
+                    feature_set_id=feature_set_id,
+                )
 
     return result
 
@@ -113,11 +125,11 @@ def get_cached_features(name_id: int, feature_set_id: int) -> dict | None:
         if not row:
             return None
 
-        try:
-            return json.loads(row[0])
-        except json.JSONDecodeError:
-            logger.warning("Invalid JSON in name_features for name_id=%s", name_id)
-            return None
+        return _decode_features_json(
+            row[0],
+            name_id=name_id,
+            feature_set_id=feature_set_id,
+        )
 
 
 def set_cached_features_batch(
@@ -144,6 +156,18 @@ def set_cached_features_batch(
             inserted += len(chunk)
 
     return inserted
+
+
+def _decode_features_json(features_json: str, *, name_id: int, feature_set_id: int) -> dict:
+    try:
+        return json.loads(features_json)
+    except json.JSONDecodeError as e:
+        logger.exception(
+            "Corrupt JSON in name_features for name_id=%s, feature_set_id=%s",
+            name_id,
+            feature_set_id,
+        )
+        raise CorruptFeatureCacheError(name_id=name_id, feature_set_id=feature_set_id, cause=e) from e
 
 
 def set_cached_features(

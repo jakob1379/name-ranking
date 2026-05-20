@@ -12,13 +12,13 @@ from datetime import UTC, datetime
 import streamlit as st
 
 from st_name_ranking import database
-from st_name_ranking.data_loader import load_names_by_gender
-from st_name_ranking.database import initialize_ratings
-from st_name_ranking.ui import render_binary_filter, render_rankings, render_similarity, render_tournament
-from st_name_ranking.utils import (
+from st_name_ranking.app_actions import (
     setup_session_state,
     sync_names_from_submodule,
 )
+from st_name_ranking.data_loader import DataLoaderError, load_names_by_gender
+from st_name_ranking.database import initialize_ratings
+from st_name_ranking.ui import render_binary_filter, render_rankings, render_similarity, render_tournament
 
 logger = logging.getLogger(__name__)
 DEFAULT_TOURNAMENT_SAMPLE_SIZE: int | None = None
@@ -151,8 +151,16 @@ def _ensure_names_loaded() -> None:
     if "all_names_data" in st.session_state:
         return
 
-    with st.spinner("Loading names from submodule..."):
-        gender_data = load_names_by_gender(sync_with_submodule=False)
+    try:
+        with st.spinner("Loading names from submodule..."):
+            gender_data = load_names_by_gender(sync_with_submodule=False)
+    except DataLoaderError as e:
+        st.toast(
+            f"Failed to load names from database: {e}",
+            icon="❌",
+            duration="long",
+        )
+        return
 
     if gender_data and "All" in gender_data:
         st.session_state.all_names_data = gender_data

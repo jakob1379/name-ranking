@@ -251,7 +251,7 @@ print(f"P(A ≻ B) = {prob:.3f}")
 
 ### Custom Active Learning Strategies
 
-1. Override `select_candidates()` in `utils.py`
+1. Extend `active_learning/selection.py` or inject `PairSelectionDependencies`
 2. Implement different information gain metrics
 3. Adjust exploration-exploitation balance
 

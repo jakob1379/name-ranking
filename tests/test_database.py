@@ -721,3 +721,65 @@ class TestDatabaseExportImport:
         # Export again and compare
         new_bytes = export_database()
         assert original_bytes == new_bytes
+
+
+class TestFeatureCacheOperations:
+    """Tests for feature cache persistence behavior."""
+
+    def test_corrupt_cached_features_raise_contextual_error(self, mock_db_path):
+        """Corrupt cached JSON should be reported distinctly from a cache miss."""
+        from st_name_ranking.database import (
+            CorruptFeatureCacheError,
+            get_cached_features,
+            get_connection,
+            init_database,
+        )
+
+        init_database()
+        with get_connection() as conn:
+            name_id, feature_set_id = self._insert_corrupt_feature_cache_row(conn)
+
+        with pytest.raises(CorruptFeatureCacheError) as exc_info:
+            get_cached_features(name_id, feature_set_id)
+
+        assert exc_info.value.name_id == name_id
+        assert exc_info.value.feature_set_id == feature_set_id
+        assert "Corrupt feature cache row" in str(exc_info.value)
+
+    def test_corrupt_cached_features_batch_raise_contextual_error(self, mock_db_path):
+        """Batch cache reads should not silently drop corrupt rows."""
+        from st_name_ranking.database import (
+            CorruptFeatureCacheError,
+            get_cached_features_batch,
+            get_connection,
+            init_database,
+        )
+
+        init_database()
+        with get_connection() as conn:
+            name_id, feature_set_id = self._insert_corrupt_feature_cache_row(conn)
+
+        with pytest.raises(CorruptFeatureCacheError) as exc_info:
+            get_cached_features_batch([name_id], feature_set_id)
+
+        assert exc_info.value.name_id == name_id
+        assert exc_info.value.feature_set_id == feature_set_id
+
+    @staticmethod
+    def _insert_corrupt_feature_cache_row(conn) -> tuple[int, int]:
+        name_id = conn.execute(
+            "INSERT INTO names (name, gender) VALUES (?, ?)",
+            ("Anna", "Female"),
+        ).lastrowid
+        feature_set_id = conn.execute(
+            "INSERT INTO feature_sets (version, feature_names_json, is_active) VALUES (?, ?, ?)",
+            ("corrupt-test", json.dumps(["length"]), 1),
+        ).lastrowid
+        conn.execute(
+            """
+            INSERT INTO name_features (name_id, feature_set_id, features_json)
+            VALUES (?, ?, ?)
+            """,
+            (name_id, feature_set_id, "{not-json"),
+        )
+        return name_id, feature_set_id

@@ -1,6 +1,8 @@
 """Integration tests for data_loader module."""
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
+
+import pytest
 
 from st_name_ranking import data_loader
 
@@ -189,40 +191,17 @@ class TestDataLoaderIntegration:
         assert data_loader.is_valid_name("Anna-Marie") is True
         assert data_loader.is_valid_name("Jørgen") is True
 
-    def test_load_submodule_json_not_found(self, tmp_path):
+    def test_load_submodule_json_not_found(self, tmp_path, monkeypatch):
         """Test loading submodule JSON when file doesn't exist."""
-        import os
-
         submodule_path = tmp_path / "godkendtefornavne"
         submodule_path.mkdir()
-        # No JSON file created
+        monkeypatch.chdir(tmp_path)
 
-        mock_st = MagicMock()
-        mock_st.toast = MagicMock()
+        with pytest.raises(data_loader.NameDataLoadError, match="Failed to load submodule JSON"):
+            data_loader.load_submodule_json()
 
-        # Save real os.path.join before patching
-        real_join = os.path.join
-
-        with (
-            patch("st_name_ranking.data_loader.st", mock_st),
-            patch("st_name_ranking.data_loader.os.path.join") as mock_join,
-        ):
-            # Make os.path.join return our temp file path
-            def join_side_effect(*args):
-                if args[0] == "godkendtefornavne":
-                    return str(submodule_path / args[1])
-                return real_join(*args)
-
-            mock_join.side_effect = join_side_effect
-
-            result = data_loader.load_submodule_json()
-            # Should return empty list when file not found
-            assert result == []
-
-    def test_load_submodule_csv_fallback(self, tmp_path):
+    def test_load_submodule_csv_fallback(self, tmp_path, monkeypatch):
         """Test CSV fallback loading."""
-        import os
-
         submodule_path = tmp_path / "godkendtefornavne"
         submodule_path.mkdir()
         # Create the three expected CSV files with names
@@ -239,34 +218,17 @@ Robin"""
         (submodule_path / "drengenavne.csv").write_text(drengenavne_content)
         (submodule_path / "pigenavne.csv").write_text(pigenavne_content)
         (submodule_path / "unisexnavne.csv").write_text(unisexnavne_content)
+        monkeypatch.chdir(tmp_path)
 
-        mock_st = MagicMock()
-        mock_st.toast = MagicMock()
-
-        # Save real os.path.join before patching
-        real_join = os.path.join
-
-        with (
-            patch("st_name_ranking.data_loader.st", mock_st),
-            patch("st_name_ranking.data_loader.os.path.join") as mock_join,
-        ):
-            # Make os.path.join return our temp file path
-            def join_side_effect(*args):
-                if args[0] == "godkendtefornavne":
-                    return str(submodule_path / args[1])
-                return real_join(*args)
-
-            mock_join.side_effect = join_side_effect
-
-            result = data_loader.load_submodule_csv_fallback()
-            # Should parse CSV and return list of names
-            assert len(result) == 9
-            assert "Peter" in result
-            assert "Hans" in result
-            assert "Jens" in result
-            assert "Anna" in result
-            assert "Maria" in result
-            assert "Ida" in result
-            assert "Alex" in result
-            assert "Kim" in result
-            assert "Robin" in result
+        result = data_loader.load_submodule_csv_fallback()
+        # Should parse CSV and return list of names
+        assert len(result) == 9
+        assert "Peter" in result
+        assert "Hans" in result
+        assert "Jens" in result
+        assert "Anna" in result
+        assert "Maria" in result
+        assert "Ida" in result
+        assert "Alex" in result
+        assert "Kim" in result
+        assert "Robin" in result

@@ -12,9 +12,9 @@ from st_name_ranking.types import NamePair
 class TestPullSubmoduleUpdates:
     """Tests for pull_submodule_updates function."""
 
-    @patch("subprocess.run")
-    @patch("st_name_ranking.utils.st")
-    @patch("st_name_ranking.utils.database")
+    @patch("st_name_ranking.app_actions.subprocess.run")
+    @patch("st_name_ranking.app_actions.st")
+    @patch("st_name_ranking.app_actions.database")
     def test_successful_pull_without_classification(
         self,
         mock_db,
@@ -54,10 +54,10 @@ class TestPullSubmoduleUpdates:
         # Should return True
         assert result is True
 
-    @patch("subprocess.run")
-    @patch("st_name_ranking.utils.st")
-    @patch("st_name_ranking.utils.database")
-    @patch("time.sleep")
+    @patch("st_name_ranking.app_actions.subprocess.run")
+    @patch("st_name_ranking.app_actions.st")
+    @patch("st_name_ranking.app_actions.database")
+    @patch("st_name_ranking.app_actions.time.sleep")
     def test_successful_pull_with_classification(
         self,
         mock_sleep,
@@ -100,8 +100,8 @@ class TestPullSubmoduleUpdates:
 
         assert result is True
 
-    @patch("subprocess.run")
-    @patch("st_name_ranking.utils.st")
+    @patch("st_name_ranking.app_actions.subprocess.run")
+    @patch("st_name_ranking.app_actions.st")
     def test_failed_pull(self, mock_st, mock_run):
         """Test when git pull fails."""
         mock_result = MagicMock()
@@ -119,9 +119,9 @@ class TestPullSubmoduleUpdates:
         )
         assert result is False
 
-    @patch("subprocess.run")
-    @patch("st_name_ranking.utils.st")
-    @patch("st_name_ranking.utils.database")
+    @patch("st_name_ranking.app_actions.subprocess.run")
+    @patch("st_name_ranking.app_actions.st")
+    @patch("st_name_ranking.app_actions.database")
     def test_sync_error(self, mock_db, mock_st, mock_run):
         """Test when database sync fails."""
         mock_result = MagicMock()
@@ -139,9 +139,9 @@ class TestPullSubmoduleUpdates:
             duration="long",
         )
 
-    @patch("subprocess.run")
-    @patch("st_name_ranking.utils.st")
-    @patch("st_name_ranking.utils.database")
+    @patch("st_name_ranking.app_actions.subprocess.run")
+    @patch("st_name_ranking.app_actions.st")
+    @patch("st_name_ranking.app_actions.database")
     def test_classification_import_error(self, mock_db, mock_st, mock_run):
         """Test when ethnidata is not installed."""
         mock_result = MagicMock()
@@ -168,8 +168,8 @@ class TestPullSubmoduleUpdates:
             )
             assert result is True
 
-    @patch("subprocess.run")
-    @patch("st_name_ranking.utils.st")
+    @patch("st_name_ranking.app_actions.subprocess.run")
+    @patch("st_name_ranking.app_actions.st")
     def test_general_exception(self, mock_st, mock_run):
         """Test handling of general exceptions."""
         from subprocess import SubprocessError
@@ -189,8 +189,8 @@ class TestPullSubmoduleUpdates:
 class TestSetupSessionState:
     """Tests for setup_session_state function."""
 
-    @patch("st_name_ranking.utils.st")
-    @patch("st_name_ranking.utils.initialize_or_load_ratings")
+    @patch("st_name_ranking.app_actions.st")
+    @patch("st_name_ranking.app_actions.initialize_or_load_ratings")
     def test_initial_setup(self, mock_init_ratings, mock_st):
         """Test setting up session state for the first time."""
         # Mock empty session state
@@ -208,8 +208,8 @@ class TestSetupSessionState:
         assert mock_st.session_state["candidate_b"] == ""
         assert mock_st.session_state["names"] == names
 
-    @patch("st_name_ranking.utils.st")
-    @patch("st_name_ranking.utils.initialize_or_load_ratings")
+    @patch("st_name_ranking.app_actions.st")
+    @patch("st_name_ranking.app_actions.initialize_or_load_ratings")
     def test_existing_session_state(self, mock_init_ratings, mock_st):
         """Test when session state already exists."""
         # Mock existing session state
@@ -465,8 +465,8 @@ class TestSelectCandidatesFallback:
 class TestSyncNamesFromSubmodule:
     """Tests for sync_names_from_submodule function."""
 
-    @patch("st_name_ranking.utils.st")
-    @patch("st_name_ranking.utils.database")
+    @patch("st_name_ranking.app_actions.st")
+    @patch("st_name_ranking.app_actions.database")
     def test_successful_sync(self, mock_db, mock_st):
         """Test successful sync with new names."""
         mock_db.sync_names_with_submodule.return_value = 5
@@ -484,8 +484,8 @@ class TestSyncNamesFromSubmodule:
         )
         assert result == 5
 
-    @patch("st_name_ranking.utils.st")
-    @patch("st_name_ranking.utils.database")
+    @patch("st_name_ranking.app_actions.st")
+    @patch("st_name_ranking.app_actions.database")
     def test_no_new_names(self, mock_db, mock_st):
         """Test sync when no new names to add."""
         mock_db.sync_names_with_submodule.return_value = 0
@@ -498,8 +498,8 @@ class TestSyncNamesFromSubmodule:
         )
         assert result == 0
 
-    @patch("st_name_ranking.utils.st")
-    @patch("st_name_ranking.utils.database")
+    @patch("st_name_ranking.app_actions.st")
+    @patch("st_name_ranking.app_actions.database")
     def test_sync_error(self, mock_db, mock_st):
         """Test handling sync errors."""
         mock_db.sync_names_with_submodule.side_effect = RuntimeError("DB error")
@@ -517,76 +517,92 @@ class TestSyncNamesFromSubmodule:
 class TestUpdatePreferenceAndSave:
     """Tests for update_preference_and_save function (uses Bradley-Terry model)."""
 
-    @patch("st_name_ranking.utils.database.update_rating_value")
-    @patch("st_name_ranking.utils._compute_rating_for_name")
-    @patch("st_name_ranking.utils.update_model_and_save")
-    @patch("st_name_ranking.utils.st")
-    def test_successful_update(
-        self,
-        mock_st,
-        mock_update_model_and_save,
-        mock_compute_rating,
-        mock_update_rating_value,
-    ):
-        """Test successful model update and save."""
+    @patch("st_name_ranking.model_service.record_comparison_instant")
+    def test_nonblocking_update_records_preference(self, mock_record_comparison):
+        """Default path records the preference and returns an unchanged ratings copy."""
         ratings = {"Anna": 1500.0, "Peter": 1500.0}
-        # Mock computed ratings
-        mock_compute_rating.side_effect = [1516.0, 1484.0]  # winner, loser
 
         result = utils.update_preference_and_save(ratings, "Anna", "Peter")
 
-        mock_update_model_and_save.assert_called_once_with("Anna", "Peter")
-        # Check compute rating called for both names
-        assert mock_compute_rating.call_count == 2
-        mock_compute_rating.assert_any_call("Anna")
-        mock_compute_rating.assert_any_call("Peter")
-        # Check database updates
-        assert mock_update_rating_value.call_count == 2
-        mock_update_rating_value.assert_any_call("Anna", 1516.0)
-        mock_update_rating_value.assert_any_call("Peter", 1484.0)
-        # Check returned ratings
-        assert result == {"Anna": 1516.0, "Peter": 1484.0}
-        # No error toast
-        assert not mock_st.toast.called
+        mock_record_comparison.assert_called_once_with("Anna", "Peter", -1, blocking=False)
+        assert result == ratings
+        assert result is not ratings
 
-    @patch("st_name_ranking.utils.database.update_rating_value")
-    @patch("st_name_ranking.utils._compute_rating_for_name")
-    @patch("st_name_ranking.utils.update_model_and_save")
-    @patch("st_name_ranking.utils.st")
-    def test_save_failure(
+    @patch("st_name_ranking.model_service.database.update_rating_value")
+    @patch("st_name_ranking.model_service._compute_rating_for_name")
+    @patch("st_name_ranking.model_service.record_comparison_instant")
+    def test_blocking_update_refreshes_ratings(
         self,
-        mock_st,
-        mock_update_model_and_save,
+        mock_record_comparison,
         mock_compute_rating,
         mock_update_rating_value,
     ):
-        """Test when ratings computation fails."""
+        ratings = {"Anna": 1500.0, "Peter": 1500.0}
+        mock_compute_rating.side_effect = [1516.0, 1484.0]
+
+        result = utils.update_preference_and_save(ratings, "Anna", "Peter", blocking=True)
+
+        mock_record_comparison.assert_called_once_with("Anna", "Peter", -1, blocking=True)
+        mock_compute_rating.assert_any_call("Anna")
+        mock_compute_rating.assert_any_call("Peter")
+        mock_update_rating_value.assert_any_call("Anna", 1516.0)
+        mock_update_rating_value.assert_any_call("Peter", 1484.0)
+        assert result == {"Anna": 1516.0, "Peter": 1484.0}
+
+    @patch("st_name_ranking.model_service.database.update_rating_value")
+    @patch("st_name_ranking.model_service._compute_rating_for_name")
+    @patch("st_name_ranking.model_service.record_comparison_instant")
+    def test_blocking_update_compute_failure(
+        self,
+        mock_record_comparison,
+        mock_compute_rating,
+        mock_update_rating_value,
+    ):
         ratings = {"Anna": 1500.0, "Peter": 1500.0}
         mock_compute_rating.side_effect = RuntimeError("Computation error")
 
-        result = utils.update_preference_and_save(ratings, "Anna", "Peter")
+        result = utils.update_preference_and_save(ratings, "Anna", "Peter", blocking=True)
 
-        # Should return original ratings as fallback
+        mock_record_comparison.assert_called_once_with("Anna", "Peter", -1, blocking=True)
         assert result == ratings
-        # Should still call update_model_and_save
-        mock_update_model_and_save.assert_called_once_with("Anna", "Peter")
-        # compute_rating was called (and failed)
-        assert mock_compute_rating.call_count == 1
-        # database.update_rating_value should NOT be called
-        assert mock_update_rating_value.call_count == 0
+        assert result is not ratings
+        mock_update_rating_value.assert_not_called()
+
+
+class TestRecordComparisonInstant:
+    """Tests for the explicit model update status contract."""
+
+    @patch("st_name_ranking.model_service._update_ratings_from_model")
+    @patch("st_name_ranking.model_service._update_model_sync")
+    @patch("st_name_ranking.model_service.database.record_comparison")
+    def test_blocking_status_reports_model_refresh_failure(
+        self,
+        mock_record_comparison,
+        mock_update_model,
+        mock_update_ratings,
+    ):
+        mock_update_model.return_value = False
+        mock_update_ratings.return_value = True
+
+        status = utils.record_comparison_instant("Anna", "Peter", -1, blocking=True)
+
+        mock_record_comparison.assert_called_once_with("Anna", "Peter", -1)
+        assert status.recorded is True
+        assert status.model_updated is False
+        assert status.ratings_fresh is True
+        assert status.fallback_used is True
+        assert status.error == "model or rating refresh failed"
 
 
 class TestUpdatePreferenceDrawAndSave:
     """Tests for update_preference_draw_and_save function (uses Bradley-Terry model)."""
 
-    @patch("st_name_ranking.utils.database.update_rating_value")
-    @patch("st_name_ranking.utils._compute_rating_for_name")
-    @patch("st_name_ranking.utils.update_model_draw_and_save")
-    @patch("st_name_ranking.utils.st")
+    @patch("st_name_ranking.model_service.database.update_rating_value")
+    @patch("st_name_ranking.model_service._compute_rating_for_name")
+    @patch("st_name_ranking.model_service.record_comparison_instant")
     def test_successful_update(
         self,
-        mock_st,
-        mock_update_model_draw_and_save,
+        mock_record_comparison,
         mock_compute_rating,
         mock_update_rating_value,
     ):
@@ -595,9 +611,9 @@ class TestUpdatePreferenceDrawAndSave:
         # Mock computed ratings (draw may change both ratings slightly)
         mock_compute_rating.side_effect = [1492.0, 1508.0]  # player_a, player_b
 
-        result = utils.update_preference_draw_and_save(ratings, "Anna", "Peter")
+        result = utils.update_preference_draw_and_save(ratings, "Anna", "Peter", blocking=True)
 
-        mock_update_model_draw_and_save.assert_called_once_with("Anna", "Peter")
+        mock_record_comparison.assert_called_once_with("Anna", "Peter", 0, blocking=True)
         # Check compute rating called for both names
         assert mock_compute_rating.call_count == 2
         mock_compute_rating.assert_any_call("Anna")
@@ -608,17 +624,13 @@ class TestUpdatePreferenceDrawAndSave:
         mock_update_rating_value.assert_any_call("Peter", 1508.0)
         # Check returned ratings
         assert result == {"Anna": 1492.0, "Peter": 1508.0}
-        # No error toast
-        assert not mock_st.toast.called
 
-    @patch("st_name_ranking.utils.database.update_rating_value")
-    @patch("st_name_ranking.utils._compute_rating_for_name")
-    @patch("st_name_ranking.utils.update_model_draw_and_save")
-    @patch("st_name_ranking.utils.st")
+    @patch("st_name_ranking.model_service.database.update_rating_value")
+    @patch("st_name_ranking.model_service._compute_rating_for_name")
+    @patch("st_name_ranking.model_service.record_comparison_instant")
     def test_save_failure(
         self,
-        mock_st,
-        mock_update_model_draw_and_save,
+        mock_record_comparison,
         mock_compute_rating,
         mock_update_rating_value,
     ):
@@ -626,11 +638,11 @@ class TestUpdatePreferenceDrawAndSave:
         ratings = {"Anna": 1500.0, "Peter": 1500.0}
         mock_compute_rating.side_effect = RuntimeError("Computation error")
 
-        result = utils.update_preference_draw_and_save(ratings, "Anna", "Peter")
+        result = utils.update_preference_draw_and_save(ratings, "Anna", "Peter", blocking=True)
 
         assert result == ratings
-        # Should still call update_model_draw_and_save
-        mock_update_model_draw_and_save.assert_called_once_with("Anna", "Peter")
+        assert result is not ratings
+        mock_record_comparison.assert_called_once_with("Anna", "Peter", 0, blocking=True)
         # compute_rating was called (and failed)
         assert mock_compute_rating.call_count == 1
         # database.update_rating_value should NOT be called
@@ -640,14 +652,12 @@ class TestUpdatePreferenceDrawAndSave:
 class TestUpdatePreferenceDownAndSave:
     """Tests for update_preference_down_and_save function (uses Bradley-Terry model)."""
 
-    @patch("st_name_ranking.utils.database.update_rating_value")
-    @patch("st_name_ranking.utils._compute_rating_for_name")
-    @patch("st_name_ranking.utils.update_model_down_and_save")
-    @patch("st_name_ranking.utils.st")
+    @patch("st_name_ranking.model_service.database.update_rating_value")
+    @patch("st_name_ranking.model_service._compute_rating_for_name")
+    @patch("st_name_ranking.model_service.record_comparison_instant")
     def test_successful_update(
         self,
-        mock_st,
-        mock_update_model_down_and_save,
+        mock_record_comparison,
         mock_compute_rating,
         mock_update_rating_value,
     ):
@@ -656,9 +666,9 @@ class TestUpdatePreferenceDownAndSave:
         # Mock computed ratings (both may decrease)
         mock_compute_rating.side_effect = [1480.0, 1470.0]  # player_a, player_b
 
-        result = utils.update_preference_down_and_save(ratings, "Anna", "Peter")
+        result = utils.update_preference_down_and_save(ratings, "Anna", "Peter", blocking=True)
 
-        mock_update_model_down_and_save.assert_called_once_with("Anna", "Peter")
+        mock_record_comparison.assert_called_once_with("Anna", "Peter", 2, blocking=True)
         # Check compute rating called for both names
         assert mock_compute_rating.call_count == 2
         mock_compute_rating.assert_any_call("Anna")
@@ -669,17 +679,13 @@ class TestUpdatePreferenceDownAndSave:
         mock_update_rating_value.assert_any_call("Peter", 1470.0)
         # Check returned ratings
         assert result == {"Anna": 1480.0, "Peter": 1470.0}
-        # No error toast
-        assert not mock_st.toast.called
 
-    @patch("st_name_ranking.utils.database.update_rating_value")
-    @patch("st_name_ranking.utils._compute_rating_for_name")
-    @patch("st_name_ranking.utils.update_model_down_and_save")
-    @patch("st_name_ranking.utils.st")
+    @patch("st_name_ranking.model_service.database.update_rating_value")
+    @patch("st_name_ranking.model_service._compute_rating_for_name")
+    @patch("st_name_ranking.model_service.record_comparison_instant")
     def test_save_failure(
         self,
-        mock_st,
-        mock_update_model_down_and_save,
+        mock_record_comparison,
         mock_compute_rating,
         mock_update_rating_value,
     ):
@@ -687,11 +693,11 @@ class TestUpdatePreferenceDownAndSave:
         ratings = {"Anna": 1500.0, "Peter": 1500.0}
         mock_compute_rating.side_effect = RuntimeError("Computation error")
 
-        result = utils.update_preference_down_and_save(ratings, "Anna", "Peter")
+        result = utils.update_preference_down_and_save(ratings, "Anna", "Peter", blocking=True)
 
         assert result == ratings
-        # Should still call update_model_down_and_save
-        mock_update_model_down_and_save.assert_called_once_with("Anna", "Peter")
+        assert result is not ratings
+        mock_record_comparison.assert_called_once_with("Anna", "Peter", 2, blocking=True)
         # compute_rating was called (and failed)
         assert mock_compute_rating.call_count == 1
         # database.update_rating_value should NOT be called
@@ -701,8 +707,8 @@ class TestUpdatePreferenceDownAndSave:
 class TestGetNameFeatures:
     """Tests for get_name_features function."""
 
-    @patch("st_name_ranking.utils.database.get_connection")
-    @patch("st_name_ranking.utils.get_feature_extractor")
+    @patch("st_name_ranking.pair_selection.database.get_connection")
+    @patch("st_name_ranking.pair_selection.get_feature_extractor")
     def test_name_found_in_database(self, mock_get_feature_extractor, mock_get_connection):
         """Test when name is found in database."""
         # Mock database connection and cursor
@@ -731,8 +737,8 @@ class TestGetNameFeatures:
         # Verify result
         np.testing.assert_array_equal(result, np.array([1.0, 2.0, 3.0]))
 
-    @patch("st_name_ranking.utils.database.get_connection")
-    @patch("st_name_ranking.utils.get_feature_extractor")
+    @patch("st_name_ranking.pair_selection.database.get_connection")
+    @patch("st_name_ranking.pair_selection.get_feature_extractor")
     def test_name_not_found_in_database(self, mock_get_feature_extractor, mock_get_connection):
         """Test when name is not found in database (should use None, None)."""
         mock_conn = MagicMock()
@@ -761,8 +767,8 @@ class TestGetNameFeatures:
 class TestComputeRatingForName:
     """Tests for _compute_rating_for_name function."""
 
-    @patch("st_name_ranking.utils.get_active_learning_model")
-    @patch("st_name_ranking.utils.get_name_features")
+    @patch("st_name_ranking.model_service.get_active_learning_model")
+    @patch("st_name_ranking.model_service.get_name_features")
     def test_compute_rating(self, mock_get_name_features, mock_get_model):
         """Test rating computation."""
         # Mock features and model
@@ -788,10 +794,10 @@ class TestComputeRatingForName:
 class TestUpdateRatingsFromModel:
     """Tests for _update_ratings_from_model function."""
 
-    @patch("st_name_ranking.utils.database.update_ratings_batch_values")
-    @patch("st_name_ranking.utils.get_names_features")
-    @patch("st_name_ranking.utils.database.get_connection")
-    @patch("st_name_ranking.utils.get_active_learning_model")
+    @patch("st_name_ranking.model_service.database.update_ratings_batch_values")
+    @patch("st_name_ranking.model_service.get_names_features")
+    @patch("st_name_ranking.model_service.database.get_connection")
+    @patch("st_name_ranking.model_service.get_active_learning_model")
     def test_successful_update(
         self,
         mock_get_model,
@@ -835,10 +841,10 @@ class TestUpdateRatingsFromModel:
         }
         mock_update_ratings_batch_values.assert_called_once_with(expected_ratings)
 
-    @patch("st_name_ranking.utils.database.update_ratings_batch_values")
-    @patch("st_name_ranking.utils.get_names_features")
-    @patch("st_name_ranking.utils.database.get_connection")
-    @patch("st_name_ranking.utils.get_active_learning_model")
+    @patch("st_name_ranking.model_service.database.update_ratings_batch_values")
+    @patch("st_name_ranking.model_service.get_names_features")
+    @patch("st_name_ranking.model_service.database.get_connection")
+    @patch("st_name_ranking.model_service.get_active_learning_model")
     def test_empty_names(
         self,
         mock_get_model,
@@ -862,10 +868,10 @@ class TestUpdateRatingsFromModel:
         mock_get_names_features.assert_not_called()
         mock_update_ratings_batch_values.assert_not_called()
 
-    @patch("st_name_ranking.utils.database.update_ratings_batch_values")
-    @patch("st_name_ranking.utils.get_names_features")
-    @patch("st_name_ranking.utils.database.get_connection")
-    @patch("st_name_ranking.utils.get_active_learning_model")
+    @patch("st_name_ranking.model_service.database.update_ratings_batch_values")
+    @patch("st_name_ranking.model_service.get_names_features")
+    @patch("st_name_ranking.model_service.database.get_connection")
+    @patch("st_name_ranking.model_service.get_active_learning_model")
     def test_exception_handling(
         self,
         mock_get_model,
@@ -895,9 +901,9 @@ class TestUpdateRatingsFromModel:
 class TestModelUpdateExceptionHandling:
     """Tests for exception handling in model update functions."""
 
-    @patch("st_name_ranking.utils.logger")
-    @patch("st_name_ranking.utils.get_name_features")
-    @patch("st_name_ranking.utils.get_active_learning_model")
+    @patch("st_name_ranking.model_service.logger")
+    @patch("st_name_ranking.model_service.get_name_features")
+    @patch("st_name_ranking.model_service.get_active_learning_model")
     def test_update_model_and_save_exception(self, mock_get_model, mock_get_name_features, mock_logger):
         """Test exception handling in update_model_and_save."""
         # Mock model that raises exception on update
@@ -920,9 +926,9 @@ class TestModelUpdateExceptionHandling:
         mock_logger.exception.assert_called_once()
         assert "Failed to update model" in mock_logger.exception.call_args[0][0]
 
-    @patch("st_name_ranking.utils.logger")
-    @patch("st_name_ranking.utils.get_name_features")
-    @patch("st_name_ranking.utils.get_active_learning_model")
+    @patch("st_name_ranking.model_service.logger")
+    @patch("st_name_ranking.model_service.get_name_features")
+    @patch("st_name_ranking.model_service.get_active_learning_model")
     def test_update_model_draw_and_save_exception(self, mock_get_model, mock_get_name_features, mock_logger):
         """Test exception handling in update_model_draw_and_save."""
         mock_model = MagicMock()
@@ -940,9 +946,9 @@ class TestModelUpdateExceptionHandling:
         mock_logger.exception.assert_called_once()
         assert "Failed to update model for draw" in mock_logger.exception.call_args[0][0]
 
-    @patch("st_name_ranking.utils.logger")
-    @patch("st_name_ranking.utils.get_name_features")
-    @patch("st_name_ranking.utils.get_active_learning_model")
+    @patch("st_name_ranking.model_service.logger")
+    @patch("st_name_ranking.model_service.get_name_features")
+    @patch("st_name_ranking.model_service.get_active_learning_model")
     def test_update_model_down_and_save_exception(self, mock_get_model, mock_get_name_features, mock_logger):
         """Test exception handling in update_model_down_and_save."""
         mock_model = MagicMock()
@@ -960,9 +966,9 @@ class TestModelUpdateExceptionHandling:
         mock_logger.exception.assert_called_once()
         assert "Failed to update model for both disliked" in mock_logger.exception.call_args[0][0]
 
-    @patch("st_name_ranking.utils.logger")
-    @patch("st_name_ranking.utils.get_name_features")
-    @patch("st_name_ranking.utils.get_active_learning_model")
+    @patch("st_name_ranking.model_service.logger")
+    @patch("st_name_ranking.model_service.get_name_features")
+    @patch("st_name_ranking.model_service.get_active_learning_model")
     def test_update_model_and_save_success(self, mock_get_model, mock_get_name_features, mock_logger):
         """Test successful update_model_and_save."""
         mock_model = MagicMock()

@@ -12,6 +12,10 @@ from sklearn.cluster import KMeans
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
 
+from st_name_ranking.active_learning.selection import (
+    get_active_learning_model,
+    get_names_features,
+)
 from st_name_ranking.database import (
     INITIAL_SCORE,
     get_preference_stats_by_gender,
@@ -19,10 +23,6 @@ from st_name_ranking.database import (
     get_preference_stats_by_phonetic,
     load_user_setting,
     save_user_setting,
-)
-from st_name_ranking.pair_selection import (
-    get_active_learning_model,
-    get_names_features,
 )
 from st_name_ranking.similarity import (
     get_string_similarity_scores,

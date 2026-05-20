@@ -110,14 +110,18 @@ Stores 5 core tables:
 - **Sampling**: Thompson sampling for active learning
 - **Persistence**: Serializes state to database
 
-### Active Learning Layer (`utils.py`)
+### Active Learning Layer (`active_learning/`)
 
 #### Candidate Selection
 
-- **Thompson sampling**: Maximizes information gain
-- **Diversity constraint**: Ensures feature space coverage
-- **History avoidance**: Prevents repetitive comparisons
-- **Fallback**: Random selection if model fails
+- **Selection owner**: `active_learning/selection.py` owns feature lookup, model
+  access, Thompson sampling, and fallback pair selection.
+- **Background queue**: `active_learning/queue.py` keeps tournament pairs ready
+  for responsive voting and reports refill latency.
+- **Lazy updates**: `active_learning/lazy_updates.py` records comparisons,
+  refreshes the model, and synchronizes model-derived ratings.
+- **Compatibility facade**: `utils.py` only re-exports legacy helpers for older
+  callers; new code should import active-learning services from this package.
 
 #### Rating Synchronization
 

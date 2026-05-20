@@ -1,15 +1,11 @@
 """Utility functions for the name ranking application."""
 
 import logging
-import subprocess
-import time
 
 import numpy as np
-import streamlit as st
 
 from st_name_ranking import database
-from st_name_ranking.data_loader import initialize_or_load_ratings
-from st_name_ranking.model_service import (
+from st_name_ranking.active_learning.lazy_updates import (
     _compute_rating_for_name,
     _update_model_sync,
     _update_ratings_from_model,
@@ -23,7 +19,7 @@ from st_name_ranking.model_service import (
     update_preference_down_and_save,
     update_preference_draw_and_save,
 )
-from st_name_ranking.pair_selection import (
+from st_name_ranking.active_learning.selection import (
     PairSelectionDependencies,
     PairSelectionOptions,
     get_active_learning_model,
@@ -31,14 +27,19 @@ from st_name_ranking.pair_selection import (
     get_name_features,
     get_names_features,
 )
-from st_name_ranking.pair_selection import (
+from st_name_ranking.active_learning.selection import (
     select_candidate_pairs as _select_candidate_pairs,
 )
-from st_name_ranking.pair_selection import (
+from st_name_ranking.active_learning.selection import (
     select_random_batch as _select_random_batch,
 )
-from st_name_ranking.pair_selection import (
+from st_name_ranking.active_learning.selection import (
     select_random_pair as _select_random_pair,
+)
+from st_name_ranking.app_actions import (
+    pull_submodule_updates,
+    setup_session_state,
+    sync_names_from_submodule,
 )
 from st_name_ranking.phonetic_similarity import phonetic_similarity
 
@@ -54,7 +55,10 @@ __all__ = [
     "get_name_features",
     "get_names_features",
     "get_thread_executor",
+    "pull_submodule_updates",
     "record_comparison_instant",
+    "setup_session_state",
+    "sync_names_from_submodule",
     "update_model_and_save",
     "update_model_async",
     "update_model_down_and_save",
@@ -66,123 +70,6 @@ __all__ = [
 
 # Minimum names required for pair selection
 MIN_NAMES_FOR_PAIR_SELECTION = 2
-
-
-def pull_submodule_updates(*, classify_origins: bool = False) -> bool:
-    """Pull latest updates from the git submodule and sync with database.
-    If classify_origins is True and ethnidata is available, classify origins.
-    Returns True if successful.
-    """
-    logger.debug(
-        "Pulling submodule updates, classify_origins=%s",
-        classify_origins,
-    )
-    try:
-        with st.spinner("Pulling latest name data from git submodule..."):
-            result = subprocess.run(  # nosec
-                ["git", "-C", "godkendtefornavne", "pull"],
-                check=False,
-                capture_output=True,
-                text=True,
-                timeout=30,
-            )
-    except subprocess.SubprocessError as e:
-        st.toast(
-            f"Error pulling submodule: {e}",
-            icon="❌",
-            duration="long",
-        )
-        return False
-    else:
-        if result.returncode == 0:
-            st.toast(
-                "✅ Submodule updated successfully",
-                icon="✅",
-            )
-            if result.stdout:
-                st.text(f"Output: {result.stdout[:200]}")
-
-            # Sync new names with database
-            with st.spinner("Syncing new names with database..."):
-                try:
-                    # Ensure database is initialized
-                    database.init_database()
-                    inserted = database.sync_names_with_submodule()
-                    if inserted > 0:
-                        st.toast(
-                            f"✅ Added {inserted} new names to database",
-                            icon="✅",
-                        )
-                    else:
-                        st.toast(
-                            "No new names to add",
-                            icon="ℹ️",
-                        )
-                except (RuntimeError, ValueError, subprocess.SubprocessError) as sync_error:
-                    st.toast(
-                        f"Failed to sync names: {sync_error}",
-                        icon="❌",
-                        duration="long",
-                    )
-                    # Continue anyway - names will be synced on next load
-
-            # Classify origins if requested and ethnidata is available
-            if classify_origins:
-                try:
-                    # Ensure database is initialized before classification
-                    database.init_database()
-                    from st_name_ranking.classify_origins import classify_all_names
-
-                    with st.spinner("Classifying name origins..."):
-                        # Classify only unclassified names
-                        classified = classify_all_names(limit=None)
-                        if classified > 0:
-                            st.toast(
-                                f"✅ Classified {classified} name origins",
-                                icon="✅",
-                            )
-                        else:
-                            st.toast(
-                                "No names needed classification",
-                                icon="ℹ️",
-                            )
-                except ImportError:
-                    st.toast(
-                        "ethnidata not installed. Run: pip install ethnidata",
-                        icon="⚠️",
-                    )
-                except (RuntimeError, ValueError) as classify_error:
-                    st.toast(
-                        f"Failed to classify origins: {classify_error}",
-                        icon="❌",
-                        duration="long",
-                    )
-
-            # Show reload message with slight delay
-            st.toast("⏳ Reloading names in 2 seconds...", icon="⏳")
-            time.sleep(2)
-
-            return True
-        st.toast(
-            f"Failed to pull submodule: {result.stderr}",
-            icon="❌",
-            duration="long",
-        )
-        return False
-
-
-def setup_session_state(names: list[str]) -> None:
-    if "ratings" not in st.session_state:
-        st.session_state["ratings"] = initialize_or_load_ratings(names)
-
-    if "candidate_a" not in st.session_state:
-        st.session_state["candidate_a"] = ""
-
-    if "candidate_b" not in st.session_state:
-        st.session_state["candidate_b"] = ""
-
-    if "names" not in st.session_state:
-        st.session_state["names"] = names
 
 
 def select_candidates(
@@ -293,31 +180,3 @@ def _select_candidates_fallback(names: list[str]) -> tuple[str, str]:
         return tuple(rng.choice(names, size=2, replace=False))
 
     return best_pair
-
-
-def sync_names_from_submodule() -> int:
-    """Sync names from submodule JSON to database.
-    Returns number of new names added.
-    """
-    try:
-        database.init_database()
-        with st.spinner("Syncing names from submodule..."):
-            inserted = database.sync_names_with_submodule()
-            if inserted > 0:
-                st.toast(
-                    f"✅ Added {inserted} new names to database",
-                    icon="✅",
-                )
-            else:
-                st.toast(
-                    "Database already up to date with submodule",
-                    icon="ℹ️",
-                )
-            return inserted
-    except (RuntimeError, ValueError, subprocess.SubprocessError) as e:
-        st.toast(
-            f"Failed to sync names: {e}",
-            icon="❌",
-            duration="long",
-        )
-        return 0

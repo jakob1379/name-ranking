@@ -127,10 +127,10 @@ class TestLoadRatings:
 
     @patch("st_name_ranking.data_loader.database.init_database")
     def test_load_ratings_database_error(self, mock_init):
-        """Test load_ratings handles database errors."""
+        """Test load_ratings reports database errors distinctly."""
         mock_init.side_effect = sqlite3.Error("Database error")
-        ratings = data_loader.load_ratings()
-        assert ratings is None
+        with pytest.raises(data_loader.DatabaseLoadError, match="Could not load ratings"):
+            data_loader.load_ratings()
 
 
 class TestSaveRatings:
