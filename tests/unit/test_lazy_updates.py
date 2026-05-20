@@ -54,7 +54,7 @@ def test_record_comparison_blocking_reports_completed_model_and_rating_updates(m
     status = lazy_updates.record_comparison_instant("Anna", "Peter", -1, blocking=True)
 
     record_comparison.assert_called_once_with("Anna", "Peter", -1)
-    assert len(executor.submissions) == 2
+    assert len(executor.submissions) == 0
     assert status.recorded
     assert status.model_updated
     assert status.ratings_fresh
@@ -68,15 +68,17 @@ def test_record_comparison_blocking_marks_fallback_when_model_update_fails(monke
     monkeypatch.setattr(lazy_updates.database, "record_comparison", Mock())
     monkeypatch.setattr(lazy_updates, "get_thread_executor", Mock(return_value=executor))
     monkeypatch.setattr(lazy_updates, "_update_model_sync", Mock(return_value=False))
-    monkeypatch.setattr(lazy_updates, "_update_ratings_from_model", Mock(return_value=True))
+    update_ratings = Mock(return_value=True)
+    monkeypatch.setattr(lazy_updates, "_update_ratings_from_model", update_ratings)
 
     status = lazy_updates.record_comparison_instant("Anna", "Peter", -1, blocking=True)
 
     assert status.recorded
     assert not status.model_updated
-    assert status.ratings_fresh
+    assert not status.ratings_fresh
     assert status.fallback_used
     assert status.error == "model or rating refresh failed"
+    update_ratings.assert_not_called()
 
 
 def test_record_comparison_nonblocking_returns_pending_status_after_scheduling(monkeypatch):
@@ -89,11 +91,40 @@ def test_record_comparison_nonblocking_returns_pending_status_after_scheduling(m
 
     status = lazy_updates.record_comparison_instant("Anna", "Peter", -1, blocking=False)
 
-    assert len(executor.submissions) == 2
+    assert len(executor.submissions) == 1
+    assert executor.submissions[0] == (lazy_updates._update_model_then_refresh_ratings, ("Anna", "Peter", -1))
     assert status.recorded
     assert status.model_updated is None
     assert status.ratings_fresh is None
     assert not status.fallback_used
+
+
+def test_update_model_then_refresh_ratings_runs_in_order(monkeypatch):
+    calls = []
+
+    def update_model(*_args):
+        calls.append("model")
+        return True
+
+    def update_ratings():
+        calls.append("ratings")
+        return True
+
+    monkeypatch.setattr(lazy_updates, "_update_model_sync", update_model)
+    monkeypatch.setattr(lazy_updates, "_update_ratings_from_model", update_ratings)
+
+    assert lazy_updates._update_model_then_refresh_ratings("Anna", "Peter", -1) == (True, True)
+    assert calls == ["model", "ratings"]
+
+
+def test_update_model_then_refresh_ratings_skips_ratings_after_model_failure(monkeypatch):
+    update_ratings = Mock(return_value=True)
+
+    monkeypatch.setattr(lazy_updates, "_update_model_sync", Mock(return_value=False))
+    monkeypatch.setattr(lazy_updates, "_update_ratings_from_model", update_ratings)
+
+    assert lazy_updates._update_model_then_refresh_ratings("Anna", "Peter", -1) == (False, False)
+    update_ratings.assert_not_called()
 
 
 def test_update_model_sync_uses_both_disliked_update(monkeypatch):

@@ -575,9 +575,10 @@ class TestRecordComparisonInstant:
         mock_record_comparison.assert_called_once_with("Anna", "Peter", -1)
         assert status.recorded is True
         assert status.model_updated is False
-        assert status.ratings_fresh is True
+        assert status.ratings_fresh is False
         assert status.fallback_used is True
         assert status.error == "model or rating refresh failed"
+        mock_update_ratings.assert_not_called()
 
 
 class TestGetNameFeatures:

@@ -5,7 +5,7 @@ from __future__ import annotations
 import functools
 import logging
 import threading
-from concurrent.futures import ThreadPoolExecutor, wait
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 
 from st_name_ranking.active_learning.selection import (
@@ -58,15 +58,11 @@ def record_comparison_instant(
             error=str(e),
         )
 
-    future = get_thread_executor().submit(_update_model_sync, name_a, name_b, preference)
-    ratings_future = get_thread_executor().submit(_update_ratings_from_model)
-
     if not blocking:
+        get_thread_executor().submit(_update_model_then_refresh_ratings, name_a, name_b, preference)
         return ModelUpdateStatus(recorded=True, model_updated=None, ratings_fresh=None)
 
-    wait([future, ratings_future])
-    model_updated = future.result()
-    ratings_fresh = ratings_future.result()
+    model_updated, ratings_fresh = _update_model_then_refresh_ratings(name_a, name_b, preference)
     return ModelUpdateStatus(
         recorded=True,
         model_updated=model_updated,
@@ -74,6 +70,14 @@ def record_comparison_instant(
         fallback_used=not (model_updated and ratings_fresh),
         error=None if model_updated and ratings_fresh else "model or rating refresh failed",
     )
+
+
+def _update_model_then_refresh_ratings(name_a: str, name_b: str, preference: int) -> tuple[bool, bool]:
+    """Update the model first, then refresh ratings from the persisted model state."""
+    model_updated = _update_model_sync(name_a, name_b, preference)
+    if not model_updated:
+        return False, False
+    return True, _update_ratings_from_model()
 
 
 def _update_model_sync(name_a: str, name_b: str, preference: int) -> bool:
