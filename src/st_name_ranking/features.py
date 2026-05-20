@@ -19,6 +19,21 @@ logger = logging.getLogger(__name__)
 # Global instances for performance
 _pyphen = pyphen.Pyphen(lang="da")  # Danish hyphenation for syllable counting
 
+
+def _metadata_sequence[T](
+    names: Sequence[str],
+    values: Sequence[T | None] | None,
+    label: str,
+) -> Sequence[T | None]:
+    """Return metadata values with the same length as names."""
+    if values is None:
+        return [None] * len(names)
+    if len(values) != len(names):
+        msg = f"{label} length ({len(values)}) must match names length ({len(names)})"
+        raise ValueError(msg)
+    return values
+
+
 # Sonority scale (higher = more sonorous) for phonetic pleasantness analysis
 SONORITY = {
     # Vowels (highest sonority)
@@ -666,20 +681,12 @@ class FeatureExtractor:
             name_ids: Optional list of database IDs for caching
             use_cache: Whether to use database caching
         """
-        if genders is None:
-            genders = [None] * len(names)  # type: ignore[assignment]
-        if origin_regions is None:
-            origin_regions = [None] * len(names)  # type: ignore[assignment]
-        if name_ids is None:
-            name_ids = [None] * len(names)  # type: ignore[assignment]
-
-        # Type narrowing: after above assignments, none are None
-        assert genders is not None
-        assert origin_regions is not None
-        assert name_ids is not None
+        genders = _metadata_sequence(names, genders, "genders")
+        origin_regions = _metadata_sequence(names, origin_regions, "origin_regions")
+        name_ids = _metadata_sequence(names, name_ids, "name_ids")
 
         vectors = []
-        for name, gender, origin, name_id in zip(names, genders, origin_regions, name_ids):
+        for name, gender, origin, name_id in zip(names, genders, origin_regions, name_ids, strict=True):
             vectors.append(self.extract(name, gender, origin, name_id, use_cache))
 
         return np.stack(vectors, axis=0)

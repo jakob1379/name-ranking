@@ -168,6 +168,20 @@ def test_batch_and_single_extraction_equivalent(initialized_db, test_names_with_
     assert direct_batch.shape == expected_shape
 
 
+@pytest.mark.parametrize(
+    ("kwargs", "field"),
+    [
+        ({"genders": ["Female"]}, "genders"),
+        ({"origin_regions": ["Nordic"]}, "origin_regions"),
+        ({"name_ids": [1]}, "name_ids"),
+    ],
+)
+def test_batch_extract_rejects_metadata_length_mismatch(feature_extractor, kwargs, field):
+    """Batch metadata must align with every requested name."""
+    with pytest.raises(ValueError, match=field):
+        feature_extractor.batch_extract(["Anna", "Peter"], **kwargs)
+
+
 def test_feature_dimensions_consistent(initialized_db, test_names_with_metadata):
     """All feature vectors should have same dimension.
 
