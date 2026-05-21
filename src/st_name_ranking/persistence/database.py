@@ -50,51 +50,38 @@ from st_name_ranking.types import (
 
 logger = logging.getLogger(__name__)
 
-DB_PATH = db_connection.DB_PATH
 _INIT_STATE = db_connection._INIT_STATE
 INITIAL_SCORE = db_connection.INITIAL_SCORE
 MAX_SQL_PARAMS = db_connection.MAX_SQL_PARAMS
 
 
-def _sync_connection_path() -> None:
-    if db_connection.get_db_path() != DB_PATH:
-        db_connection.set_db_path(DB_PATH)
-
-
 def get_db_path() -> Path:
     """Return the active SQLite database path."""
-    _sync_connection_path()
     return db_connection.get_db_path()
 
 
 def set_db_path(path: str | Path) -> None:
     """Set the active SQLite database path and reset initialization state."""
-    global DB_PATH  # noqa: PLW0603
-    DB_PATH = Path(path)
-    db_connection.set_db_path(DB_PATH)
+    db_connection.set_db_path(path)
 
 
 def reset_database_init_state() -> None:
     """Reset cached database-initialization state."""
-    _sync_connection_path()
     db_connection.reset_database_init_state()
 
 
 def get_connection(timeout: float = 30.0) -> AbstractContextManager[sqlite3.Connection]:
-    """Return a database connection using the facade's current DB_PATH."""
-    _sync_connection_path()
+    """Return a database connection using the active connection path."""
     return db_connection.get_connection(timeout)
 
 
 def export_database() -> bytes:
     """Export the current SQLite database file as bytes."""
-    _sync_connection_path()
     return database_io.export_database()
 
 
 def import_database(file_bytes: bytes, *, backup: bool = True) -> None:
     """Replace the current SQLite database with uploaded bytes."""
-    _sync_connection_path()
     database_io.import_database(file_bytes, backup=backup)
 
 
@@ -106,7 +93,6 @@ def _compute_phonetic_codes(name: str) -> tuple[str, str]:
 
 def update_phonetic_codes(limit: int | None = None, conn: sqlite3.Connection | None = None) -> int:
     """Update phonetic codes for names where codes are missing."""
-    _sync_connection_path()
     return name_store.update_phonetic_codes(limit=limit, conn=conn, compute_codes=_compute_phonetic_codes)
 
 
@@ -346,13 +332,11 @@ def init_database() -> None:
 
 def get_unclassified_names(limit: int | None = None) -> list[UnclassifiedName]:
     """Get names that haven't been classified with origin region."""
-    _sync_connection_path()
     return name_store.get_unclassified_names(limit=limit)
 
 
 def update_name_origin(name_id: int, region: str, confidence: float) -> None:
     """Update a name's origin region and confidence."""
-    _sync_connection_path()
     name_store.update_name_origin(name_id, region, confidence)
 
 
@@ -360,7 +344,6 @@ def get_names_with_origins(
     confidence_threshold: float = 0.5,
 ) -> dict[str, tuple[str, float, str, str]]:
     """Get known name -> (region, confidence, phonetic_primary, phonetic_secondary)."""
-    _sync_connection_path()
     return name_store.get_names_with_origins(confidence_threshold=confidence_threshold)
 
 
@@ -369,19 +352,16 @@ def get_names_by_filters(
     origins: list[str] | None = None,
 ) -> list[str]:
     """Get names filtered by gender and origin regions."""
-    _sync_connection_path()
     return name_store.get_names_by_filters(gender=gender, origins=origins)
 
 
 def get_names_by_gender() -> dict[str, list[str]]:
     """Get names categorized by gender."""
-    _sync_connection_path()
     return name_store.get_names_by_gender()
 
 
 def get_all_origin_regions() -> list[str]:
     """Get distinct origin regions from names table, including NULL as International."""
-    _sync_connection_path()
     return name_store.get_all_origin_regions()
 
 
@@ -389,55 +369,46 @@ def get_name_details_batch(
     names: list[str],
 ) -> list[NameDetails]:
     """Get gender and origin_region for multiple names in batch."""
-    _sync_connection_path()
     return name_store.get_name_details_batch(names)
 
 
 def get_phonetic_codes_batch(names: list[str]) -> dict[str, PhoneticCodes]:
     """Get phonetic codes for multiple names in batch."""
-    _sync_connection_path()
     return name_store.get_phonetic_codes_batch(names)
 
 
 def get_ratings() -> dict[str, float]:
     """Get all ratings as name -> rating dictionary."""
-    _sync_connection_path()
     return ratings_store.get_ratings()
 
 
 def update_rating(name: str, rating: float) -> list[str]:
     """Update one rating and return the skipped name when it is missing."""
-    _sync_connection_path()
     return ratings_store.update_rating(name, rating)
 
 
 def update_ratings_batch(ratings_dict: dict[str, float]) -> list[str]:
     """Update multiple ratings in one transaction, incrementing match counts."""
-    _sync_connection_path()
     return ratings_store.update_ratings_batch(ratings_dict)
 
 
 def update_ratings_batch_values(ratings_dict: dict[str, float]) -> list[str]:
     """Update multiple ratings without incrementing match counts."""
-    _sync_connection_path()
     return ratings_store.update_ratings_batch_values(ratings_dict)
 
 
 def record_comparison(name_a: str, name_b: str, preference: int) -> None:
     """Record a pairwise comparison in the database."""
-    _sync_connection_path()
     ratings_store.record_comparison(name_a, name_b, preference)
 
 
 def get_total_comparisons() -> int:
     """Get total number of recorded pairwise comparisons."""
-    _sync_connection_path()
     return ratings_store.get_total_comparisons()
 
 
 def get_comparison_count(name: str) -> int:
     """Get number of comparisons involving a name."""
-    _sync_connection_path()
     return ratings_store.get_comparison_count(name)
 
 
@@ -448,37 +419,31 @@ def initialize_ratings(names: list[str]) -> dict[str, float]:
 
 def save_user_setting(key: str, value: str) -> None:
     """Save a user setting."""
-    _sync_connection_path()
     settings_store.save_user_setting(key, value)
 
 
 def load_user_setting(key: str, default: str = "") -> str:
     """Load a user setting."""
-    _sync_connection_path()
     return settings_store.load_user_setting(key, default=default)
 
 
 def get_stats() -> DatabaseStats:
     """Get database statistics."""
-    _sync_connection_path()
     return stats_store.get_stats()
 
 
 def get_preference_stats_by_gender() -> dict[str, PreferenceStats]:
     """Get preference statistics grouped by gender."""
-    _sync_connection_path()
     return preference_stats_store.get_preference_stats_by_gender()
 
 
 def get_preference_stats_by_origin() -> dict[str, PreferenceStats]:
     """Get preference statistics grouped by origin region."""
-    _sync_connection_path()
     return preference_stats_store.get_preference_stats_by_origin()
 
 
 def get_preference_stats_by_phonetic() -> dict[str, PreferenceStats]:
     """Get preference statistics grouped by phonetic primary code."""
-    _sync_connection_path()
     return preference_stats_store.get_preference_stats_by_phonetic()
 
 

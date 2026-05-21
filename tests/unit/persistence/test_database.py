@@ -112,21 +112,19 @@ class TestDatabaseInitialization:
 
         assert comparison_count == 1
 
-    def test_legacy_db_path_assignment_syncs_through_get_db_path(self, tmp_path):
-        """Legacy direct DB_PATH assignment should still reset connection state on sync."""
+    def test_database_facade_does_not_shadow_connection_path(self, tmp_path):
+        """The database facade should delegate path ownership to connection."""
         from st_name_ranking.persistence import connection
 
         original_path = database.get_db_path()
-        new_path = tmp_path / "legacy.db"
+        new_path = tmp_path / "facade.db"
 
         try:
-            database.DB_PATH = new_path
-            database._INIT_STATE["db_initialized"] = True
-            database._INIT_STATE["db_path"] = original_path
+            database.set_db_path(new_path)
 
             assert database.get_db_path() == new_path
             assert connection.get_db_path() == new_path
-            assert database._INIT_STATE == {"db_initialized": False, "db_path": None}
+            assert "DB_PATH" not in vars(database)
         finally:
             database.set_db_path(original_path)
 
