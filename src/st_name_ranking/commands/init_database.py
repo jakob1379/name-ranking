@@ -72,8 +72,10 @@ def main() -> None:
                 "✗ ethnidata not installed. Install with: pip install ethnidata",
             )
             print("  Or run later: st-name-ranking db origins classify")
+            raise SystemExit(1) from None
         except (RuntimeError, ValueError) as e:
             print(f"✗ Classification failed: {e}")
+            raise SystemExit(1) from e
 
     # Show statistics
     stats = get_stats()
