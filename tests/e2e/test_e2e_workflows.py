@@ -250,8 +250,6 @@ class TestVotingWorkflow:
 
         # Select two names
         name_a, name_b = "Emma", "Liam"
-        initial_a = ratings[name_a]
-        initial_b = ratings[name_b]
 
         # Record draw
         updated_ratings = update_preference_draw_and_save(ratings, name_a, name_b)
