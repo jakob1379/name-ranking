@@ -638,12 +638,16 @@ def _render_preference_landscape(filtered_ratings: dict[str, float]) -> None:
         _render_landscape_chart(landscape_df)
         _render_global_predictors(feature_names)
         summary_df = _render_cluster_summary(landscape_df)
+        model = get_or_initialize_active_learning_model()
         _render_cluster_profiles(
-            landscape_df=landscape_df,
-            summary_df=summary_df,
-            sorted_names=sorted_names,
-            feature_matrix=feature_matrix,
-            feature_names=feature_names,
+            ClusterProfileInputs(
+                landscape_df=landscape_df,
+                summary_df=summary_df,
+                sorted_names=sorted_names,
+                feature_matrix=feature_matrix,
+                feature_names=feature_names,
+                feature_weights=model.state.weight_mean,
+            ),
         )
     except (RuntimeError, ValueError, ImportError) as err:
         logger.exception("Failed to render preference landscape")
@@ -719,26 +723,8 @@ def _render_cluster_summary(landscape_df: pl.DataFrame) -> pl.DataFrame:
     return summary_df
 
 
-def _render_cluster_profiles(
-    *,
-    landscape_df: pl.DataFrame,
-    summary_df: pl.DataFrame,
-    sorted_names: tuple[str, ...],
-    feature_matrix: np.ndarray,
-    feature_names: list[str],
-) -> None:
-    model = get_or_initialize_active_learning_model()
-    cluster_profiles = build_cluster_profiles(
-        ClusterProfileInputs(
-            landscape_df=landscape_df,
-            summary_df=summary_df,
-            sorted_names=sorted_names,
-            feature_matrix=feature_matrix,
-            feature_names=feature_names,
-            feature_weights=model.state.weight_mean,
-        ),
-    )
-
+def _render_cluster_profiles(inputs: ClusterProfileInputs) -> None:
+    cluster_profiles = build_cluster_profiles(inputs)
     st.markdown("**Cluster profiles**")
     st.dataframe(
         pl.DataFrame(cluster_profiles).sort("Cluster"),
