@@ -269,26 +269,23 @@ def extract_linguistic_features(name: str) -> dict[str, float]:
     try:
         hyphenated = _pyphen.inserted(name_lower)
         syllable_count = hyphenated.count("-") + 1
-        features["syllable_count"] = syllable_count / 6.0
-        features["syllable_density"] = syllable_count / max(len(name), 1)
     except (AttributeError, ValueError):
         # Fallback: rough estimate based on vowels
         vowel_count = sum(1 for c in name_lower if c in "aeiouyæøå")
         syllable_count = max(1, vowel_count // 2)
-        features["syllable_count"] = syllable_count / 6.0
-        features["syllable_density"] = syllable_count / max(len(name), 1)
+
+    features["syllable_count"] = syllable_count / 6.0
+    features["syllable_density"] = syllable_count / max(len(name), 1)
 
     vowels = sum(1 for c in name_lower if c in "aeiouyæøå")
     consonants = len(name) - vowels
     features["vowel_ratio"] = vowels / max(len(name), 1)
     features["consonant_ratio"] = consonants / max(len(name), 1)
 
-    if len(name) >= 1:
-        features["first_letter"] = ord(name_lower[0]) / 255.0
-        features["last_letter"] = ord(name_lower[-1]) / 255.0
-    else:
-        features["first_letter"] = 0.0
-        features["last_letter"] = 0.0
+    first_letter = ord(name_lower[0]) / 255.0 if name else 0.0
+    last_letter = ord(name_lower[-1]) / 255.0 if name else 0.0
+    features["first_letter"] = first_letter
+    features["last_letter"] = last_letter
 
     danish_letters = {"æ", "ø", "å"}
     features["contains_danish"] = 1.0 if any(c in danish_letters for c in name_lower) else 0.0
