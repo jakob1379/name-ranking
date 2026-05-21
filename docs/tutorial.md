@@ -36,6 +36,9 @@ $ cd sort-names
 $ uv sync
 Resolved 87 packages in 0.42s
 Audited 87 packages in 0.01s
+
+# Optional: enable the ethnicolr fallback classifier
+$ uv sync --extra origin-classification
 ```
 
 ### Step 3: Initialize the Database
@@ -414,13 +417,14 @@ Or click **Sync Names** in the sidebar.
 
 ### "Failed to classify origins"
 
-**Cause**: **ethnidata** library not installed or no internet connection.
+**Cause**: **ethnidata** is unavailable, the optional **ethnicolr** fallback is
+not installed, or the classifier data cannot be loaded.
 
 **Solution**:
 
 ```bash
-# Verify ethnidata is installed
-$ uv add ethnidata
+# Install the optional ethnicolr fallback classifier
+$ uv sync --extra origin-classification
 
 # Check internet connection (required for model download)
 # Try with a smaller batch

@@ -16,6 +16,9 @@ $ cd sort-names
 # Install dependencies
 $ uv sync
 
+# Optional: enable the ethnicolr fallback classifier
+$ uv sync --extra origin-classification
+
 # Initialize database (computes features automatically)
 $ uv run st-name-ranking db init
 ✓ Database schema created
