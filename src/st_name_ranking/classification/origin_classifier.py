@@ -72,12 +72,13 @@ def _get_region_for_nationality(nationality: str) -> tuple[str, float]:
         return "International", 0.5
 
 
-# Type alias for classifier that returns (region, confidence) or None
-ClassifierFunc = Callable[[str], OriginResult | None]
+# Type alias for classifier callables that return (region, confidence) or None.
+ClassifierFunc = Callable[[str], tuple[str, float] | None]
 
 
 def _create_ethnidata_classifier() -> ClassifierFunc | None:
-    """Create an ethnidata classifier callable that returns (region, confidence).
+    """Create an ethnidata classifier callable.
+
     Returns the classifier instance, or None if ethnidata is unavailable.
     """
     try:
