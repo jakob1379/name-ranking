@@ -7,6 +7,7 @@ from typing import Any
 
 import streamlit as st
 
+from st_name_ranking.interface.tournament_orchestration import prepare_tournament_round, record_tournament_vote
 from st_name_ranking.interface.tournament_session import (
     get_current_pair,
     get_or_start_tournament_queue,
@@ -20,7 +21,6 @@ from st_name_ranking.interface.ui_support import (
     RenderTimer,
 )
 from st_name_ranking.persistence.database import INITIAL_SCORE
-from st_name_ranking.tournament_orchestration import prepare_tournament_round, record_tournament_vote
 
 logger = logging.getLogger(__name__)
 

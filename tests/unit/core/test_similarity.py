@@ -1,17 +1,17 @@
-"""Tests for st_name_ranking.similarity module."""
+"""Tests for interface similarity-search helpers."""
 
 from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pytest
 
-from st_name_ranking import similarity
+from st_name_ranking.interface import similarity_search as similarity
 
 
 class TestGetStringSimilarityScores:
     """Tests for get_string_similarity_scores function."""
 
-    @patch("st_name_ranking.similarity.process")
+    @patch("st_name_ranking.interface.similarity_search.process")
     def test_basic_similarity(self, mock_process):
         """Test basic string similarity."""
         target = "Anna"
@@ -44,7 +44,7 @@ class TestGetStringSimilarityScores:
         results = similarity.get_string_similarity_scores("Anna", [])
         assert results == []
 
-    @patch("st_name_ranking.similarity.process")
+    @patch("st_name_ranking.interface.similarity_search.process")
     def test_limit(self, mock_process):
         """Test limit parameter."""
         target = "Anna"
@@ -68,7 +68,7 @@ class TestGetStringSimilarityScores:
             limit=2,
         )
 
-    @patch("st_name_ranking.similarity.process")
+    @patch("st_name_ranking.interface.similarity_search.process")
     def test_logging(self, mock_process, caplog):
         """Test that logging occurs."""
         import logging
@@ -90,7 +90,7 @@ class TestGetStringSimilarityScores:
 class TestLoadEmbeddingModel:
     """Tests for load_embedding_model function."""
 
-    @patch("st_name_ranking.similarity.SentenceTransformer")
+    @patch("st_name_ranking.interface.similarity_search.SentenceTransformer")
     def test_load_model(self, mock_sentence_transformer):
         """Test loading the embedding model."""
         mock_model = MagicMock()
@@ -119,7 +119,7 @@ class TestGetVectorSimilarityScores:
         # Model should not be called
         assert not mock_model.encode.called
 
-    @patch("st_name_ranking.similarity.np")
+    @patch("st_name_ranking.interface.similarity_search.np")
     def test_vector_similarity(self, mock_np):
         """Test vector similarity calculation."""
         mock_model = MagicMock()
@@ -169,7 +169,7 @@ class TestGetVectorSimilarityScores:
         assert results[0] == ("Anna", 1.0)
         assert results[1] == ("Anne", 0.32)
 
-    @patch("st_name_ranking.similarity.np")
+    @patch("st_name_ranking.interface.similarity_search.np")
     def test_limit_exceeds_candidates(self, mock_np):
         """Test when limit exceeds number of candidates."""
         mock_model = MagicMock()
@@ -200,7 +200,7 @@ class TestGetVectorSimilarityScores:
         assert results[0] == ("Anna", 1.0)
         assert results[1] == ("Anne", 0.32)
 
-    @patch("st_name_ranking.similarity.np")
+    @patch("st_name_ranking.interface.similarity_search.np")
     def test_logging(self, mock_np, caplog):
         """Test that logging occurs."""
         import logging

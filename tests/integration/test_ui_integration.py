@@ -6,7 +6,7 @@ import numpy as np
 
 from st_name_ranking.active_learning.lazy_updates import ModelUpdateStatus
 from st_name_ranking.interface import rankings_ui, similarity_ui, tournament_ui
-from st_name_ranking.tournament_orchestration import TournamentRound, VoteResult
+from st_name_ranking.interface.tournament_orchestration import TournamentRound, VoteResult
 from st_name_ranking.types import PreferenceStats
 
 

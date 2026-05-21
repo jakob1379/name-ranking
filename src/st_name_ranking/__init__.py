@@ -9,6 +9,14 @@ Canonical imports live in the domain subpackages:
 - ``st_name_ranking.learning``
 - ``st_name_ranking.persistence``
 
-Top-level database/features-style modules are deprecated compatibility shims
-for older callers. Internal code should use canonical subpackage imports.
+Stable root-level shared modules:
+
+- ``st_name_ranking.types`` owns cross-package record types.
+- ``st_name_ranking.name_normalization`` owns loader/persistence name cleanup.
+- ``st_name_ranking.phonetic_similarity`` owns generic phonetic scoring.
+
+Top-level database/features/UI-style modules are deprecated compatibility shims
+for older callers. Internal code should use canonical subpackage imports. The
+internal ``st_name_ranking._compat`` module exists only to implement those
+aliases.
 """

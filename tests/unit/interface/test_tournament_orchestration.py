@@ -2,9 +2,8 @@
 
 from unittest.mock import Mock
 
-from st_name_ranking import tournament_orchestration
 from st_name_ranking.active_learning.lazy_updates import ModelUpdateStatus
-from st_name_ranking.interface import tournament_session
+from st_name_ranking.interface import tournament_orchestration, tournament_session
 
 
 def test_get_current_pair_reuses_valid_session_candidates(monkeypatch):

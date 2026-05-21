@@ -60,9 +60,14 @@ and tests.
 | Capability                          | Canonical module                                     |
 | ----------------------------------- | ---------------------------------------------------- |
 | Streamlit app entrypoint            | `st_name_ranking.interface.main`                     |
-| UI rendering helpers                | `st_name_ranking.interface.ui`                       |
+| Tournament UI                       | `st_name_ranking.interface.tournament_ui`            |
+| Rankings UI                         | `st_name_ranking.interface.rankings_ui`              |
+| Binary filter UI                    | `st_name_ranking.interface.filter_ui`                |
+| Similarity-search UI                | `st_name_ranking.interface.similarity_ui`            |
 | UI app actions                      | `st_name_ranking.interface.app_actions`              |
 | Tournament state helpers            | `st_name_ranking.interface.tournament_session`       |
+| Tournament orchestration            | `st_name_ranking.interface.tournament_orchestration` |
+| Similarity search                   | `st_name_ranking.interface.similarity_search`        |
 | Active-learning selection           | `st_name_ranking.active_learning.selection`          |
 | Candidate queue                     | `st_name_ranking.active_learning.queue`              |
 | Comparison/model refresh            | `st_name_ranking.active_learning.lazy_updates`       |
@@ -82,6 +87,23 @@ and tests.
 | Origin classification orchestration | `st_name_ranking.classification.classify_origins`    |
 | Origin classifier implementation    | `st_name_ranking.classification.origin_classifier`   |
 | CLI                                 | `st_name_ranking.commands.cli`                       |
+
+## Shared Root Modules
+
+Only a small set of root modules are stable shared infrastructure:
+
+| Module                                | Owner and purpose                                                    |
+| ------------------------------------- | -------------------------------------------------------------------- |
+| `st_name_ranking.types`               | Shared record types used across interface, learning, and persistence |
+| `st_name_ranking.name_normalization`  | Shared name cleanup for submodule loading and persistence sync       |
+| `st_name_ranking.phonetic_similarity` | Generic phonetic scoring used by active learning and tests           |
+
+Everything else at the package root is either internal
+(`st_name_ranking._compat`) or a deprecated compatibility shim that forwards to
+a package-owned module. Examples include `st_name_ranking.database`,
+`st_name_ranking.features`, `st_name_ranking.ui`, `st_name_ranking.similarity`,
+and `st_name_ranking.tournament_orchestration`. New code should not import those
+shim paths.
 
 ## Component Architecture
 
@@ -425,7 +447,7 @@ $ uv run st-name-ranking db features rebuild
 
 ### UI Enhancements
 
-1. Add new **Streamlit** components to `ui.py`
+1. Add new **Streamlit** components to the focused module under `interface/`
 2. Extend filter options in sidebar
 3. Add new visualization components
 

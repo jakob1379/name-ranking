@@ -23,7 +23,9 @@ import st_name_ranking.interface.filter_ui as filter_ui
 import st_name_ranking.interface.main as main
 import st_name_ranking.interface.name_queue as name_queue
 import st_name_ranking.interface.rankings_ui as rankings_ui
+import st_name_ranking.interface.similarity_search as similarity_search
 import st_name_ranking.interface.similarity_ui as similarity_ui
+import st_name_ranking.interface.tournament_orchestration as tournament_orchestration
 import st_name_ranking.interface.tournament_ui as tournament_ui
 import st_name_ranking.interface.ui as ui
 import st_name_ranking.learning.features as features
@@ -35,7 +37,6 @@ import st_name_ranking.persistence.database_io as database_io
 import st_name_ranking.persistence.feature_cache as feature_cache
 import st_name_ranking.persistence.feature_store as feature_store
 import st_name_ranking.persistence.sync_store as sync_store
-import st_name_ranking.tournament_orchestration as tournament_orchestration
 
 MODULE_CONTRACTS = [
     (app_actions, "setup_session_state"),
@@ -62,6 +63,7 @@ MODULE_CONTRACTS = [
     (queue, "QueueManager"),
     (rankings_ui, "render_rankings"),
     (selection, "select_candidate_pairs"),
+    (similarity_search, "get_string_similarity_scores"),
     (similarity_ui, "render_similarity"),
     (sync_store, "sync_names_with_submodule"),
     (take_screenshots, "capture_screenshots"),
