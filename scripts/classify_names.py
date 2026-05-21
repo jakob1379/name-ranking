@@ -15,7 +15,8 @@ from pathlib import Path
 
 def _ensure_src_path() -> None:
     src_path = Path(__file__).parent.parent / "src"
-    sys.path.insert(0, str(src_path))
+    if str(src_path) not in sys.path:
+        sys.path.insert(0, str(src_path))
 
 
 def main(argv: Sequence[str] | None = None) -> int:

@@ -14,6 +14,7 @@ import argparse
 import sys
 from pathlib import Path
 
+from st_name_ranking.classification.classify_origins import classify_all_names
 from st_name_ranking.persistence.database import (
     get_stats,
     init_database,
@@ -63,8 +64,6 @@ def main() -> None:
     if args.classify:
         print("Running initial origin classification...")
         try:
-            from st_name_ranking.classification.classify_origins import classify_all_names  # noqa: PLC0415
-
             classified = classify_all_names()
             print(f"✓ Classified {classified} names")
         except ImportError:
