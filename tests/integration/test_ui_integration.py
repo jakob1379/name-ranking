@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 
 from st_name_ranking.active_learning.lazy_updates import ModelUpdateStatus
-from st_name_ranking.interface import ui
+from st_name_ranking.interface import rankings_ui, similarity_ui, tournament_ui
 from st_name_ranking.tournament_orchestration import TournamentRound, VoteResult
 from st_name_ranking.types import PreferenceStats
 
@@ -74,7 +74,7 @@ def _mock_tournament_streamlit(*, clicked_key: str | None):
 
 
 def _render_tournament_body(names: list[str]) -> None:
-    ui.render_tournament.__wrapped__(names)
+    tournament_ui.render_tournament.__wrapped__(names)
 
 
 class TestUIIntegration:
@@ -114,10 +114,10 @@ class TestUIIntegration:
         }
 
         with (
-            patch("st_name_ranking.interface.ui.st", mock_st),
-            patch("st_name_ranking.interface.ui.get_preference_stats_by_gender") as mock_gender,
-            patch("st_name_ranking.interface.ui.get_preference_stats_by_origin") as mock_origin,
-            patch("st_name_ranking.interface.ui.get_preference_stats_by_phonetic") as mock_phonetic,
+            patch("st_name_ranking.interface.rankings_ui.st", mock_st),
+            patch("st_name_ranking.interface.rankings_ui.get_preference_stats_by_gender") as mock_gender,
+            patch("st_name_ranking.interface.rankings_ui.get_preference_stats_by_origin") as mock_origin,
+            patch("st_name_ranking.interface.rankings_ui.get_preference_stats_by_phonetic") as mock_phonetic,
         ):
             # Setup mock returns
             mock_gender.return_value = mock_gender_stats
@@ -125,7 +125,7 @@ class TestUIIntegration:
             mock_phonetic.return_value = mock_phonetic_stats
 
             # Call the function
-            ui.render_preferences_panel()
+            rankings_ui.render_preferences_panel()
 
             # Verify overall subheader was called
             mock_st.subheader.assert_any_call("Overall Preferences")
@@ -178,10 +178,10 @@ class TestUIIntegration:
         mock_st.expander.return_value = mock_expander
 
         with (
-            patch("st_name_ranking.interface.ui.st", mock_st),
-            patch("st_name_ranking.interface.ui.get_preference_stats_by_gender") as mock_gender,
-            patch("st_name_ranking.interface.ui.get_preference_stats_by_origin") as mock_origin,
-            patch("st_name_ranking.interface.ui.get_preference_stats_by_phonetic") as mock_phonetic,
+            patch("st_name_ranking.interface.rankings_ui.st", mock_st),
+            patch("st_name_ranking.interface.rankings_ui.get_preference_stats_by_gender") as mock_gender,
+            patch("st_name_ranking.interface.rankings_ui.get_preference_stats_by_origin") as mock_origin,
+            patch("st_name_ranking.interface.rankings_ui.get_preference_stats_by_phonetic") as mock_phonetic,
         ):
             # Setup mock returns (empty dicts)
             mock_gender.return_value = {}
@@ -189,7 +189,7 @@ class TestUIIntegration:
             mock_phonetic.return_value = {}
 
             # Call the function
-            ui.render_preferences_panel()
+            rankings_ui.render_preferences_panel()
 
             # Verify subheader was called
             mock_st.subheader.assert_called_with("Overall Preferences")
@@ -227,10 +227,10 @@ class TestUIIntegration:
         }
 
         with (
-            patch("st_name_ranking.interface.ui.st", mock_st),
-            patch("st_name_ranking.interface.ui.get_preference_stats_by_gender") as mock_gender,
-            patch("st_name_ranking.interface.ui.get_preference_stats_by_origin") as mock_origin,
-            patch("st_name_ranking.interface.ui.get_preference_stats_by_phonetic") as mock_phonetic,
+            patch("st_name_ranking.interface.rankings_ui.st", mock_st),
+            patch("st_name_ranking.interface.rankings_ui.get_preference_stats_by_gender") as mock_gender,
+            patch("st_name_ranking.interface.rankings_ui.get_preference_stats_by_origin") as mock_origin,
+            patch("st_name_ranking.interface.rankings_ui.get_preference_stats_by_phonetic") as mock_phonetic,
         ):
             # Setup mock returns
             mock_gender.return_value = mock_gender_stats
@@ -238,7 +238,7 @@ class TestUIIntegration:
             mock_phonetic.return_value = None  # None also triggers info message
 
             # Call the function
-            ui.render_preferences_panel()
+            rankings_ui.render_preferences_panel()
 
             # Verify one dataframe displayed (for gender)
             assert mock_st.dataframe.call_count == 1
@@ -260,9 +260,9 @@ class TestUIIntegration:
         mock_st = MagicMock()
         mock_st.metric = MagicMock()
 
-        with patch("st_name_ranking.interface.ui.st", mock_st):
+        with patch("st_name_ranking.interface.tournament_ui.st", mock_st):
             # Call with numeric delta
-            ui.display_name_with_rating("Anna", 1650.5, delta=25.3)
+            tournament_ui.display_name_with_rating("Anna", 1650.5, delta=25.3)
 
             # Verify metric called with correct parameters
             mock_st.metric.assert_called_once()
@@ -278,9 +278,9 @@ class TestUIIntegration:
         mock_st = MagicMock()
         mock_st.metric = MagicMock()
 
-        with patch("st_name_ranking.interface.ui.st", mock_st):
+        with patch("st_name_ranking.interface.tournament_ui.st", mock_st):
             # Call with string delta
-            ui.display_name_with_rating("Peter", 1420.0, delta="+20")
+            tournament_ui.display_name_with_rating("Peter", 1420.0, delta="+20")
 
             # Verify metric called with correct parameters
             mock_st.metric.assert_called_once()
@@ -296,9 +296,9 @@ class TestUIIntegration:
         mock_st = MagicMock()
         mock_st.metric = MagicMock()
 
-        with patch("st_name_ranking.interface.ui.st", mock_st):
+        with patch("st_name_ranking.interface.tournament_ui.st", mock_st):
             # Call without delta
-            ui.display_name_with_rating("Maria", 1550.0)
+            tournament_ui.display_name_with_rating("Maria", 1550.0)
 
             # Verify metric called with correct parameters
             mock_st.metric.assert_called_once()
@@ -314,9 +314,9 @@ class TestUIIntegration:
         mock_st = MagicMock()
         mock_st.metric = MagicMock()
 
-        with patch("st_name_ranking.interface.ui.st", mock_st):
+        with patch("st_name_ranking.interface.tournament_ui.st", mock_st):
             # Call with negative numeric delta
-            ui.display_name_with_rating("John", 1480.0, delta=-15.7)
+            tournament_ui.display_name_with_rating("John", 1480.0, delta=-15.7)
 
             # Verify metric called with correct parameters
             mock_st.metric.assert_called_once()
@@ -347,14 +347,14 @@ class TestUIIntegration:
         mock_results = [("Anne", 0.9), ("Ann", 0.8), ("Annie", 0.7)]
 
         with (
-            patch("st_name_ranking.interface.ui.st", mock_st),
-            patch("st_name_ranking.interface.ui.get_string_similarity_scores") as mock_string_scores,
-            patch("st_name_ranking.interface.ui.load_embedding_model") as mock_load_model,
+            patch("st_name_ranking.interface.similarity_ui.st", mock_st),
+            patch("st_name_ranking.interface.similarity_ui.get_string_similarity_scores") as mock_string_scores,
+            patch("st_name_ranking.interface.similarity_ui.load_embedding_model") as mock_load_model,
         ):
             mock_string_scores.return_value = mock_results
 
             # Call with test names
-            ui.render_similarity(["Anna", "Peter", "Maria", "Anne", "Ann", "Annie"])
+            similarity_ui.render_similarity(["Anna", "Peter", "Maria", "Anne", "Ann", "Annie"])
 
             # Verify UI elements
             mock_st.header.assert_called_with("Similarity Search")
@@ -395,15 +395,15 @@ class TestUIIntegration:
         mock_results = [("Anne", 0.92), ("Annie", 0.85), ("Ann", 0.78)]
 
         with (
-            patch("st_name_ranking.interface.ui.st", mock_st),
-            patch("st_name_ranking.interface.ui.load_embedding_model") as mock_load_model,
-            patch("st_name_ranking.interface.ui.get_vector_similarity_scores") as mock_vector_scores,
+            patch("st_name_ranking.interface.similarity_ui.st", mock_st),
+            patch("st_name_ranking.interface.similarity_ui.load_embedding_model") as mock_load_model,
+            patch("st_name_ranking.interface.similarity_ui.get_vector_similarity_scores") as mock_vector_scores,
         ):
             mock_load_model.return_value = mock_model
             mock_vector_scores.return_value = mock_results
 
             # Call with test names
-            ui.render_similarity(["Anna", "Peter", "Maria"])
+            similarity_ui.render_similarity(["Anna", "Peter", "Maria"])
 
             # Verify UI elements
             mock_st.header.assert_called_with("Similarity Search")
@@ -432,12 +432,12 @@ class TestUIIntegration:
         mock_st.dataframe = MagicMock()
 
         with (
-            patch("st_name_ranking.interface.ui.st", mock_st),
-            patch("st_name_ranking.interface.ui.get_string_similarity_scores") as mock_string_scores,
-            patch("st_name_ranking.interface.ui.load_embedding_model") as mock_load_model,
+            patch("st_name_ranking.interface.similarity_ui.st", mock_st),
+            patch("st_name_ranking.interface.similarity_ui.get_string_similarity_scores") as mock_string_scores,
+            patch("st_name_ranking.interface.similarity_ui.load_embedding_model") as mock_load_model,
         ):
             # Call with test names
-            ui.render_similarity(["Anna", "Peter", "Maria"])
+            similarity_ui.render_similarity(["Anna", "Peter", "Maria"])
 
             # Verify UI elements rendered
             mock_st.header.assert_called_with("Similarity Search")
@@ -463,20 +463,26 @@ class TestUIIntegration:
         names = ["Anna", "Bo", "Maria", "Peter"]
 
         with (
-            patch("st_name_ranking.interface.ui.st", mock_st),
+            patch("st_name_ranking.interface.tournament_ui.st", mock_st),
             patch("st_name_ranking.interface.tournament_session.st", mock_st),
-            patch("st_name_ranking.interface.ui.display_name_with_rating") as mock_display,
+            patch("st_name_ranking.interface.tournament_ui.display_name_with_rating") as mock_display,
             patch(
-                "st_name_ranking.interface.ui.get_or_start_tournament_queue",
+                "st_name_ranking.interface.tournament_ui.get_or_start_tournament_queue",
                 return_value=manager,
             ) as mock_get_manager,
-            patch("st_name_ranking.interface.ui.get_current_pair", return_value=("Anna", "Bo")) as mock_get_pair,
             patch(
-                "st_name_ranking.interface.ui.get_queue_manager_stats",
+                "st_name_ranking.interface.tournament_ui.get_current_pair",
+                return_value=("Anna", "Bo"),
+            ) as mock_get_pair,
+            patch(
+                "st_name_ranking.interface.tournament_ui.get_queue_manager_stats",
                 return_value={"queue_size": 2, "target_size": 5},
             ) as mock_stats,
-            patch("st_name_ranking.interface.ui.prepare_tournament_round", return_value=round_state) as mock_prepare,
-            patch("st_name_ranking.interface.ui.record_tournament_vote") as mock_record_vote,
+            patch(
+                "st_name_ranking.interface.tournament_ui.prepare_tournament_round",
+                return_value=round_state,
+            ) as mock_prepare,
+            patch("st_name_ranking.interface.tournament_ui.record_tournament_vote") as mock_record_vote,
         ):
             _render_tournament_body(names)
 
@@ -509,17 +515,20 @@ class TestUIIntegration:
         )
 
         with (
-            patch("st_name_ranking.interface.ui.st", mock_st),
+            patch("st_name_ranking.interface.tournament_ui.st", mock_st),
             patch("st_name_ranking.interface.tournament_session.st", mock_st),
-            patch("st_name_ranking.interface.ui.display_name_with_rating") as mock_display,
-            patch("st_name_ranking.interface.ui.get_or_start_tournament_queue", return_value=manager),
-            patch("st_name_ranking.interface.ui.get_current_pair", return_value=("Anna", "Bo")),
+            patch("st_name_ranking.interface.tournament_ui.display_name_with_rating") as mock_display,
+            patch("st_name_ranking.interface.tournament_ui.get_or_start_tournament_queue", return_value=manager),
+            patch("st_name_ranking.interface.tournament_ui.get_current_pair", return_value=("Anna", "Bo")),
             patch(
-                "st_name_ranking.interface.ui.get_queue_manager_stats",
+                "st_name_ranking.interface.tournament_ui.get_queue_manager_stats",
                 return_value={"queue_size": 1, "target_size": 5},
             ),
-            patch("st_name_ranking.interface.ui.prepare_tournament_round", return_value=round_state),
-            patch("st_name_ranking.interface.ui.record_tournament_vote", return_value=vote_result) as mock_record_vote,
+            patch("st_name_ranking.interface.tournament_ui.prepare_tournament_round", return_value=round_state),
+            patch(
+                "st_name_ranking.interface.tournament_ui.record_tournament_vote",
+                return_value=vote_result,
+            ) as mock_record_vote,
         ):
             _render_tournament_body(names)
 
@@ -554,17 +563,20 @@ class TestUIIntegration:
         )
 
         with (
-            patch("st_name_ranking.interface.ui.st", mock_st),
+            patch("st_name_ranking.interface.tournament_ui.st", mock_st),
             patch("st_name_ranking.interface.tournament_session.st", mock_st),
-            patch("st_name_ranking.interface.ui.display_name_with_rating") as mock_display,
-            patch("st_name_ranking.interface.ui.get_or_start_tournament_queue", return_value=manager),
-            patch("st_name_ranking.interface.ui.get_current_pair", return_value=("Anna", "Bo")),
+            patch("st_name_ranking.interface.tournament_ui.display_name_with_rating") as mock_display,
+            patch("st_name_ranking.interface.tournament_ui.get_or_start_tournament_queue", return_value=manager),
+            patch("st_name_ranking.interface.tournament_ui.get_current_pair", return_value=("Anna", "Bo")),
             patch(
-                "st_name_ranking.interface.ui.get_queue_manager_stats",
+                "st_name_ranking.interface.tournament_ui.get_queue_manager_stats",
                 return_value={"queue_size": 1, "target_size": 5},
             ),
-            patch("st_name_ranking.interface.ui.prepare_tournament_round", return_value=round_state),
-            patch("st_name_ranking.interface.ui.record_tournament_vote", return_value=vote_result) as mock_record_vote,
+            patch("st_name_ranking.interface.tournament_ui.prepare_tournament_round", return_value=round_state),
+            patch(
+                "st_name_ranking.interface.tournament_ui.record_tournament_vote",
+                return_value=vote_result,
+            ) as mock_record_vote,
         ):
             _render_tournament_body(names)
 
@@ -601,8 +613,8 @@ class TestUIIntegration:
         )
 
         names = [f"Name{i}" for i in range(12)]
-        with patch("st_name_ranking.interface.ui.st", mock_st):
-            ui.render_rankings(names)
+        with patch("st_name_ranking.interface.rankings_ui.st", mock_st):
+            rankings_ui.render_rankings(names)
 
         assert mock_st.dataframe.call_count >= 1
         mock_st.info.assert_any_call("Preference landscape appears after at least 25 rated names.")
@@ -646,11 +658,14 @@ class TestUIIntegration:
         features = np.random.randn(30, 6)
 
         with (
-            patch("st_name_ranking.interface.ui.st", mock_st),
-            patch("st_name_ranking.interface.ui.get_or_initialize_active_learning_model", return_value=mock_model),
-            patch("st_name_ranking.interface.ui.get_names_features", return_value=features),
+            patch("st_name_ranking.interface.rankings_ui.st", mock_st),
+            patch(
+                "st_name_ranking.interface.rankings_ui.get_or_initialize_active_learning_model",
+                return_value=mock_model,
+            ),
+            patch("st_name_ranking.interface.rankings_ui.get_names_features", return_value=features),
         ):
-            ui.render_rankings(names)
+            rankings_ui.render_rankings(names)
 
         assert mock_st.dataframe.call_count >= 3
         assert mock_st.selectbox.call_count == 0

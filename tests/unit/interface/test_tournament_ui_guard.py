@@ -3,7 +3,7 @@
 from unittest.mock import Mock
 
 from st_name_ranking.active_learning.lazy_updates import ModelUpdateStatus
-from st_name_ranking.interface import ui
+from st_name_ranking.interface import tournament_ui as ui
 from st_name_ranking.tournament_orchestration import VoteResult
 
 

@@ -18,13 +18,11 @@ from st_name_ranking.interface.app_actions import (
     sync_names_from_submodule,
 )
 from st_name_ranking.interface.filter_state import load_name_inclusions_json
-from st_name_ranking.interface.ui import (
-    MS_PER_SECOND,
-    render_binary_filter,
-    render_rankings,
-    render_similarity,
-    render_tournament,
-)
+from st_name_ranking.interface.filter_ui import render_binary_filter
+from st_name_ranking.interface.rankings_ui import render_rankings
+from st_name_ranking.interface.similarity_ui import render_similarity
+from st_name_ranking.interface.tournament_ui import render_tournament
+from st_name_ranking.interface.ui_support import MS_PER_SECOND
 from st_name_ranking.persistence import database
 from st_name_ranking.persistence.data_loader import DataLoaderError, load_names_by_gender
 from st_name_ranking.persistence.database import initialize_ratings
