@@ -87,7 +87,7 @@ def test_extracted_features_work_with_model_update(initialized_db, test_names_wi
     name_a = test_names_with_metadata[0]  # Anna
     name_b = test_names_with_metadata[1]  # Peter
 
-    # Extract features using utils (queries database)
+    # Extract features using canonical helpers (queries database)
     features_a = get_name_features(name_a)
     features_b = get_name_features(name_b)
 
@@ -134,11 +134,11 @@ def test_batch_and_single_extraction_equivalent(initialized_db, test_names_with_
     # Select subset of names for testing
     test_subset = test_names_with_metadata[:4]
 
-    # Method 1: Individual extraction via utils
+    # Method 1: Individual extraction via selection helpers
     individual_features = [get_name_features(name) for name in test_subset]
     individual_matrix = np.stack(individual_features, axis=0)
 
-    # Method 2: Batch extraction via utils
+    # Method 2: Batch extraction via selection helpers
     batch_matrix = get_names_features(test_subset)
 
     # Method 3: Direct FeatureExtractor batch_extract
@@ -215,7 +215,7 @@ def test_feature_dimensions_consistent(initialized_db, test_names_with_metadata)
         features_single = extractor.extract(name, gender, origin)
         assert features_single.shape[0] == expected_dim, f"Dimension mismatch for {name}"
 
-        # Via utils (queries DB)
+        # Via selection helpers (queries DB)
         if name in test_names_with_metadata:
             features_util = get_name_features(name)
             assert features_util.shape[0] == expected_dim, f"Utils dimension mismatch for {name}"

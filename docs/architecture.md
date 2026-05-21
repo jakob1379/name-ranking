@@ -54,8 +54,8 @@ Comparisons: 0
 
 Use the package-owned modules below for new code. Top-level modules such as
 `st_name_ranking.database`, `st_name_ranking.features`, `st_name_ranking.model`,
-`st_name_ranking.ui`, and `st_name_ranking.utils` are deprecated compatibility
-shims for older callers and tests.
+and `st_name_ranking.ui` are deprecated compatibility shims for older callers
+and tests.
 
 | Capability                          | Canonical module                                     |
 | ----------------------------------- | ---------------------------------------------------- |
@@ -153,8 +153,8 @@ Stores 5 core tables:
   for responsive voting and reports refill latency.
 - **Lazy updates**: `active_learning/lazy_updates.py` records comparisons,
   refreshes the model, and synchronizes model-derived ratings.
-- **Compatibility facade**: `utils.py` only re-exports legacy helpers for older
-  callers; new code should import active-learning services from this package.
+- **No root utilities facade**: active-learning helpers are imported from this
+  package directly; the old root `utils.py` facade has been removed.
 
 #### Rating Synchronization
 

@@ -418,7 +418,7 @@ class TestBatchSelection:
 
         names = ["Anna", "Anne", "Peter", "Petra", "Jens", "Jonas"]
 
-        # Use the utils function for batch selection
+        # Use the selection function for batch selection
         # Mock the model to avoid database dependencies in feature extraction
         with patch(
             "st_name_ranking.active_learning.selection.get_or_initialize_active_learning_model",
