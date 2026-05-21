@@ -374,7 +374,7 @@ def extract_sonority_features(name: str) -> dict[str, float]:
     hardness_ratio = hard_count / soft_total
 
     roundness_sum = sum(ROUNDNESS.get(c, 0) for c in name_lower)
-    roundness_score = roundness_sum / length if length > 0 else 0.0
+    roundness_score = roundness_sum / length
 
     liquid_count = sum(1 for c in name_lower if c in {"l", "r"})
     liquid_density = liquid_count / length
