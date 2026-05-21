@@ -84,7 +84,6 @@ class TestPullSubmoduleUpdates:
             "sys.modules",
             {
                 "ethnidata": ethnidata_mock,
-                "st_name_ranking.classify_origins": classify_origins_mock,
                 "st_name_ranking.classification.classify_origins": classify_origins_mock,
                 "classify_origins": classify_origins_mock,
             },
@@ -158,7 +157,7 @@ class TestPullSubmoduleUpdates:
         with patch.dict(
             "sys.modules",
             {
-                "st_name_ranking.classify_origins": classify_origins_mock,
+                "st_name_ranking.classification.classify_origins": classify_origins_mock,
             },
         ):
             result = app_actions.pull_submodule_updates(classify_origins=True)

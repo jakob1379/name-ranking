@@ -6,7 +6,7 @@ class TestPreferenceStatistics:
 
     def test_preference_stats_empty(self, initialized_db):
         """Test preference statistics when no comparisons exist."""
-        from st_name_ranking.database import (
+        from st_name_ranking.persistence.database import (
             get_preference_stats_by_gender,
             get_preference_stats_by_origin,
             get_preference_stats_by_phonetic,
@@ -23,7 +23,7 @@ class TestPreferenceStatistics:
 
     def test_preference_stats_by_gender(self, initialized_db):
         """Test preference statistics grouped by gender."""
-        from st_name_ranking.database import (
+        from st_name_ranking.persistence.database import (
             get_connection,
             get_preference_stats_by_gender,
             get_preference_stats_by_origin,
@@ -125,7 +125,7 @@ class TestPreferenceStatistics:
 
     def test_preference_stats_by_origin(self, initialized_db):
         """Test preference statistics grouped by origin region."""
-        from st_name_ranking.database import (
+        from st_name_ranking.persistence.database import (
             get_connection,
             get_preference_stats_by_origin,
         )
@@ -196,7 +196,7 @@ class TestPreferenceStatistics:
 
     def test_preference_stats_by_phonetic(self, initialized_db):
         """Test preference statistics grouped by phonetic code."""
-        from st_name_ranking.database import (
+        from st_name_ranking.persistence.database import (
             get_connection,
             get_preference_stats_by_phonetic,
         )
@@ -267,7 +267,7 @@ class TestPreferenceStatistics:
 
     def test_preference_stats_multiple_comparisons_same_name(self, initialized_db):
         """Test preference statistics when a name appears in multiple comparisons."""
-        from st_name_ranking.database import (
+        from st_name_ranking.persistence.database import (
             get_connection,
             get_preference_stats_by_gender,
         )

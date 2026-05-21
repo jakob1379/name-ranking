@@ -8,8 +8,8 @@ class TestBradleyTerryModelIntegration:
 
     def test_initialize_model_if_needed(self, initialized_db):
         """Test model initialization and database persistence."""
-        from st_name_ranking.database import get_connection
-        from st_name_ranking.model import initialize_model_if_needed
+        from st_name_ranking.learning.model import initialize_model_if_needed
+        from st_name_ranking.persistence.database import get_connection
 
         # Define feature names (must match what features module uses)
         # We'll use a simple known set
@@ -71,9 +71,9 @@ class TestBradleyTerryModelIntegration:
 
     def test_model_update_and_save(self, initialized_db):
         """Test model update with comparisons and database persistence."""
-        from st_name_ranking.database import get_connection
-        from st_name_ranking.features import FeatureExtractor
-        from st_name_ranking.model import BradleyTerryModel
+        from st_name_ranking.learning.features import FeatureExtractor
+        from st_name_ranking.learning.model import BradleyTerryModel
+        from st_name_ranking.persistence.database import get_connection
 
         # Create feature extractor to get consistent feature names
         extractor = FeatureExtractor()
@@ -129,8 +129,8 @@ class TestBradleyTerryModelIntegration:
 
     def test_model_select_pair(self, initialized_db):
         """Test pair selection with Thompson sampling."""
-        from st_name_ranking.features import FeatureExtractor
-        from st_name_ranking.model import BradleyTerryModel
+        from st_name_ranking.learning.features import FeatureExtractor
+        from st_name_ranking.learning.model import BradleyTerryModel
 
         extractor = FeatureExtractor()
         feature_names = extractor.get_feature_names()
@@ -139,7 +139,7 @@ class TestBradleyTerryModelIntegration:
         model = BradleyTerryModel(feature_names)
 
         # Insert test names
-        from st_name_ranking.database import get_connection
+        from st_name_ranking.persistence.database import get_connection
 
         with get_connection() as conn:
             conn.executemany(
@@ -176,15 +176,15 @@ class TestBradleyTerryModelIntegration:
 
     def test_model_select_top_k_pairs(self, initialized_db):
         """Test batch pair selection."""
-        from st_name_ranking.features import FeatureExtractor
-        from st_name_ranking.model import BradleyTerryModel
+        from st_name_ranking.learning.features import FeatureExtractor
+        from st_name_ranking.learning.model import BradleyTerryModel
 
         extractor = FeatureExtractor()
         feature_names = extractor.get_feature_names()
         model = BradleyTerryModel(feature_names)
 
         # Insert test names
-        from st_name_ranking.database import get_connection
+        from st_name_ranking.persistence.database import get_connection
 
         with get_connection() as conn:
             conn.executemany(
@@ -233,15 +233,15 @@ class TestBradleyTerryModelIntegration:
 
     def test_model_update_batch(self, initialized_db):
         """Test batch update with multiple comparisons."""
-        from st_name_ranking.features import FeatureExtractor
-        from st_name_ranking.model import BradleyTerryModel
+        from st_name_ranking.learning.features import FeatureExtractor
+        from st_name_ranking.learning.model import BradleyTerryModel
 
         extractor = FeatureExtractor()
         feature_names = extractor.get_feature_names()
         model = BradleyTerryModel(feature_names)
 
         # Insert test names
-        from st_name_ranking.database import get_connection
+        from st_name_ranking.persistence.database import get_connection
 
         with get_connection() as conn:
             conn.executemany(
@@ -285,15 +285,15 @@ class TestBradleyTerryModelIntegration:
 
     def test_model_update_both_disliked(self, initialized_db):
         """Test update_both_disliked adds two comparisons."""
-        from st_name_ranking.features import FeatureExtractor
-        from st_name_ranking.model import BradleyTerryModel
+        from st_name_ranking.learning.features import FeatureExtractor
+        from st_name_ranking.learning.model import BradleyTerryModel
 
         extractor = FeatureExtractor()
         feature_names = extractor.get_feature_names()
         model = BradleyTerryModel(feature_names)
 
         # Insert test names
-        from st_name_ranking.database import get_connection
+        from st_name_ranking.persistence.database import get_connection
 
         with get_connection() as conn:
             conn.executemany(

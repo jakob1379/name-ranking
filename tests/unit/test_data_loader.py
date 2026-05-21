@@ -1,11 +1,11 @@
-"""Tests for st_name_ranking.data_loader module."""
+"""Tests for st_name_ranking.persistence.data_loader module."""
 
 import sqlite3
 from unittest.mock import patch
 
 import pytest
 
-from st_name_ranking import data_loader
+from st_name_ranking.persistence import data_loader
 
 
 class TestIsValidName:
@@ -108,7 +108,7 @@ class TestLoadRatings:
 
     def test_load_ratings_with_data(self, initialized_db):
         """Test loading ratings when database has ratings."""
-        from st_name_ranking.database import get_connection, update_rating
+        from st_name_ranking.persistence.database import get_connection, update_rating
 
         # Insert a name and rating
         with get_connection() as conn:
@@ -125,7 +125,7 @@ class TestLoadRatings:
         assert "Anna" in ratings
         assert ratings["Anna"] == 1600.0
 
-    @patch("st_name_ranking.data_loader.database.init_database")
+    @patch("st_name_ranking.persistence.data_loader.database.init_database")
     def test_load_ratings_database_error(self, mock_init):
         """Test load_ratings reports database errors distinctly."""
         mock_init.side_effect = sqlite3.Error("Database error")
@@ -138,7 +138,7 @@ class TestSaveRatings:
 
     def test_save_ratings_new_name(self, initialized_db):
         """Test saving ratings for a new name."""
-        from st_name_ranking.database import get_connection
+        from st_name_ranking.persistence.database import get_connection
 
         # First ensure name exists
         with get_connection() as conn:
@@ -167,7 +167,7 @@ class TestSaveRatings:
 
     def test_save_ratings_multiple_names(self, initialized_db):
         """Test saving ratings for multiple names."""
-        from st_name_ranking.database import get_connection
+        from st_name_ranking.persistence.database import get_connection
 
         # Insert names
         with get_connection() as conn:
@@ -207,7 +207,7 @@ class TestInitializeOrLoadRatings:
 
     def test_load_existing_ratings(self, initialized_db):
         """Test loading existing ratings without reinitializing."""
-        from st_name_ranking.database import get_connection, update_rating
+        from st_name_ranking.persistence.database import get_connection, update_rating
 
         # Insert names and set ratings
         with get_connection() as conn:

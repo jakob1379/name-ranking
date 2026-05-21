@@ -20,7 +20,7 @@ from unittest.mock import patch
 import pytest
 from typer.testing import CliRunner
 
-from st_name_ranking.cli import app
+from st_name_ranking.commands.cli import app
 
 # -----------------------------------------------------------------------------
 # Fixtures
@@ -50,7 +50,7 @@ def real_db_path(temp_db_path):
 
     This patches the database module to use the temp path.
     """
-    from st_name_ranking import database
+    from st_name_ranking.persistence import database
 
     original_path = database.get_db_path()
     database.set_db_path(temp_db_path)
@@ -106,7 +106,7 @@ def initialized_real_db(real_db_path, mock_submodule_with_names):
     Returns the database path after init_database() and sync_names_with_submodule()
     have been called with real operations.
     """
-    from st_name_ranking.database import get_connection, init_database, sync_names_with_submodule
+    from st_name_ranking.persistence.database import get_connection, init_database, sync_names_with_submodule
 
     # Initialize database schema
     init_database()
@@ -268,7 +268,7 @@ class TestCLIInit:
         """Test that init command creates all required database tables."""
 
         # Mock the submodule sync to return predictable results
-        with patch("st_name_ranking.cli.sync_names_with_submodule") as mock_sync:
+        with patch("st_name_ranking.commands.cli.sync_names_with_submodule") as mock_sync:
             mock_sync.return_value = 10  # Simulate 10 names synced
 
             result = cli_runner.invoke(app, ["init"])
@@ -297,10 +297,10 @@ class TestCLIInit:
         """Test that init command syncs names from submodule to database."""
 
         # Mock sync to use our test submodule
-        with patch("st_name_ranking.cli.sync_names_with_submodule") as mock_sync:
+        with patch("st_name_ranking.commands.cli.sync_names_with_submodule") as mock_sync:
             # Actually call the real sync with our mock path
             def real_sync():
-                from st_name_ranking.database import sync_names_with_submodule
+                from st_name_ranking.persistence.database import sync_names_with_submodule
 
                 return sync_names_with_submodule(mock_submodule_with_names)
 
@@ -321,7 +321,7 @@ class TestCLIInit:
     def test_init_shows_statistics(self, real_db_path, mock_submodule_with_names, cli_runner):
         """Test that init command displays database statistics after initialization."""
 
-        with patch("st_name_ranking.cli.sync_names_with_submodule") as mock_sync:
+        with patch("st_name_ranking.commands.cli.sync_names_with_submodule") as mock_sync:
             mock_sync.return_value = 10
 
             result = cli_runner.invoke(app, ["init"])
@@ -338,11 +338,11 @@ class TestCLIInit:
     def test_init_with_classify_flag(self, real_db_path, mock_submodule_with_names, cli_runner):
         """Test that init --classify runs classification after initialization."""
 
-        with patch("st_name_ranking.cli.sync_names_with_submodule") as mock_sync:
+        with patch("st_name_ranking.commands.cli.sync_names_with_submodule") as mock_sync:
             mock_sync.return_value = 10
 
             # Mock classify_all_names to actually classify names
-            with patch("st_name_ranking.cli.classify_all_names") as mock_classify:
+            with patch("st_name_ranking.commands.cli.classify_all_names") as mock_classify:
                 mock_classify.return_value = 5  # 5 names classified
 
                 result = cli_runner.invoke(app, ["init", "--classify"])
@@ -361,7 +361,7 @@ class TestCLIInit:
         json_file = empty_submodule / "allenavne.json"
         json_file.write_text(json.dumps([]), encoding="utf-8")
 
-        with patch("st_name_ranking.cli.sync_names_with_submodule") as mock_sync:
+        with patch("st_name_ranking.commands.cli.sync_names_with_submodule") as mock_sync:
             mock_sync.return_value = 0  # No names synced
 
             result = cli_runner.invoke(app, ["init"])
@@ -390,7 +390,7 @@ class TestCLIProcess:
         classify_test_names(initialized_real_db, test_classifications)
 
         # Mock the classification to return predictable results
-        with patch("st_name_ranking.cli.classify_all_names") as mock_classify:
+        with patch("st_name_ranking.commands.cli.classify_all_names") as mock_classify:
             mock_classify.return_value = 5  # Simulate 5 classifications
 
             result = cli_runner.invoke(app, ["process", "--limit", "10"])
@@ -411,7 +411,7 @@ class TestCLIProcess:
             conn.execute("UPDATE names SET origin_region = 'International', origin_confidence = 0.5")
             conn.commit()
 
-        with patch("st_name_ranking.cli.classify_all_names") as mock_classify:
+        with patch("st_name_ranking.commands.cli.classify_all_names") as mock_classify:
             mock_classify.return_value = 0  # No names to classify
 
             result = cli_runner.invoke(app, ["process"])
@@ -422,7 +422,7 @@ class TestCLIProcess:
     def test_process_with_custom_batch_size(self, initialized_real_db, cli_runner):
         """Test that process command respects batch-size parameter."""
 
-        with patch("st_name_ranking.cli.classify_all_names") as mock_classify:
+        with patch("st_name_ranking.commands.cli.classify_all_names") as mock_classify:
             mock_classify.return_value = 3
 
             result = cli_runner.invoke(app, ["process", "--batch-size", "25"])
@@ -435,7 +435,7 @@ class TestCLIProcess:
     def test_process_handles_classification_error(self, initialized_real_db, cli_runner):
         """Test that process handles classification errors gracefully."""
 
-        with patch("st_name_ranking.cli.classify_all_names") as mock_classify:
+        with patch("st_name_ranking.commands.cli.classify_all_names") as mock_classify:
             # Simulate ImportError for ethnidata
             mock_classify.side_effect = ImportError("ethnidata not installed")
 
@@ -574,11 +574,10 @@ class TestCLIModelCommands:
 
     def test_model_reset_clears_model_state(self, initialized_real_db, cli_runner):
         """Test that model-reset actually clears model state in database."""
-        from st_name_ranking import database
-
         # First, add some training data to the model
         from st_name_ranking.active_learning.selection import get_or_initialize_active_learning_model
-        from st_name_ranking.features import FeatureExtractor
+        from st_name_ranking.learning.features import FeatureExtractor
+        from st_name_ranking.persistence import database
 
         model = get_or_initialize_active_learning_model()
         extractor = FeatureExtractor()
@@ -706,10 +705,10 @@ class TestCLIIntegrationFlow:
         """Test complete workflow: init -> process -> stats."""
 
         # Step 1: Initialize database with real sync
-        with patch("st_name_ranking.cli.sync_names_with_submodule") as mock_sync:
+        with patch("st_name_ranking.commands.cli.sync_names_with_submodule") as mock_sync:
             # Actually sync to populate the database
             def real_sync():
-                from st_name_ranking.database import sync_names_with_submodule
+                from st_name_ranking.persistence.database import sync_names_with_submodule
 
                 return sync_names_with_submodule(mock_submodule_with_names)
 
@@ -723,7 +722,7 @@ class TestCLIIntegrationFlow:
         assert name_count > 0, f"Expected names in database, got {name_count}"
 
         # Step 2: Process/classify names (mocked)
-        with patch("st_name_ranking.cli.classify_all_names") as mock_classify:
+        with patch("st_name_ranking.commands.cli.classify_all_names") as mock_classify:
             mock_classify.return_value = 5
 
             process_result = cli_runner.invoke(app, ["process", "--limit", "10"])
@@ -778,10 +777,10 @@ class TestDatabaseStateVerification:
     def test_init_creates_phonetic_codes(self, real_db_path, mock_submodule_with_names, cli_runner):
         """Verify that init creates phonetic codes for names."""
 
-        with patch("st_name_ranking.cli.sync_names_with_submodule") as mock_sync:
+        with patch("st_name_ranking.commands.cli.sync_names_with_submodule") as mock_sync:
             # Actually sync to populate names
             def real_sync():
-                from st_name_ranking.database import sync_names_with_submodule
+                from st_name_ranking.persistence.database import sync_names_with_submodule
 
                 return sync_names_with_submodule(mock_submodule_with_names)
 
@@ -803,7 +802,7 @@ class TestDatabaseStateVerification:
     def test_init_creates_region_mapping(self, real_db_path, mock_submodule_with_names, cli_runner):
         """Verify that init populates region_mapping table."""
 
-        with patch("st_name_ranking.cli.sync_names_with_submodule") as mock_sync:
+        with patch("st_name_ranking.commands.cli.sync_names_with_submodule") as mock_sync:
             mock_sync.return_value = 10
             result = cli_runner.invoke(app, ["init"])
 
@@ -827,7 +826,7 @@ class TestDatabaseStateVerification:
     def test_init_creates_indexes(self, real_db_path, mock_submodule_with_names, cli_runner):
         """Verify that init creates all expected indexes."""
 
-        with patch("st_name_ranking.cli.sync_names_with_submodule") as mock_sync:
+        with patch("st_name_ranking.commands.cli.sync_names_with_submodule") as mock_sync:
             mock_sync.return_value = 10
             result = cli_runner.invoke(app, ["init"])
 

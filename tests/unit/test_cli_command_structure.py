@@ -4,7 +4,7 @@ from unittest.mock import patch
 
 from typer.testing import CliRunner
 
-from st_name_ranking.cli import app
+from st_name_ranking.commands.cli import app
 
 
 def test_top_level_commands_are_serve_and_db() -> None:
@@ -51,7 +51,7 @@ def test_db_origins_classify_is_canonical_classification_entrypoint() -> None:
     """Origin classification should be exposed under the db maintenance group."""
     runner = CliRunner()
 
-    with patch("st_name_ranking.cli.classify_all_names", return_value=7) as classify_all:
+    with patch("st_name_ranking.commands.cli.classify_all_names", return_value=7) as classify_all:
         result = runner.invoke(app, ["db", "origins", "classify", "--limit", "50", "--batch-size", "25"])
 
     assert result.exit_code == 0

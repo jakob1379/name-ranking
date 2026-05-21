@@ -2,7 +2,7 @@
 
 from unittest.mock import MagicMock, patch
 
-from st_name_ranking import classify_origins
+from st_name_ranking.classification import classify_origins
 
 
 class TestClassifyAllNamesIntegration:
@@ -10,7 +10,7 @@ class TestClassifyAllNamesIntegration:
 
     def test_classify_all_names_with_mocked_classifier(self, initialized_db):
         """Test classifying names with mocked ethnidata classifier."""
-        from st_name_ranking.database import get_connection
+        from st_name_ranking.persistence.database import get_connection
 
         # Ensure test name exists in database, unclassified
         with get_connection() as conn:
@@ -29,7 +29,7 @@ class TestClassifyAllNamesIntegration:
         mock_classifier = MagicMock()
         mock_classifier.classify.return_value = ("Nordic", 0.9)
 
-        with patch("st_name_ranking.classify_origins.get_or_create_classifier") as mock_get:
+        with patch("st_name_ranking.classification.classify_origins.get_or_create_classifier") as mock_get:
             mock_get.return_value = mock_classifier
 
             # Call classify_all_names with limit=1

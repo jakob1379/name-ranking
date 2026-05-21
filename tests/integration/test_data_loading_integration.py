@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from st_name_ranking import data_loader, database
+from st_name_ranking.persistence import data_loader, database
 
 # =============================================================================
 # JSON Loading Tests

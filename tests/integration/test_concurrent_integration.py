@@ -22,7 +22,7 @@ multiprocessing.set_start_method("spawn", force=True)
 def _init_in_process(db_path_str):
     """Initialize database in a subprocess (for testing)."""
     sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
-    from st_name_ranking import database
+    from st_name_ranking.persistence import database
 
     database.set_db_path(Path(db_path_str))
 
@@ -42,7 +42,7 @@ def _vote_in_process(args):
     """Cast votes from a subprocess (for testing)."""
     process_id, db_path = args
     sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
-    from st_name_ranking import database
+    from st_name_ranking.persistence import database
 
     database.set_db_path(Path(db_path))
 
@@ -64,7 +64,7 @@ class TestConcurrentDatabaseInitialization:
         Multiple threads trying to initialize simultaneously
         should not cause duplicate tables or errors.
         """
-        from st_name_ranking import database
+        from st_name_ranking.persistence import database
 
         # Reset initialization flag
         database.reset_database_init_state()
@@ -141,7 +141,7 @@ class TestConcurrentVoting:
         - Record all valid votes
         - Maintain rating consistency
         """
-        from st_name_ranking import database
+        from st_name_ranking.persistence import database
 
         # Insert test names
         with database.get_connection() as conn:
@@ -222,7 +222,7 @@ class TestConcurrentVoting:
         """
         Multiple processes voting should maintain consistency.
         """
-        from st_name_ranking import database
+        from st_name_ranking.persistence import database
 
         # Insert test names
         with database.get_connection() as conn:
@@ -252,8 +252,9 @@ class TestModelUpdateAtomicity:
         If model.save_to_db succeeds but comparison recording fails,
         the system should detect inconsistency.
         """
-        from st_name_ranking import database, model
-        from st_name_ranking.features import FeatureExtractor
+        from st_name_ranking.learning import model
+        from st_name_ranking.learning.features import FeatureExtractor
+        from st_name_ranking.persistence import database
 
         # Initialize model
         extractor = FeatureExtractor()
@@ -285,7 +286,7 @@ class TestModelUpdateAtomicity:
         """
         Comparison recording and rating updates should be consistent.
         """
-        from st_name_ranking import database
+        from st_name_ranking.persistence import database
 
         # Insert test names
         with database.get_connection() as conn:
@@ -346,7 +347,7 @@ class TestReadConsistency:
         Reading ratings while updates happen should not crash
         and should return consistent (though possibly outdated) data.
         """
-        from st_name_ranking import database
+        from st_name_ranking.persistence import database
 
         # Insert test names
         with database.get_connection() as conn:
@@ -412,7 +413,7 @@ class TestReadConsistency:
         """
         Uncommitted changes should not be visible to other connections.
         """
-        from st_name_ranking import database
+        from st_name_ranking.persistence import database
 
         # Insert test name
         with database.get_connection() as conn:
@@ -452,7 +453,7 @@ class TestConnectionPool:
         """
         Multiple database connections should work without conflicts.
         """
-        from st_name_ranking import database
+        from st_name_ranking.persistence import database
 
         # Insert test names
         with database.get_connection() as conn:
@@ -502,7 +503,7 @@ class TestConnectionPool:
         Each connection should see committed data (read committed isolation).
         SQLite default mode is READ COMMITTED, not snapshot isolation.
         """
-        from st_name_ranking import database
+        from st_name_ranking.persistence import database
 
         # Insert initial data
         with database.get_connection() as conn:
@@ -539,7 +540,7 @@ class TestTransactionRollback:
         """
         Partial operations should be rolled back on error.
         """
-        from st_name_ranking import database
+        from st_name_ranking.persistence import database
 
         # Insert test names
         with database.get_connection() as conn:
@@ -575,7 +576,7 @@ class TestTransactionRollback:
         If one rating update fails, previous updates in same transaction
         should be rolled back.
         """
-        from st_name_ranking import database
+        from st_name_ranking.persistence import database
 
         # Insert test names
         with database.get_connection() as conn:
@@ -613,7 +614,7 @@ class TestTransactionRollback:
         """
         Foreign key violations should trigger rollback.
         """
-        from st_name_ranking import database
+        from st_name_ranking.persistence import database
 
         # Enable foreign key constraints
         with database.get_connection() as conn:
@@ -716,7 +717,7 @@ class TestDatabaseIntegrity:
         """
         Unique constraints should be enforced even under concurrent load.
         """
-        from st_name_ranking import database
+        from st_name_ranking.persistence import database
 
         errors = []
 
@@ -750,7 +751,7 @@ class TestDatabaseIntegrity:
         """
         CHECK constraints should be enforced.
         """
-        from st_name_ranking import database
+        from st_name_ranking.persistence import database
 
         # Insert test names
         with database.get_connection() as conn:
@@ -789,7 +790,7 @@ class TestConcurrentComparisonRecording:
         """
         Recording the same comparison twice should not duplicate.
         """
-        from st_name_ranking import database
+        from st_name_ranking.persistence import database
 
         # Insert test names
         with database.get_connection() as conn:
@@ -821,7 +822,7 @@ class TestConcurrentComparisonRecording:
         """
         Multiple threads updating preference for same pair should be handled.
         """
-        from st_name_ranking import database
+        from st_name_ranking.persistence import database
 
         # Insert test names
         with database.get_connection() as conn:
@@ -862,9 +863,9 @@ class TestUtilsConcurrency:
         """
         Multiple threads recording comparisons should update model state safely.
         """
-        from st_name_ranking import database
         from st_name_ranking.active_learning.lazy_updates import record_comparison_instant
-        from st_name_ranking.features import FeatureExtractor
+        from st_name_ranking.learning.features import FeatureExtractor
+        from st_name_ranking.persistence import database
 
         # Initialize model first and verify the feature surface is available.
         extractor = FeatureExtractor()
@@ -905,9 +906,9 @@ class TestUtilsConcurrency:
         """
         Multiple threads recording winner/loser preferences should be safe.
         """
-        from st_name_ranking import database
         from st_name_ranking.active_learning.lazy_updates import record_comparison_instant
-        from st_name_ranking.features import FeatureExtractor
+        from st_name_ranking.learning.features import FeatureExtractor
+        from st_name_ranking.persistence import database
 
         # Initialize and verify the feature surface is available.
         extractor = FeatureExtractor()
@@ -949,7 +950,7 @@ class TestConnectionTimeoutAndLocks:
         """
         Database should handle busy timeouts gracefully.
         """
-        from st_name_ranking import database
+        from st_name_ranking.persistence import database
 
         # Set busy timeout
         with database.get_connection() as conn:
@@ -962,7 +963,7 @@ class TestConnectionTimeoutAndLocks:
         """
         Multiple writers should be serialized by SQLite.
         """
-        from st_name_ranking import database
+        from st_name_ranking.persistence import database
 
         # Insert test name
         with database.get_connection() as conn:
@@ -1010,7 +1011,7 @@ class TestStressConcurrency:
         """
         High concurrency stress test with mixed operations.
         """
-        from st_name_ranking import database
+        from st_name_ranking.persistence import database
 
         # Insert many test names
         num_names = 50
@@ -1068,7 +1069,7 @@ class TestStressConcurrency:
         """
         Long-running transactions shouldn't block others indefinitely.
         """
-        from st_name_ranking import database
+        from st_name_ranking.persistence import database
 
         # Insert test names
         with database.get_connection() as conn:

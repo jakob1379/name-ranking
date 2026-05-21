@@ -170,8 +170,8 @@ from pathlib import Path
 # Add src to path
 sys.path.insert(0, str(Path("{test_db_path}").parent.parent / "src"))
 
-from st_name_ranking import database
-from st_name_ranking.ui import render_tournament, render_binary_filter, render_similarity
+from st_name_ranking.persistence import database
+from st_name_ranking.interface.ui import render_tournament, render_binary_filter, render_similarity
 
 # Set test DB path
 database.set_db_path(Path("{test_db_path}"))
@@ -525,7 +525,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path("{db_path}").parent.parent / "src"))
 
-from st_name_ranking import database
+from st_name_ranking.persistence import database
 
 database.set_db_path(Path("{db_path}"))
 database._INIT_STATE["db_initialized"] = True
@@ -576,7 +576,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path("{db_path}").parent.parent / "src"))
 
-from st_name_ranking import database
+from st_name_ranking.persistence import database
 
 database.set_db_path(Path("{db_path}"))
 database._INIT_STATE["db_initialized"] = True
@@ -621,7 +621,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path("{db_path}").parent.parent / "src"))
 
-from st_name_ranking import database
+from st_name_ranking.persistence import database
 
 database.set_db_path(Path("{db_path}"))
 database._INIT_STATE["db_initialized"] = True
@@ -671,7 +671,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path("{db_path}").parent.parent / "src"))
 
-from st_name_ranking import database
+from st_name_ranking.persistence import database
 from st_name_ranking.interface.app_actions import setup_session_state
 
 database.set_db_path(Path("{db_path}"))
@@ -751,7 +751,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path("{db_path}").parent.parent / "src"))
 
-from st_name_ranking import database
+from st_name_ranking.persistence import database
 
 database.set_db_path(Path("{db_path}"))
 database._INIT_STATE["db_initialized"] = True
@@ -958,7 +958,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path("{db_path}").parent.parent / "src"))
 
-from st_name_ranking import database
+from st_name_ranking.persistence import database
 
 database.set_db_path(Path("{db_path}"))
 database._INIT_STATE["db_initialized"] = True
@@ -996,7 +996,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path("{db_path}").parent.parent / "src"))
 
-from st_name_ranking import database
+from st_name_ranking.persistence import database
 
 database.set_db_path(Path("{db_path}"))
 database._INIT_STATE["db_initialized"] = True
@@ -1035,7 +1035,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path("{db_path}").parent.parent / "src"))
 
-from st_name_ranking import database
+from st_name_ranking.persistence import database
 
 database.set_db_path(Path("{db_path}"))
 database._INIT_STATE["db_initialized"] = True
@@ -1076,7 +1076,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path("{db_path}").parent.parent / "src"))
 
-from st_name_ranking import database
+from st_name_ranking.persistence import database
 
 database.set_db_path(Path("{db_path}"))
 database._INIT_STATE["db_initialized"] = True
@@ -1171,7 +1171,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from st_name_ranking.ui import render_tournament, render_binary_filter
+from st_name_ranking.interface.ui import render_tournament, render_binary_filter
 
 st.set_page_config(page_title="Test", layout="wide")
 
@@ -1205,7 +1205,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from st_name_ranking.ui import render_tournament, render_binary_filter
+from st_name_ranking.interface.ui import render_tournament, render_binary_filter
 
 st.set_page_config(page_title="Test", layout="wide")
 

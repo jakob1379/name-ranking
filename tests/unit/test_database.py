@@ -1,11 +1,11 @@
-"""Tests for st_name_ranking.database module."""
+"""Tests for st_name_ranking.persistence.database module."""
 
 import json
 from unittest.mock import patch
 
 import pytest
 
-from st_name_ranking import database
+from st_name_ranking.persistence import database
 
 
 class TestDatabaseInitialization:
@@ -14,7 +14,7 @@ class TestDatabaseInitialization:
     def test_init_database_creates_tables(self, mock_db_path):
         """Test that init_database creates all required tables."""
         # Arrange
-        from st_name_ranking.database import get_connection, init_database
+        from st_name_ranking.persistence.database import get_connection, init_database
 
         # Act
         init_database()
@@ -36,7 +36,7 @@ class TestDatabaseInitialization:
 
     def test_init_database_idempotent(self, mock_db_path):
         """Test that calling init_database multiple times doesn't cause errors."""
-        from st_name_ranking.database import init_database
+        from st_name_ranking.persistence.database import init_database
 
         # Should not raise
         init_database()
@@ -56,7 +56,7 @@ class TestDatabaseInitialization:
 
         with (
             patch(
-                "st_name_ranking.database._insert_default_region_mapping",
+                "st_name_ranking.persistence.database._insert_default_region_mapping",
                 side_effect=RuntimeError("schema failure"),
             ),
             pytest.raises(RuntimeError, match="schema failure"),
@@ -132,7 +132,7 @@ class TestDatabaseInitialization:
 
     def test_region_mapping_populated(self, mock_db_path):
         """Test that region_mapping table is populated with data."""
-        from st_name_ranking.database import get_connection, init_database
+        from st_name_ranking.persistence.database import get_connection, init_database
 
         init_database()
 
@@ -154,7 +154,7 @@ class TestDatabaseInitialization:
 
     def test_get_connection_context_manager(self, mock_db_path):
         """Test that get_connection context manager works correctly."""
-        from st_name_ranking.database import get_connection, init_database
+        from st_name_ranking.persistence.database import get_connection, init_database
 
         init_database()
 
@@ -199,7 +199,7 @@ class TestNameOperations:
 
     def test_insert_names_via_sql(self, initialized_db):
         """Test inserting names directly via SQL."""
-        from st_name_ranking.database import get_connection
+        from st_name_ranking.persistence.database import get_connection
 
         # Insert names directly via SQL (since there's no insert_names function)
         with get_connection() as conn:
@@ -209,7 +209,7 @@ class TestNameOperations:
             )
 
         # Verify using get_unclassified_names
-        from st_name_ranking.database import get_unclassified_names
+        from st_name_ranking.persistence.database import get_unclassified_names
 
         names = get_unclassified_names()
         assert len(names) == 2
@@ -219,7 +219,7 @@ class TestNameOperations:
 
         # Verify names were inserted (gender not included in get_unclassified_names)
         # Additional check: verify via direct SQL query
-        from st_name_ranking.database import get_connection
+        from st_name_ranking.persistence.database import get_connection
 
         with get_connection() as conn:
             cursor = conn.cursor()
@@ -237,7 +237,7 @@ class TestNameOperations:
 
     def test_get_names_by_gender(self, initialized_db):
         """Test retrieving names filtered by gender."""
-        from st_name_ranking.database import get_connection, get_names_by_gender
+        from st_name_ranking.persistence.database import get_connection, get_names_by_gender
 
         # Insert test data
         with get_connection() as conn:
@@ -272,7 +272,7 @@ class TestNameOperations:
 
     def test_get_unclassified_names(self, initialized_db):
         """Test retrieving names that haven't been classified."""
-        from st_name_ranking.database import (
+        from st_name_ranking.persistence.database import (
             get_connection,
             get_unclassified_names,
             update_name_origin,
@@ -311,7 +311,7 @@ class TestNameOperations:
 
     def test_update_name_origin(self, initialized_db):
         """Test updating name origin classification."""
-        from st_name_ranking.database import get_connection, update_name_origin
+        from st_name_ranking.persistence.database import get_connection, update_name_origin
 
         # Insert test name
         with get_connection() as conn:
@@ -346,7 +346,7 @@ class TestRatingOperations:
 
     def test_update_rating(self, initialized_db):
         """Test updating a name's rating."""
-        from st_name_ranking.database import (
+        from st_name_ranking.persistence.database import (
             get_connection,
             get_ratings,
             update_rating,
@@ -384,7 +384,7 @@ class TestRatingOperations:
 
     def test_update_rating_multiple_times(self, initialized_db):
         """Test updating rating multiple times increments matches."""
-        from st_name_ranking.database import (
+        from st_name_ranking.persistence.database import (
             get_connection,
             get_ratings,
             update_rating,
@@ -423,13 +423,13 @@ class TestRatingOperations:
 
     def test_update_rating_nonexistent_name(self, initialized_db):
         """Test updating rating for non-existent name reports it as skipped."""
-        from st_name_ranking.database import update_rating
+        from st_name_ranking.persistence.database import update_rating
 
         assert update_rating("Nonexistent", 1500.0) == ["Nonexistent"]
 
     def test_get_ratings_empty(self, initialized_db):
         """Test getting ratings when no ratings exist."""
-        from st_name_ranking.database import get_ratings
+        from st_name_ranking.persistence.database import get_ratings
 
         ratings = get_ratings()
         assert isinstance(ratings, dict)
@@ -441,7 +441,7 @@ class TestSubmoduleOperations:
 
     def test_get_latest_submodule_version(self, initialized_db):
         """Test getting latest submodule version."""
-        from st_name_ranking.database import (
+        from st_name_ranking.persistence.database import (
             get_latest_submodule_version,
             update_submodule_version,
         )
@@ -460,7 +460,7 @@ class TestSubmoduleOperations:
 
     def test_update_submodule_version(self, initialized_db):
         """Test updating submodule version."""
-        from st_name_ranking.database import (
+        from st_name_ranking.persistence.database import (
             get_latest_submodule_version,
             update_submodule_version,
         )
@@ -485,7 +485,7 @@ class TestStatistics:
 
     def test_get_stats_empty(self, initialized_db):
         """Test getting statistics from empty database."""
-        from st_name_ranking.database import get_stats
+        from st_name_ranking.persistence.database import get_stats
 
         stats = get_stats()
 
@@ -498,7 +498,7 @@ class TestStatistics:
 
     def test_get_stats_with_data(self, initialized_db):
         """Test getting statistics with data."""
-        from st_name_ranking.database import (
+        from st_name_ranking.persistence.database import (
             get_connection,
             get_stats,
             update_name_origin,
@@ -546,7 +546,7 @@ class TestStatistics:
 
     def test_get_total_comparisons(self, initialized_db):
         """Test total comparison counter."""
-        from st_name_ranking.database import (
+        from st_name_ranking.persistence.database import (
             get_connection,
             get_total_comparisons,
             record_comparison,
@@ -581,7 +581,7 @@ class TestSyncOperations:
         """Test syncing names from submodule directory."""
         from unittest.mock import patch
 
-        from st_name_ranking.database import (
+        from st_name_ranking.persistence.database import (
             get_latest_submodule_version,
             get_unclassified_names,
             sync_names_with_submodule,
@@ -612,7 +612,7 @@ class TestSyncOperations:
             # Expect 3 names inserted
             if result != 3:
                 # Debug: check what's in the database
-                from st_name_ranking.database import get_connection
+                from st_name_ranking.persistence.database import get_connection
 
                 with get_connection() as conn:
                     cursor = conn.cursor()
@@ -628,7 +628,7 @@ class TestSyncOperations:
         # Since none are classified, all inserted names should be returned
         # However, there might be more if other tests inserted names.
         # Use raw SQL to count total names
-        from st_name_ranking.database import get_connection
+        from st_name_ranking.persistence.database import get_connection
 
         with get_connection() as conn:
             cursor = conn.cursor()
@@ -646,7 +646,7 @@ class TestSyncOperations:
         """Test syncing from empty submodule directory."""
         from unittest.mock import patch
 
-        from st_name_ranking.database import sync_names_with_submodule
+        from st_name_ranking.persistence.database import sync_names_with_submodule
 
         # Create empty submodule directory with empty JSON file
         empty_path = tmp_path / "empty"
@@ -670,7 +670,7 @@ class TestSyncOperations:
         """Failed git rev-parse should not be treated as an empty source version."""
         from unittest.mock import patch
 
-        from st_name_ranking.database import sync_names_with_submodule
+        from st_name_ranking.persistence.database import sync_names_with_submodule
 
         with patch("st_name_ranking.sync_store.subprocess.run") as mock_run:
             mock_process = mock_run.return_value
@@ -685,7 +685,7 @@ class TestSyncOperations:
         """An empty rev-parse stdout is not a valid commit hash."""
         from unittest.mock import patch
 
-        from st_name_ranking.database import sync_names_with_submodule
+        from st_name_ranking.persistence.database import sync_names_with_submodule
 
         with patch("st_name_ranking.sync_store.subprocess.run") as mock_run:
             mock_process = mock_run.return_value
@@ -704,10 +704,10 @@ class TestPhoneticOperations:
         """Test _compute_phonetic_codes function."""
         from unittest.mock import patch
 
-        from st_name_ranking.database import _compute_phonetic_codes
+        from st_name_ranking.persistence.database import _compute_phonetic_codes
 
         # Test with standard name
-        with patch("st_name_ranking.database.doublemetaphone") as mock_dm:
+        with patch("st_name_ranking.persistence.database.doublemetaphone") as mock_dm:
             mock_dm.return_value = ("AN", "AN")
             primary, secondary = _compute_phonetic_codes("Anna")
             assert primary == "AN"
@@ -715,14 +715,14 @@ class TestPhoneticOperations:
             mock_dm.assert_called_once_with("Anna")
 
         # Test with empty primary (should return empty string)
-        with patch("st_name_ranking.database.doublemetaphone") as mock_dm:
+        with patch("st_name_ranking.persistence.database.doublemetaphone") as mock_dm:
             mock_dm.return_value = (None, "AN")
             primary, secondary = _compute_phonetic_codes("Test")
             assert primary == ""
             assert secondary == "AN"
 
         # Test with empty secondary (should return empty string)
-        with patch("st_name_ranking.database.doublemetaphone") as mock_dm:
+        with patch("st_name_ranking.persistence.database.doublemetaphone") as mock_dm:
             mock_dm.return_value = ("AN", None)
             primary, secondary = _compute_phonetic_codes("Test")
             assert primary == "AN"
@@ -730,7 +730,7 @@ class TestPhoneticOperations:
 
     def test_update_phonetic_codes_no_names(self, initialized_db):
         """Test update_phonetic_codes when no names need updating."""
-        from st_name_ranking.database import update_phonetic_codes
+        from st_name_ranking.persistence.database import update_phonetic_codes
 
         # No names in database, so no updates
         result = update_phonetic_codes()
@@ -740,7 +740,7 @@ class TestPhoneticOperations:
         """Test update_phonetic_codes with names needing updates."""
         from unittest.mock import patch
 
-        from st_name_ranking.database import get_connection, update_phonetic_codes
+        from st_name_ranking.persistence.database import get_connection, update_phonetic_codes
 
         # Insert a name without phonetic codes
         with get_connection() as conn:
@@ -748,7 +748,7 @@ class TestPhoneticOperations:
             name_id = cursor.lastrowid
 
         # Mock doublemetaphone
-        with patch("st_name_ranking.database.doublemetaphone") as mock_dm:
+        with patch("st_name_ranking.persistence.database.doublemetaphone") as mock_dm:
             mock_dm.return_value = ("AN", "AN")
             result = update_phonetic_codes()
 
@@ -767,7 +767,7 @@ class TestPhoneticOperations:
         """Test update_phonetic_codes with limit parameter."""
         from unittest.mock import patch
 
-        from st_name_ranking.database import get_connection, update_phonetic_codes
+        from st_name_ranking.persistence.database import get_connection, update_phonetic_codes
 
         # Insert multiple names
         names = [("Anna", "Female"), ("Peter", "Male"), ("Maria", "Female")]
@@ -776,7 +776,7 @@ class TestPhoneticOperations:
                 conn.execute("INSERT INTO names (name, gender) VALUES (?, ?)", (name, gender))
 
         # Mock doublemetaphone to track calls
-        with patch("st_name_ranking.database.doublemetaphone") as mock_dm:
+        with patch("st_name_ranking.persistence.database.doublemetaphone") as mock_dm:
             mock_dm.return_value = ("XX", "XX")
             result = update_phonetic_codes(limit=2)
 
@@ -788,7 +788,7 @@ class TestPhoneticOperations:
         """Test update_phonetic_codes when names already have phonetic codes."""
         from unittest.mock import patch
 
-        from st_name_ranking.database import get_connection, update_phonetic_codes
+        from st_name_ranking.persistence.database import get_connection, update_phonetic_codes
 
         # Insert a name WITH phonetic codes
         with get_connection() as conn:
@@ -799,7 +799,7 @@ class TestPhoneticOperations:
             )
 
         # Mock doublemetaphone (should not be called)
-        with patch("st_name_ranking.database.doublemetaphone") as mock_dm:
+        with patch("st_name_ranking.persistence.database.doublemetaphone") as mock_dm:
             result = update_phonetic_codes()
 
         # Should update 0 names
@@ -812,7 +812,7 @@ class TestDatabaseExportImport:
 
     def test_export_database(self, mock_db_path):
         """Test exporting database as bytes."""
-        from st_name_ranking.database import export_database, init_database
+        from st_name_ranking.persistence.database import export_database, init_database
 
         init_database()
         db_bytes = export_database()
@@ -821,7 +821,7 @@ class TestDatabaseExportImport:
 
     def test_import_database(self, mock_db_path):
         """Test importing database from bytes."""
-        from st_name_ranking.database import export_database, import_database, init_database
+        from st_name_ranking.persistence.database import export_database, import_database, init_database
 
         init_database()
         original_bytes = export_database()
@@ -837,7 +837,7 @@ class TestFeatureCacheOperations:
 
     def test_feature_cache_keeps_versions_separate_locally(self, mock_db_path):
         """Local cache hits should not cross feature-set versions."""
-        from st_name_ranking.database import get_connection, init_database
+        from st_name_ranking.persistence.database import get_connection, init_database
         from st_name_ranking.persistence.feature_cache import FeatureCache
 
         init_database()
@@ -871,7 +871,7 @@ class TestFeatureCacheOperations:
 
     def test_corrupt_cached_features_raise_contextual_error(self, mock_db_path):
         """Corrupt cached JSON should be reported distinctly from a cache miss."""
-        from st_name_ranking.database import (
+        from st_name_ranking.persistence.database import (
             CorruptFeatureCacheError,
             get_cached_features,
             get_connection,
@@ -891,7 +891,7 @@ class TestFeatureCacheOperations:
 
     def test_corrupt_cached_features_batch_raise_contextual_error(self, mock_db_path):
         """Batch cache reads should not silently drop corrupt rows."""
-        from st_name_ranking.database import (
+        from st_name_ranking.persistence.database import (
             CorruptFeatureCacheError,
             get_cached_features_batch,
             get_connection,

@@ -4,7 +4,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from st_name_ranking import origin_classifier
+from st_name_ranking.classification import origin_classifier
 
 
 class TestOriginClassifierIntegration:
@@ -69,7 +69,7 @@ class TestOriginClassifierIntegration:
         assert confidence == 0.0
 
         # Phonetic pattern detection via mock
-        monkeypatch.setattr("st_name_ranking.origin_classifier.doublemetaphone", lambda _: ("HJ", ""))
+        monkeypatch.setattr("st_name_ranking.classification.origin_classifier.doublemetaphone", lambda _: ("HJ", ""))
         region, confidence = origin_classifier.rule_based_nordic_detection("Test")
         assert region == "Nordic"
         assert confidence == pytest.approx(0.75)
@@ -78,7 +78,7 @@ class TestOriginClassifierIntegration:
         """Test phonetic similarity classification with reference names."""
         from metaphone import doublemetaphone
 
-        from st_name_ranking.database import get_connection
+        from st_name_ranking.persistence.database import get_connection
 
         ref_name = "ReferenceName"
         region = "Nordic"
@@ -118,7 +118,7 @@ class TestOriginClassifierIntegration:
 
         # Mock doublemetaphone to return specific primary/secondary for input name
         monkeypatch.setattr(
-            "st_name_ranking.origin_classifier.doublemetaphone",
+            "st_name_ranking.classification.origin_classifier.doublemetaphone",
             lambda _: ("EFGH", "IJKL"),  # primary matches ref_secondary
         )
         region, confidence = origin_classifier.phonetic_similarity_classification("TestName", reference_names)
@@ -127,7 +127,7 @@ class TestOriginClassifierIntegration:
 
         # Test secondary matches ref_primary
         monkeypatch.setattr(
-            "st_name_ranking.origin_classifier.doublemetaphone",
+            "st_name_ranking.classification.origin_classifier.doublemetaphone",
             lambda _: ("WXYZ", "ABCD"),  # secondary matches ref_primary
         )
         region, confidence = origin_classifier.phonetic_similarity_classification("TestName2", reference_names)
@@ -136,7 +136,7 @@ class TestOriginClassifierIntegration:
 
         # Test secondary matches ref_secondary
         monkeypatch.setattr(
-            "st_name_ranking.origin_classifier.doublemetaphone",
+            "st_name_ranking.classification.origin_classifier.doublemetaphone",
             lambda _: ("WXYZ", "EFGH"),  # secondary matches ref_secondary
         )
         region, confidence = origin_classifier.phonetic_similarity_classification("TestName3", reference_names)
@@ -145,7 +145,7 @@ class TestOriginClassifierIntegration:
 
         # Test first character match
         monkeypatch.setattr(
-            "st_name_ranking.origin_classifier.doublemetaphone",
+            "st_name_ranking.classification.origin_classifier.doublemetaphone",
             lambda _: ("AXXX", "YYYY"),  # primary[0] matches ref_primary[0]
         )
         region, confidence = origin_classifier.phonetic_similarity_classification("TestName4", reference_names)
@@ -153,7 +153,10 @@ class TestOriginClassifierIntegration:
         assert confidence == pytest.approx(0.5 * ref_conf * 0.9)
 
         # Test no match (score 0)
-        monkeypatch.setattr("st_name_ranking.origin_classifier.doublemetaphone", lambda _: ("ZZZZ", "WWWW"))
+        monkeypatch.setattr(
+            "st_name_ranking.classification.origin_classifier.doublemetaphone",
+            lambda _: ("ZZZZ", "WWWW"),
+        )
         region, confidence = origin_classifier.phonetic_similarity_classification("TestName5", reference_names)
         assert region is None
         assert confidence == 0.0
@@ -163,7 +166,7 @@ class TestOriginClassifierIntegration:
         from unittest.mock import patch
 
         # Patch ethnidata classifier to simulate missing package
-        with patch("st_name_ranking.origin_classifier._create_ethnidata_classifier", return_value=None):
+        with patch("st_name_ranking.classification.origin_classifier._create_ethnidata_classifier", return_value=None):
             classifier = origin_classifier.get_or_create_classifier(reference_names={})
             # Should still return a classifier (using rule-based and phonetic)
             assert classifier is not None
@@ -179,7 +182,7 @@ class TestOriginClassifierIntegration:
 
     def test_get_region_for_nationality(self, initialized_db):
         """Test mapping nationality to region with exact, partial, and default matches."""
-        from st_name_ranking.database import get_connection
+        from st_name_ranking.persistence.database import get_connection
 
         # Insert a custom mapping for partial match testing
         with get_connection() as conn:

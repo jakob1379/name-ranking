@@ -17,9 +17,9 @@ import numpy as np
 import pytest
 
 from st_name_ranking.active_learning.selection import get_name_features, get_names_features
-from st_name_ranking.database import get_connection
-from st_name_ranking.features import FeatureExtractor, extract_all_features, extract_suffix_features
-from st_name_ranking.model import BradleyTerryModel
+from st_name_ranking.learning.features import FeatureExtractor, extract_all_features, extract_suffix_features
+from st_name_ranking.learning.model import BradleyTerryModel
+from st_name_ranking.persistence.database import get_connection
 
 # -----------------------------------------------------------------------------
 # Test Fixtures

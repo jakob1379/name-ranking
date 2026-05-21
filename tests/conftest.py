@@ -1,5 +1,6 @@
 """Pytest fixtures for st_name_ranking tests."""
 
+import subprocess
 import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -20,8 +21,8 @@ def temp_db_path():
 
 @pytest.fixture
 def mock_db_path(temp_db_path):
-    """Mock the database path in st_name_ranking.database."""
-    from st_name_ranking import database
+    """Mock the database path in st_name_ranking.persistence.database."""
+    from st_name_ranking.persistence import database
 
     original_path = database.get_db_path()
 
@@ -36,7 +37,7 @@ def mock_db_path(temp_db_path):
 def initialized_db(mock_db_path):
     """Initialize a fresh database with schema."""
     from st_name_ranking.active_learning import selection
-    from st_name_ranking.database import get_connection, init_database
+    from st_name_ranking.persistence.database import get_connection, init_database
 
     # Clear active-learning caches to prevent stale data between tests.
     selection.reset_active_learning_state()
@@ -113,6 +114,23 @@ def mock_submodule_path(tmp_path):
     import json
 
     json_file.write_text(json.dumps(json_data, indent=2))
+    subprocess.run(["git", "init"], cwd=submodule_path, check=True, capture_output=True)
+    subprocess.run(["git", "add", "."], cwd=submodule_path, check=True, capture_output=True)
+    subprocess.run(
+        [
+            "git",
+            "-c",
+            "user.name=Test User",
+            "-c",
+            "user.email=test@example.invalid",
+            "commit",
+            "-m",
+            "test names fixture",
+        ],
+        cwd=submodule_path,
+        check=True,
+        capture_output=True,
+    )
 
     return submodule_path
 
@@ -120,7 +138,7 @@ def mock_submodule_path(tmp_path):
 @pytest.fixture
 def mock_classifier():
     """Mock the ethnidata classifier to avoid missing database file."""
-    from st_name_ranking import origin_classifier
+    from st_name_ranking.classification import origin_classifier
 
     # Clear singleton cache to ensure fresh classifier
     origin_classifier.reset_classifier_cache()
@@ -128,7 +146,7 @@ def mock_classifier():
     # The classifier expects a callable that returns (region, confidence) tuple
     mock_instance = MagicMock(return_value=("European", 0.85))
     with patch(
-        "st_name_ranking.origin_classifier._create_ethnidata_classifier",
+        "st_name_ranking.classification.origin_classifier._create_ethnidata_classifier",
         return_value=mock_instance,
     ):
         yield mock_instance

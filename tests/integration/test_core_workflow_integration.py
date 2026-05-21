@@ -10,8 +10,10 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from st_name_ranking import database
-from st_name_ranking.database import (
+from st_name_ranking.learning.features import FeatureExtractor
+from st_name_ranking.learning.model import BradleyTerryModel
+from st_name_ranking.persistence import database
+from st_name_ranking.persistence.database import (
     get_connection,
     init_database,
     record_comparison,
@@ -19,8 +21,6 @@ from st_name_ranking.database import (
     update_ratings_batch,
     update_ratings_batch_values,
 )
-from st_name_ranking.features import FeatureExtractor
-from st_name_ranking.model import BradleyTerryModel
 
 
 @pytest.fixture

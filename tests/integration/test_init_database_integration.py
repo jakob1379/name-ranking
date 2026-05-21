@@ -62,7 +62,7 @@ class TestInitDatabaseIntegration:
             patch("st_name_ranking.init_database.init_database"),
             patch("st_name_ranking.init_database.sync_names_with_submodule") as mock_sync,
             patch("st_name_ranking.init_database.get_stats", return_value=mock_stats),
-            patch("st_name_ranking.classify_origins.classify_all_names", mock_classify_all),
+            patch("st_name_ranking.classification.classify_origins.classify_all_names", mock_classify_all),
             patch("sys.stdout", new_callable=StringIO) as mock_stdout,
         ):
             mock_sync.return_value = 10
@@ -97,7 +97,7 @@ class TestInitDatabaseIntegration:
         ):
             # Mock classify_all_names to raise ImportError (ethnidata not installed)
             import_error = ImportError("ethnidata not installed. Install with: pip install ethnidata")
-            with patch("st_name_ranking.classify_origins.classify_all_names", side_effect=import_error):
+            with patch("st_name_ranking.classification.classify_origins.classify_all_names", side_effect=import_error):
                 mock_sync.return_value = 10
 
                 sys.argv = ["init_database.py", "--classify"]
@@ -144,7 +144,7 @@ class TestInitDatabaseIntegration:
             patch("st_name_ranking.init_database.init_database"),
             patch("st_name_ranking.init_database.sync_names_with_submodule") as mock_sync,
             patch("st_name_ranking.init_database.get_stats", return_value=mock_stats),
-            patch("st_name_ranking.classify_origins.classify_all_names", mock_classify_all),
+            patch("st_name_ranking.classification.classify_origins.classify_all_names", mock_classify_all),
             patch("sys.stdout", new_callable=StringIO) as mock_stdout,
         ):
             mock_sync.return_value = 10

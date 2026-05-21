@@ -21,9 +21,9 @@ class TestModelPersistenceRoundTrip:
 
     def test_model_save_and_load_preserves_state(self, initialized_db):
         """Verify model weights and covariance survive save/load cycle."""
-        from st_name_ranking.database import get_connection
-        from st_name_ranking.features import FeatureExtractor
-        from st_name_ranking.model import BradleyTerryModel
+        from st_name_ranking.learning.features import FeatureExtractor
+        from st_name_ranking.learning.model import BradleyTerryModel
+        from st_name_ranking.persistence.database import get_connection
 
         # Setup: Create model with known state
         extractor = FeatureExtractor()
@@ -100,9 +100,9 @@ class TestModelPersistenceRoundTrip:
 
     def test_model_multiple_updates_and_round_trip(self, initialized_db):
         """Test multiple updates survive save/load cycle."""
-        from st_name_ranking.database import get_connection
-        from st_name_ranking.features import FeatureExtractor
-        from st_name_ranking.model import BradleyTerryModel
+        from st_name_ranking.learning.features import FeatureExtractor
+        from st_name_ranking.learning.model import BradleyTerryModel
+        from st_name_ranking.persistence.database import get_connection
 
         extractor = FeatureExtractor()
         feature_names = extractor.get_feature_names()
@@ -157,9 +157,9 @@ class TestTransactionSafety:
 
     def test_comparison_and_model_update_atomic(self, initialized_db):
         """If model.save_to_db fails, comparison should not be recorded."""
-        from st_name_ranking.database import get_connection, record_comparison
-        from st_name_ranking.features import FeatureExtractor
-        from st_name_ranking.model import BradleyTerryModel
+        from st_name_ranking.learning.features import FeatureExtractor
+        from st_name_ranking.learning.model import BradleyTerryModel
+        from st_name_ranking.persistence.database import get_connection, record_comparison
 
         extractor = FeatureExtractor()
         feature_names = extractor.get_feature_names()
@@ -210,7 +210,7 @@ class TestTransactionSafety:
 
     def test_database_transaction_rollback_on_error(self, initialized_db):
         """Test that database transactions roll back on error."""
-        from st_name_ranking.database import get_connection
+        from st_name_ranking.persistence.database import get_connection
 
         # Start a transaction and force an error
         with pytest.raises(Exception):
@@ -230,9 +230,9 @@ class TestTransactionSafety:
 
     def test_model_save_is_atomic(self, initialized_db):
         """Test that model.save_to_db is atomic (uses single transaction)."""
-        from st_name_ranking.database import get_connection
-        from st_name_ranking.features import FeatureExtractor
-        from st_name_ranking.model import BradleyTerryModel
+        from st_name_ranking.learning.features import FeatureExtractor
+        from st_name_ranking.learning.model import BradleyTerryModel
+        from st_name_ranking.persistence.database import get_connection
 
         extractor = FeatureExtractor()
         feature_names = extractor.get_feature_names()
@@ -282,9 +282,9 @@ class TestConcurrentAccess:
 
     def test_concurrent_model_updates(self, initialized_db):
         """Simulate multiple processes updating model simultaneously."""
-        from st_name_ranking.database import get_connection
-        from st_name_ranking.features import FeatureExtractor
-        from st_name_ranking.model import BradleyTerryModel
+        from st_name_ranking.learning.features import FeatureExtractor
+        from st_name_ranking.learning.model import BradleyTerryModel
+        from st_name_ranking.persistence.database import get_connection
 
         extractor = FeatureExtractor()
         feature_names = extractor.get_feature_names()
@@ -366,8 +366,8 @@ class TestConcurrentAccess:
 
     def test_concurrent_reads_dont_corrupt(self, initialized_db):
         """Test that concurrent reads don't corrupt model state."""
-        from st_name_ranking.features import FeatureExtractor
-        from st_name_ranking.model import BradleyTerryModel
+        from st_name_ranking.learning.features import FeatureExtractor
+        from st_name_ranking.learning.model import BradleyTerryModel
 
         extractor = FeatureExtractor()
         feature_names = extractor.get_feature_names()
@@ -410,9 +410,9 @@ class TestCorruptionRecovery:
 
     def test_model_reinitializes_on_corrupted_data(self, initialized_db):
         """Model should detect corruption and reinitialize."""
-        from st_name_ranking.database import get_connection
-        from st_name_ranking.features import FeatureExtractor
-        from st_name_ranking.model import BradleyTerryModel
+        from st_name_ranking.learning.features import FeatureExtractor
+        from st_name_ranking.learning.model import BradleyTerryModel
+        from st_name_ranking.persistence.database import get_connection
 
         extractor = FeatureExtractor()
         feature_names = extractor.get_feature_names()
@@ -454,8 +454,8 @@ class TestCorruptionRecovery:
 
     def test_model_reinitializes_on_mismatched_feature_count(self, initialized_db):
         """Model should detect when stored feature count doesn't match weights."""
-        from st_name_ranking.database import get_connection
-        from st_name_ranking.model import BradleyTerryModel
+        from st_name_ranking.learning.model import BradleyTerryModel
+        from st_name_ranking.persistence.database import get_connection
 
         # Create model with specific feature names
         feature_names = ["feat_a", "feat_b", "feat_c"]
@@ -482,7 +482,7 @@ class TestCorruptionRecovery:
 
     def test_model_reinitializes_on_wrong_feature_names(self, initialized_db):
         """Model should detect when stored feature names differ from expected."""
-        from st_name_ranking.model import BradleyTerryModel
+        from st_name_ranking.learning.model import BradleyTerryModel
 
         # Create model with specific feature names
         feature_names_v1 = ["feat_a", "feat_b", "feat_c"]
@@ -505,8 +505,8 @@ class TestFeatureDimensionMismatch:
         """Model should detect when feature dimensions don't match."""
         import json
 
-        from st_name_ranking.database import get_connection
-        from st_name_ranking.model import BradleyTerryModel
+        from st_name_ranking.learning.model import BradleyTerryModel
+        from st_name_ranking.persistence.database import get_connection
 
         # Create a valid model state with 5 features
         feature_names = ["f1", "f2", "f3", "f4", "f5"]
@@ -542,8 +542,8 @@ class TestFeatureDimensionMismatch:
         """Model should load successfully when dimensions match."""
         import json
 
-        from st_name_ranking.database import get_connection
-        from st_name_ranking.model import BradleyTerryModel
+        from st_name_ranking.learning.model import BradleyTerryModel
+        from st_name_ranking.persistence.database import get_connection
 
         # Create a valid model state
         feature_names = ["f1", "f2", "f3", "f4", "f5"]
@@ -581,8 +581,8 @@ class TestFeatureDimensionMismatch:
         """Model should detect when stored features are a subset of expected."""
         import json
 
-        from st_name_ranking.database import get_connection
-        from st_name_ranking.model import BradleyTerryModel
+        from st_name_ranking.learning.model import BradleyTerryModel
+        from st_name_ranking.persistence.database import get_connection
 
         # Create model state with 3 features
         stored_features = ["f1", "f2", "f3"]
@@ -621,9 +621,9 @@ class TestModelStateIntegrity:
 
     def test_covariance_matrix_symmetric_after_save_load(self, initialized_db):
         """Covariance matrix should remain symmetric after save/load."""
-        from st_name_ranking.database import get_connection
-        from st_name_ranking.features import FeatureExtractor
-        from st_name_ranking.model import BradleyTerryModel
+        from st_name_ranking.learning.features import FeatureExtractor
+        from st_name_ranking.learning.model import BradleyTerryModel
+        from st_name_ranking.persistence.database import get_connection
 
         extractor = FeatureExtractor()
         feature_names = extractor.get_feature_names()
@@ -665,9 +665,9 @@ class TestModelStateIntegrity:
 
     def test_training_samples_increment_correctly(self, initialized_db):
         """Training samples should increment correctly with each update."""
-        from st_name_ranking.database import get_connection
-        from st_name_ranking.features import FeatureExtractor
-        from st_name_ranking.model import BradleyTerryModel
+        from st_name_ranking.learning.features import FeatureExtractor
+        from st_name_ranking.learning.model import BradleyTerryModel
+        from st_name_ranking.persistence.database import get_connection
 
         extractor = FeatureExtractor()
         feature_names = extractor.get_feature_names()
@@ -710,7 +710,7 @@ class TestModelStateIntegrity:
 
     def test_model_handles_empty_batch_update(self, initialized_db):
         """Model should handle empty batch updates gracefully."""
-        from st_name_ranking.model import BradleyTerryModel
+        from st_name_ranking.learning.model import BradleyTerryModel
 
         feature_names = ["f1", "f2"]
         model = BradleyTerryModel(feature_names)
@@ -731,8 +731,8 @@ class TestDatabaseModelIntegrationEdgeCases:
 
     def test_model_save_without_prior_load(self, initialized_db):
         """Should be able to save a brand new model without loading first."""
-        from st_name_ranking.database import get_connection
-        from st_name_ranking.model import BradleyTerryModel
+        from st_name_ranking.learning.model import BradleyTerryModel
+        from st_name_ranking.persistence.database import get_connection
 
         feature_names = ["f1", "f2", "f3"]
         model = BradleyTerryModel(feature_names)
@@ -747,8 +747,8 @@ class TestDatabaseModelIntegrationEdgeCases:
 
     def test_multiple_saves_overwrite_correctly(self, initialized_db):
         """Multiple saves should overwrite, not create duplicates."""
-        from st_name_ranking.database import get_connection
-        from st_name_ranking.model import BradleyTerryModel
+        from st_name_ranking.learning.model import BradleyTerryModel
+        from st_name_ranking.persistence.database import get_connection
 
         feature_names = ["f1", "f2"]
 
@@ -768,7 +768,7 @@ class TestDatabaseModelIntegrationEdgeCases:
 
     def test_load_from_empty_database(self, initialized_db):
         """Loading from empty database should return False."""
-        from st_name_ranking.model import BradleyTerryModel
+        from st_name_ranking.learning.model import BradleyTerryModel
 
         feature_names = ["f1", "f2"]
         model = BradleyTerryModel(feature_names)
@@ -779,7 +779,7 @@ class TestDatabaseModelIntegrationEdgeCases:
 
     def test_model_with_large_feature_dimensions(self, initialized_db):
         """Test model with larger feature dimensions."""
-        from st_name_ranking.model import BradleyTerryModel
+        from st_name_ranking.learning.model import BradleyTerryModel
 
         # Create model with 100 features
         feature_names = [f"feat_{i}" for i in range(100)]

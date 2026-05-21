@@ -4,7 +4,7 @@ from unittest.mock import MagicMock, patch
 
 import numpy as np
 
-from st_name_ranking import ui
+from st_name_ranking.interface import ui
 from st_name_ranking.types import PreferenceStats
 
 
@@ -62,10 +62,10 @@ class TestUIIntegration:
         }
 
         with (
-            patch("st_name_ranking.ui.st", mock_st),
-            patch("st_name_ranking.ui.get_preference_stats_by_gender") as mock_gender,
-            patch("st_name_ranking.ui.get_preference_stats_by_origin") as mock_origin,
-            patch("st_name_ranking.ui.get_preference_stats_by_phonetic") as mock_phonetic,
+            patch("st_name_ranking.interface.ui.st", mock_st),
+            patch("st_name_ranking.interface.ui.get_preference_stats_by_gender") as mock_gender,
+            patch("st_name_ranking.interface.ui.get_preference_stats_by_origin") as mock_origin,
+            patch("st_name_ranking.interface.ui.get_preference_stats_by_phonetic") as mock_phonetic,
         ):
             # Setup mock returns
             mock_gender.return_value = mock_gender_stats
@@ -126,10 +126,10 @@ class TestUIIntegration:
         mock_st.expander.return_value = mock_expander
 
         with (
-            patch("st_name_ranking.ui.st", mock_st),
-            patch("st_name_ranking.ui.get_preference_stats_by_gender") as mock_gender,
-            patch("st_name_ranking.ui.get_preference_stats_by_origin") as mock_origin,
-            patch("st_name_ranking.ui.get_preference_stats_by_phonetic") as mock_phonetic,
+            patch("st_name_ranking.interface.ui.st", mock_st),
+            patch("st_name_ranking.interface.ui.get_preference_stats_by_gender") as mock_gender,
+            patch("st_name_ranking.interface.ui.get_preference_stats_by_origin") as mock_origin,
+            patch("st_name_ranking.interface.ui.get_preference_stats_by_phonetic") as mock_phonetic,
         ):
             # Setup mock returns (empty dicts)
             mock_gender.return_value = {}
@@ -175,10 +175,10 @@ class TestUIIntegration:
         }
 
         with (
-            patch("st_name_ranking.ui.st", mock_st),
-            patch("st_name_ranking.ui.get_preference_stats_by_gender") as mock_gender,
-            patch("st_name_ranking.ui.get_preference_stats_by_origin") as mock_origin,
-            patch("st_name_ranking.ui.get_preference_stats_by_phonetic") as mock_phonetic,
+            patch("st_name_ranking.interface.ui.st", mock_st),
+            patch("st_name_ranking.interface.ui.get_preference_stats_by_gender") as mock_gender,
+            patch("st_name_ranking.interface.ui.get_preference_stats_by_origin") as mock_origin,
+            patch("st_name_ranking.interface.ui.get_preference_stats_by_phonetic") as mock_phonetic,
         ):
             # Setup mock returns
             mock_gender.return_value = mock_gender_stats
@@ -208,7 +208,7 @@ class TestUIIntegration:
         mock_st = MagicMock()
         mock_st.metric = MagicMock()
 
-        with patch("st_name_ranking.ui.st", mock_st):
+        with patch("st_name_ranking.interface.ui.st", mock_st):
             # Call with numeric delta
             ui.display_name_with_rating("Anna", 1650.5, delta=25.3)
 
@@ -226,7 +226,7 @@ class TestUIIntegration:
         mock_st = MagicMock()
         mock_st.metric = MagicMock()
 
-        with patch("st_name_ranking.ui.st", mock_st):
+        with patch("st_name_ranking.interface.ui.st", mock_st):
             # Call with string delta
             ui.display_name_with_rating("Peter", 1420.0, delta="+20")
 
@@ -244,7 +244,7 @@ class TestUIIntegration:
         mock_st = MagicMock()
         mock_st.metric = MagicMock()
 
-        with patch("st_name_ranking.ui.st", mock_st):
+        with patch("st_name_ranking.interface.ui.st", mock_st):
             # Call without delta
             ui.display_name_with_rating("Maria", 1550.0)
 
@@ -262,7 +262,7 @@ class TestUIIntegration:
         mock_st = MagicMock()
         mock_st.metric = MagicMock()
 
-        with patch("st_name_ranking.ui.st", mock_st):
+        with patch("st_name_ranking.interface.ui.st", mock_st):
             # Call with negative numeric delta
             ui.display_name_with_rating("John", 1480.0, delta=-15.7)
 
@@ -295,9 +295,9 @@ class TestUIIntegration:
         mock_results = [("Anne", 0.9), ("Ann", 0.8), ("Annie", 0.7)]
 
         with (
-            patch("st_name_ranking.ui.st", mock_st),
-            patch("st_name_ranking.ui.get_string_similarity_scores") as mock_string_scores,
-            patch("st_name_ranking.ui.load_embedding_model") as mock_load_model,
+            patch("st_name_ranking.interface.ui.st", mock_st),
+            patch("st_name_ranking.interface.ui.get_string_similarity_scores") as mock_string_scores,
+            patch("st_name_ranking.interface.ui.load_embedding_model") as mock_load_model,
         ):
             mock_string_scores.return_value = mock_results
 
@@ -343,9 +343,9 @@ class TestUIIntegration:
         mock_results = [("Anne", 0.92), ("Annie", 0.85), ("Ann", 0.78)]
 
         with (
-            patch("st_name_ranking.ui.st", mock_st),
-            patch("st_name_ranking.ui.load_embedding_model") as mock_load_model,
-            patch("st_name_ranking.ui.get_vector_similarity_scores") as mock_vector_scores,
+            patch("st_name_ranking.interface.ui.st", mock_st),
+            patch("st_name_ranking.interface.ui.load_embedding_model") as mock_load_model,
+            patch("st_name_ranking.interface.ui.get_vector_similarity_scores") as mock_vector_scores,
         ):
             mock_load_model.return_value = mock_model
             mock_vector_scores.return_value = mock_results
@@ -380,9 +380,9 @@ class TestUIIntegration:
         mock_st.dataframe = MagicMock()
 
         with (
-            patch("st_name_ranking.ui.st", mock_st),
-            patch("st_name_ranking.ui.get_string_similarity_scores") as mock_string_scores,
-            patch("st_name_ranking.ui.load_embedding_model") as mock_load_model,
+            patch("st_name_ranking.interface.ui.st", mock_st),
+            patch("st_name_ranking.interface.ui.get_string_similarity_scores") as mock_string_scores,
+            patch("st_name_ranking.interface.ui.load_embedding_model") as mock_load_model,
         ):
             # Call with test names
             ui.render_similarity(["Anna", "Peter", "Maria"])
@@ -472,14 +472,14 @@ class TestUIIntegration:
         mock_batch = [("Name1", "Name2"), ("Name3", "Name4")]
 
         with (
-            patch("st_name_ranking.ui.st", mock_st),
-            patch("st_name_ranking.ui.display_name_with_rating", mock_display),
-            patch("st_name_ranking.ui.get_names_features") as mock_get_features,
-            patch("st_name_ranking.ui.select_candidate_batch") as mock_select_batch,
-            patch("st_name_ranking.ui.update_preference_and_save"),
-            patch("st_name_ranking.ui.update_preference_draw_and_save"),
-            patch("st_name_ranking.ui.render_preferences_panel"),
-            patch("st_name_ranking.ui.INITIAL_SCORE", 1500),  # Mock INITIAL_SCORE constant
+            patch("st_name_ranking.interface.ui.st", mock_st),
+            patch("st_name_ranking.interface.ui.display_name_with_rating", mock_display),
+            patch("st_name_ranking.interface.ui.get_names_features") as mock_get_features,
+            patch("st_name_ranking.interface.ui.select_candidate_batch") as mock_select_batch,
+            patch("st_name_ranking.interface.ui.update_preference_and_save"),
+            patch("st_name_ranking.interface.ui.update_preference_draw_and_save"),
+            patch("st_name_ranking.interface.ui.render_preferences_panel"),
+            patch("st_name_ranking.interface.ui.INITIAL_SCORE", 1500),  # Mock INITIAL_SCORE constant
         ):
             # Setup mocks
             mock_get_features.return_value = mock_features
@@ -619,14 +619,14 @@ class TestUIIntegration:
         mock_batch = [("Maria", "John"), ("Anna", "Maria")]  # New batch after vote
 
         with (
-            patch("st_name_ranking.ui.st", mock_st),
-            patch("st_name_ranking.ui.display_name_with_rating", mock_display),
-            patch("st_name_ranking.ui.get_names_features") as mock_get_features,
-            patch("st_name_ranking.ui.select_candidate_batch") as mock_select_batch,
-            patch("st_name_ranking.ui.update_preference_and_save") as mock_update,
-            patch("st_name_ranking.ui.update_preference_draw_and_save") as mock_update_draw,
-            patch("st_name_ranking.ui.render_preferences_panel"),
-            patch("st_name_ranking.ui.INITIAL_SCORE", 1500),
+            patch("st_name_ranking.interface.ui.st", mock_st),
+            patch("st_name_ranking.interface.ui.display_name_with_rating", mock_display),
+            patch("st_name_ranking.interface.ui.get_names_features") as mock_get_features,
+            patch("st_name_ranking.interface.ui.select_candidate_batch") as mock_select_batch,
+            patch("st_name_ranking.interface.ui.update_preference_and_save") as mock_update,
+            patch("st_name_ranking.interface.ui.update_preference_draw_and_save") as mock_update_draw,
+            patch("st_name_ranking.interface.ui.render_preferences_panel"),
+            patch("st_name_ranking.interface.ui.INITIAL_SCORE", 1500),
         ):
             # Setup mocks
             mock_get_features.return_value = mock_features
@@ -753,14 +753,14 @@ class TestUIIntegration:
         mock_batch = [("Maria", "John"), ("Anna", "Maria")]  # New batch after vote
 
         with (
-            patch("st_name_ranking.ui.st", mock_st),
-            patch("st_name_ranking.ui.display_name_with_rating", MagicMock()),
-            patch("st_name_ranking.ui.get_names_features") as mock_get_features,
-            patch("st_name_ranking.ui.select_candidate_batch") as mock_select_batch,
-            patch("st_name_ranking.ui.update_preference_and_save") as mock_update,
-            patch("st_name_ranking.ui.update_preference_draw_and_save") as mock_update_draw,
-            patch("st_name_ranking.ui.render_preferences_panel"),
-            patch("st_name_ranking.ui.INITIAL_SCORE", 1500),
+            patch("st_name_ranking.interface.ui.st", mock_st),
+            patch("st_name_ranking.interface.ui.display_name_with_rating", MagicMock()),
+            patch("st_name_ranking.interface.ui.get_names_features") as mock_get_features,
+            patch("st_name_ranking.interface.ui.select_candidate_batch") as mock_select_batch,
+            patch("st_name_ranking.interface.ui.update_preference_and_save") as mock_update,
+            patch("st_name_ranking.interface.ui.update_preference_draw_and_save") as mock_update_draw,
+            patch("st_name_ranking.interface.ui.render_preferences_panel"),
+            patch("st_name_ranking.interface.ui.INITIAL_SCORE", 1500),
         ):
             # Setup mocks
             mock_get_features.return_value = mock_features
@@ -880,14 +880,14 @@ class TestUIIntegration:
         mock_st.session_state.filtered_features = mock_features
 
         with (
-            patch("st_name_ranking.ui.st", mock_st),
-            patch("st_name_ranking.ui.display_name_with_rating", MagicMock()),
-            patch("st_name_ranking.ui.get_names_features") as mock_get_features,
-            patch("st_name_ranking.ui.select_candidate_batch") as mock_select_batch,
-            patch("st_name_ranking.ui.update_preference_and_save") as mock_update,
-            patch("st_name_ranking.ui.update_preference_draw_and_save") as mock_update_draw,
-            patch("st_name_ranking.ui.render_preferences_panel"),
-            patch("st_name_ranking.ui.INITIAL_SCORE", 1500),
+            patch("st_name_ranking.interface.ui.st", mock_st),
+            patch("st_name_ranking.interface.ui.display_name_with_rating", MagicMock()),
+            patch("st_name_ranking.interface.ui.get_names_features") as mock_get_features,
+            patch("st_name_ranking.interface.ui.select_candidate_batch") as mock_select_batch,
+            patch("st_name_ranking.interface.ui.update_preference_and_save") as mock_update,
+            patch("st_name_ranking.interface.ui.update_preference_draw_and_save") as mock_update_draw,
+            patch("st_name_ranking.interface.ui.render_preferences_panel"),
+            patch("st_name_ranking.interface.ui.INITIAL_SCORE", 1500),
         ):
             # Setup mocks
             mock_get_features.return_value = mock_features
@@ -987,15 +987,15 @@ class TestUIIntegration:
         mock_batch = [("Anna", "Peter"), ("Maria", "John")]
 
         with (
-            patch("st_name_ranking.ui.st", mock_st),
-            patch("st_name_ranking.ui.display_name_with_rating", MagicMock()),
-            patch("st_name_ranking.ui.get_names_features") as mock_get_features,
-            patch("st_name_ranking.ui.select_candidates") as mock_select_candidates,
-            patch("st_name_ranking.ui.select_candidate_batch") as mock_select_batch,
-            patch("st_name_ranking.ui.update_preference_and_save"),
-            patch("st_name_ranking.ui.update_preference_draw_and_save"),
-            patch("st_name_ranking.ui.render_preferences_panel"),
-            patch("st_name_ranking.ui.INITIAL_SCORE", 1500),
+            patch("st_name_ranking.interface.ui.st", mock_st),
+            patch("st_name_ranking.interface.ui.display_name_with_rating", MagicMock()),
+            patch("st_name_ranking.interface.ui.get_names_features") as mock_get_features,
+            patch("st_name_ranking.interface.ui.select_candidates") as mock_select_candidates,
+            patch("st_name_ranking.interface.ui.select_candidate_batch") as mock_select_batch,
+            patch("st_name_ranking.interface.ui.update_preference_and_save"),
+            patch("st_name_ranking.interface.ui.update_preference_draw_and_save"),
+            patch("st_name_ranking.interface.ui.render_preferences_panel"),
+            patch("st_name_ranking.interface.ui.INITIAL_SCORE", 1500),
         ):
             mock_get_features.return_value = mock_features
             mock_select_candidates.return_value = ("Anna", "Peter")
@@ -1077,14 +1077,14 @@ class TestUIIntegration:
         )
 
         with (
-            patch("st_name_ranking.ui.st", mock_st),
-            patch("st_name_ranking.ui.display_name_with_rating", MagicMock()),
-            patch("st_name_ranking.ui.get_names_features") as mock_get_features,
-            patch("st_name_ranking.ui.select_candidate_batch") as mock_select_batch,
-            patch("st_name_ranking.ui.update_preference_and_save"),
-            patch("st_name_ranking.ui.update_preference_draw_and_save"),
-            patch("st_name_ranking.ui.render_preferences_panel"),
-            patch("st_name_ranking.ui.INITIAL_SCORE", 1500),
+            patch("st_name_ranking.interface.ui.st", mock_st),
+            patch("st_name_ranking.interface.ui.display_name_with_rating", MagicMock()),
+            patch("st_name_ranking.interface.ui.get_names_features") as mock_get_features,
+            patch("st_name_ranking.interface.ui.select_candidate_batch") as mock_select_batch,
+            patch("st_name_ranking.interface.ui.update_preference_and_save"),
+            patch("st_name_ranking.interface.ui.update_preference_draw_and_save"),
+            patch("st_name_ranking.interface.ui.render_preferences_panel"),
+            patch("st_name_ranking.interface.ui.INITIAL_SCORE", 1500),
         ):
             mock_get_features.return_value = mock_features
 
@@ -1163,14 +1163,14 @@ class TestUIIntegration:
         # We'll mock get_names_features to return new features for new names
         mock_features = np.random.randn(4, 25)
         with (
-            patch("st_name_ranking.ui.st", mock_st),
-            patch("st_name_ranking.ui.display_name_with_rating", MagicMock()),
-            patch("st_name_ranking.ui.get_names_features") as mock_get_features,
-            patch("st_name_ranking.ui.select_candidate_batch") as mock_select_batch,
-            patch("st_name_ranking.ui.update_preference_and_save"),
-            patch("st_name_ranking.ui.update_preference_draw_and_save"),
-            patch("st_name_ranking.ui.render_preferences_panel"),
-            patch("st_name_ranking.ui.INITIAL_SCORE", 1500),
+            patch("st_name_ranking.interface.ui.st", mock_st),
+            patch("st_name_ranking.interface.ui.display_name_with_rating", MagicMock()),
+            patch("st_name_ranking.interface.ui.get_names_features") as mock_get_features,
+            patch("st_name_ranking.interface.ui.select_candidate_batch") as mock_select_batch,
+            patch("st_name_ranking.interface.ui.update_preference_and_save"),
+            patch("st_name_ranking.interface.ui.update_preference_draw_and_save"),
+            patch("st_name_ranking.interface.ui.render_preferences_panel"),
+            patch("st_name_ranking.interface.ui.INITIAL_SCORE", 1500),
         ):
             mock_get_features.return_value = mock_features
             mock_select_batch.return_value = [("Maria", "John")]
@@ -1257,15 +1257,15 @@ class TestUIIntegration:
         valid_fallback_pair = ("Anna", "Peter")
 
         with (
-            patch("st_name_ranking.ui.st", mock_st),
-            patch("st_name_ranking.ui.display_name_with_rating", MagicMock()),
-            patch("st_name_ranking.ui.get_names_features") as mock_get_features,
-            patch("st_name_ranking.ui.select_candidate_batch") as mock_select_batch,
-            patch("st_name_ranking.ui.select_candidates") as mock_select_candidates,
-            patch("st_name_ranking.ui.update_preference_and_save"),
-            patch("st_name_ranking.ui.update_preference_draw_and_save"),
-            patch("st_name_ranking.ui.render_preferences_panel"),
-            patch("st_name_ranking.ui.INITIAL_SCORE", 1500),
+            patch("st_name_ranking.interface.ui.st", mock_st),
+            patch("st_name_ranking.interface.ui.display_name_with_rating", MagicMock()),
+            patch("st_name_ranking.interface.ui.get_names_features") as mock_get_features,
+            patch("st_name_ranking.interface.ui.select_candidate_batch") as mock_select_batch,
+            patch("st_name_ranking.interface.ui.select_candidates") as mock_select_candidates,
+            patch("st_name_ranking.interface.ui.update_preference_and_save"),
+            patch("st_name_ranking.interface.ui.update_preference_draw_and_save"),
+            patch("st_name_ranking.interface.ui.render_preferences_panel"),
+            patch("st_name_ranking.interface.ui.INITIAL_SCORE", 1500),
         ):
             mock_get_features.return_value = mock_features
             mock_select_batch.return_value = invalid_batch
@@ -1359,15 +1359,15 @@ class TestUIIntegration:
         valid_fallback_pair = ("Maria", "John")
 
         with (
-            patch("st_name_ranking.ui.st", mock_st),
-            patch("st_name_ranking.ui.display_name_with_rating", MagicMock()),
-            patch("st_name_ranking.ui.get_names_features") as mock_get_features,
-            patch("st_name_ranking.ui.select_candidate_batch") as mock_select_batch,
-            patch("st_name_ranking.ui.select_candidates") as mock_select_candidates,
-            patch("st_name_ranking.ui.update_preference_and_save") as mock_update,
-            patch("st_name_ranking.ui.update_preference_draw_and_save"),
-            patch("st_name_ranking.ui.render_preferences_panel"),
-            patch("st_name_ranking.ui.INITIAL_SCORE", 1500),
+            patch("st_name_ranking.interface.ui.st", mock_st),
+            patch("st_name_ranking.interface.ui.display_name_with_rating", MagicMock()),
+            patch("st_name_ranking.interface.ui.get_names_features") as mock_get_features,
+            patch("st_name_ranking.interface.ui.select_candidate_batch") as mock_select_batch,
+            patch("st_name_ranking.interface.ui.select_candidates") as mock_select_candidates,
+            patch("st_name_ranking.interface.ui.update_preference_and_save") as mock_update,
+            patch("st_name_ranking.interface.ui.update_preference_draw_and_save"),
+            patch("st_name_ranking.interface.ui.render_preferences_panel"),
+            patch("st_name_ranking.interface.ui.INITIAL_SCORE", 1500),
         ):
             mock_get_features.return_value = mock_features
             mock_select_batch.return_value = invalid_batch
@@ -1468,15 +1468,15 @@ class TestUIIntegration:
         valid_fallback_pair = ("Maria", "John")
 
         with (
-            patch("st_name_ranking.ui.st", mock_st),
-            patch("st_name_ranking.ui.display_name_with_rating", MagicMock()),
-            patch("st_name_ranking.ui.get_names_features") as mock_get_features,
-            patch("st_name_ranking.ui.select_candidate_batch") as mock_select_batch,
-            patch("st_name_ranking.ui.select_candidates") as mock_select_candidates,
-            patch("st_name_ranking.ui.update_preference_and_save") as mock_update,
-            patch("st_name_ranking.ui.update_preference_draw_and_save"),
-            patch("st_name_ranking.ui.render_preferences_panel"),
-            patch("st_name_ranking.ui.INITIAL_SCORE", 1500),
+            patch("st_name_ranking.interface.ui.st", mock_st),
+            patch("st_name_ranking.interface.ui.display_name_with_rating", MagicMock()),
+            patch("st_name_ranking.interface.ui.get_names_features") as mock_get_features,
+            patch("st_name_ranking.interface.ui.select_candidate_batch") as mock_select_batch,
+            patch("st_name_ranking.interface.ui.select_candidates") as mock_select_candidates,
+            patch("st_name_ranking.interface.ui.update_preference_and_save") as mock_update,
+            patch("st_name_ranking.interface.ui.update_preference_draw_and_save"),
+            patch("st_name_ranking.interface.ui.render_preferences_panel"),
+            patch("st_name_ranking.interface.ui.INITIAL_SCORE", 1500),
         ):
             mock_get_features.return_value = mock_features
             mock_select_batch.return_value = invalid_batch
@@ -1577,15 +1577,15 @@ class TestUIIntegration:
         valid_fallback_pair = ("Maria", "John")
 
         with (
-            patch("st_name_ranking.ui.st", mock_st),
-            patch("st_name_ranking.ui.display_name_with_rating", MagicMock()),
-            patch("st_name_ranking.ui.get_names_features") as mock_get_features,
-            patch("st_name_ranking.ui.select_candidate_batch") as mock_select_batch,
-            patch("st_name_ranking.ui.select_candidates") as mock_select_candidates,
-            patch("st_name_ranking.ui.update_preference_and_save") as mock_update,
-            patch("st_name_ranking.ui.update_preference_draw_and_save") as mock_update_draw,
-            patch("st_name_ranking.ui.render_preferences_panel"),
-            patch("st_name_ranking.ui.INITIAL_SCORE", 1500),
+            patch("st_name_ranking.interface.ui.st", mock_st),
+            patch("st_name_ranking.interface.ui.display_name_with_rating", MagicMock()),
+            patch("st_name_ranking.interface.ui.get_names_features") as mock_get_features,
+            patch("st_name_ranking.interface.ui.select_candidate_batch") as mock_select_batch,
+            patch("st_name_ranking.interface.ui.select_candidates") as mock_select_candidates,
+            patch("st_name_ranking.interface.ui.update_preference_and_save") as mock_update,
+            patch("st_name_ranking.interface.ui.update_preference_draw_and_save") as mock_update_draw,
+            patch("st_name_ranking.interface.ui.render_preferences_panel"),
+            patch("st_name_ranking.interface.ui.INITIAL_SCORE", 1500),
         ):
             mock_get_features.return_value = mock_features
             mock_select_batch.return_value = invalid_batch
@@ -1642,7 +1642,7 @@ class TestUIIntegration:
         )
 
         names = [f"Name{i}" for i in range(12)]
-        with patch("st_name_ranking.ui.st", mock_st):
+        with patch("st_name_ranking.interface.ui.st", mock_st):
             ui.render_rankings(names)
 
         assert mock_st.dataframe.call_count >= 1
@@ -1687,9 +1687,9 @@ class TestUIIntegration:
         features = np.random.randn(30, 6)
 
         with (
-            patch("st_name_ranking.ui.st", mock_st),
-            patch("st_name_ranking.ui.get_or_initialize_active_learning_model", return_value=mock_model),
-            patch("st_name_ranking.ui.get_names_features", return_value=features),
+            patch("st_name_ranking.interface.ui.st", mock_st),
+            patch("st_name_ranking.interface.ui.get_or_initialize_active_learning_model", return_value=mock_model),
+            patch("st_name_ranking.interface.ui.get_names_features", return_value=features),
         ):
             ui.render_rankings(names)
 

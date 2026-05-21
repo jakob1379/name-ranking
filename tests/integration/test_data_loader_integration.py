@@ -4,7 +4,7 @@ from unittest.mock import patch
 
 import pytest
 
-from st_name_ranking import data_loader
+from st_name_ranking.persistence import data_loader
 
 
 class TestDataLoaderIntegration:
@@ -12,7 +12,7 @@ class TestDataLoaderIntegration:
 
     def test_load_ratings_from_database(self, initialized_db):
         """Test loading ratings from database."""
-        from st_name_ranking.database import get_connection
+        from st_name_ranking.persistence.database import get_connection
 
         # Insert test names and ratings into database
         with get_connection() as conn:
@@ -40,7 +40,7 @@ class TestDataLoaderIntegration:
 
     def test_save_ratings_to_database(self, initialized_db):
         """Test saving ratings to database."""
-        from st_name_ranking.database import get_connection
+        from st_name_ranking.persistence.database import get_connection
 
         # Insert test names first
         with get_connection() as conn:
@@ -68,7 +68,7 @@ class TestDataLoaderIntegration:
 
     def test_initialize_or_load_ratings(self, initialized_db):
         """Test initialize_or_load_ratings function."""
-        from st_name_ranking.database import get_connection
+        from st_name_ranking.persistence.database import get_connection
 
         # Insert some names with existing ratings
         with get_connection() as conn:
@@ -99,7 +99,7 @@ class TestDataLoaderIntegration:
 
     def test_load_names_by_gender_with_submodule(self, initialized_db):
         """Test loading names by gender from database after inserting names."""
-        from st_name_ranking.database import get_connection
+        from st_name_ranking.persistence.database import get_connection
 
         # Insert test names into database
         with get_connection() as conn:
@@ -140,7 +140,7 @@ class TestDataLoaderIntegration:
 
     def test_load_names_by_gender_sync_with_submodule(self, initialized_db, tmp_path):
         """Test loading names by gender with sync to submodule."""
-        from st_name_ranking.database import get_connection
+        from st_name_ranking.persistence.database import get_connection
 
         # Insert test names into database (simulate sync result)
         with get_connection() as conn:
@@ -152,7 +152,7 @@ class TestDataLoaderIntegration:
                 ],
             )
 
-        with patch("st_name_ranking.database.sync_names_with_submodule") as mock_sync:
+        with patch("st_name_ranking.persistence.database.sync_names_with_submodule") as mock_sync:
             mock_sync.return_value = 2  # Simulate 2 names synced
 
             gender_data = data_loader.load_names_by_gender(sync_with_submodule=True)

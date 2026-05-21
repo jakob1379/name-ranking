@@ -1,4 +1,4 @@
-"""Tests for st_name_ranking.classify_origins module."""
+"""Tests for st_name_ranking.classification.classify_origins module."""
 
 import sqlite3
 from types import SimpleNamespace
@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from st_name_ranking import classify_origins, origin_classifier
+from st_name_ranking.classification import classify_origins, origin_classifier
 
 
 class TestOriginClassifierFactory:
@@ -19,7 +19,7 @@ class TestOriginClassifierFactory:
     def test_get_or_create_classifier_caches_hierarchical_classifier(self):
         """Test successful hierarchical classifier caching."""
         reference_names: dict[str, tuple[str, float, str, str]] = {}
-        with patch("st_name_ranking.origin_classifier.OriginClassifier") as mock_cls:
+        with patch("st_name_ranking.classification.origin_classifier.OriginClassifier") as mock_cls:
             classifier = origin_classifier.get_or_create_classifier(reference_names=reference_names)
             assert classifier == mock_cls.return_value
 
@@ -34,7 +34,7 @@ class TestOriginClassifierFactory:
         first_reference_set = {"Anna": ("Nordic", 0.9, "AN", "")}
         second_reference_set = {"Maria": ("European", 0.8, "MR", "")}
 
-        with patch("st_name_ranking.origin_classifier.OriginClassifier") as mock_cls:
+        with patch("st_name_ranking.classification.origin_classifier.OriginClassifier") as mock_cls:
             mock_cls.side_effect = [object(), object()]
             first_classifier = origin_classifier.get_or_create_classifier(first_reference_set)
             second_classifier = origin_classifier.get_or_create_classifier(second_reference_set)
@@ -49,7 +49,7 @@ class TestOriginClassifierFactory:
         first_reference_set = {"Anna": ("Nordic", 0.9, "AN", "")}
         second_reference_set = {"Anna": ("Nordic", 0.9, "AN", "")}
 
-        with patch("st_name_ranking.origin_classifier.OriginClassifier") as mock_cls:
+        with patch("st_name_ranking.classification.origin_classifier.OriginClassifier") as mock_cls:
             first_classifier = origin_classifier.get_or_create_classifier(first_reference_set)
             second_classifier = origin_classifier.get_or_create_classifier(second_reference_set)
 
@@ -60,7 +60,7 @@ class TestOriginClassifierFactory:
         """Mutating reference content should not reuse a stale classifier for the same dict."""
         reference_set = {"Anna": ("Nordic", 0.9, "AN", "")}
 
-        with patch("st_name_ranking.origin_classifier.OriginClassifier") as mock_cls:
+        with patch("st_name_ranking.classification.origin_classifier.OriginClassifier") as mock_cls:
             mock_cls.side_effect = [object(), object()]
             first_classifier = origin_classifier.get_or_create_classifier(reference_set)
             reference_set["Anna"] = ("European", 0.8, "MR", "")
@@ -73,7 +73,7 @@ class TestOriginClassifierFactory:
         """A classifier should not observe later mutations to caller-owned reference data."""
         reference_set = {"Anna": ("Nordic", 0.9, "AN", "")}
 
-        with patch("st_name_ranking.origin_classifier.get_ethnicolr_classifier", return_value=None):
+        with patch("st_name_ranking.classification.origin_classifier.get_ethnicolr_classifier", return_value=None):
             classifier = origin_classifier.OriginClassifier(reference_set, use_ethnidata=False)
 
         reference_set["Anna"] = ("European", 0.8, "MR", "")
@@ -83,7 +83,7 @@ class TestOriginClassifierFactory:
 
     def test_get_or_create_classifier_uses_origin_classifier_boundary(self):
         """Test factory construction errors surface from origin_classifier directly."""
-        with patch("st_name_ranking.origin_classifier.OriginClassifier", side_effect=ImportError):
+        with patch("st_name_ranking.classification.origin_classifier.OriginClassifier", side_effect=ImportError):
             with pytest.raises(ImportError):
                 origin_classifier.get_or_create_classifier(reference_names={})
 
@@ -94,7 +94,7 @@ class TestGetRegionForNationality:
     def test_region_found(self, initialized_db):
         """Test when nationality mapping exists in database."""
         # Use a country not in default mapping
-        from st_name_ranking.database import get_connection
+        from st_name_ranking.persistence.database import get_connection
 
         with get_connection() as conn:
             # First delete if exists (to avoid primary key conflict)
@@ -121,7 +121,7 @@ class TestGetRegionForNationality:
 
     def test_region_with_confidence(self, initialized_db):
         """Test region mapping with confidence adjustment."""
-        from st_name_ranking.database import get_connection
+        from st_name_ranking.persistence.database import get_connection
 
         with get_connection() as conn:
             # Use different country to avoid default mapping conflict
@@ -173,7 +173,7 @@ class TestClassifyName:
         """Test when ethnidata is not installed."""
         # Need to patch the specific module where _create_ethnidata_classifier is used
         with patch(
-            "st_name_ranking.origin_classifier._create_ethnidata_classifier",
+            "st_name_ranking.classification.origin_classifier._create_ethnidata_classifier",
             side_effect=ImportError,
         ):
             # When ethnidata fails, classifier falls back to International
@@ -192,7 +192,7 @@ class TestClassifyName:
         """Reference lookup failures should remain distinguishable from no reference data."""
         classify_origins.reset_reference_cache()
         with patch(
-            "st_name_ranking.classify_origins.get_names_with_origins",
+            "st_name_ranking.classification.classify_origins.get_names_with_origins",
             side_effect=sqlite3.OperationalError("database is locked"),
         ):
             with pytest.raises(RuntimeError, match="Failed to load origin-classification reference names"):
@@ -204,11 +204,11 @@ class TestClassifyName:
 class TestClassifyAllNames:
     """Tests for classify_all_names function."""
 
-    @patch("st_name_ranking.classify_origins.classify_batch")
-    @patch("st_name_ranking.classify_origins.get_unclassified_names")
-    @patch("st_name_ranking.classify_origins.update_name_origin")
+    @patch("st_name_ranking.classification.classify_origins.classify_batch")
+    @patch("st_name_ranking.classification.classify_origins.get_unclassified_names")
+    @patch("st_name_ranking.classification.classify_origins.update_name_origin")
     @patch(
-        "st_name_ranking.classify_origins.st",
+        "st_name_ranking.classification.classify_origins.st",
         new_callable=MagicMock,
         create=True,
     )
@@ -251,9 +251,9 @@ class TestClassifyAllNames:
 
         assert result == 2  # mock returns 2
 
-    @patch("st_name_ranking.classify_origins.get_unclassified_names")
+    @patch("st_name_ranking.classification.classify_origins.get_unclassified_names")
     @patch(
-        "st_name_ranking.classify_origins.st",
+        "st_name_ranking.classification.classify_origins.st",
         new_callable=MagicMock,
         create=True,
     )
@@ -271,9 +271,9 @@ class TestClassifyAllNames:
         # Note: classify_all_names uses logging, not Streamlit toast
         # Original test expected toast but it's not implemented
 
-    @patch("st_name_ranking.classify_origins.get_unclassified_names")
+    @patch("st_name_ranking.classification.classify_origins.get_unclassified_names")
     @patch(
-        "st_name_ranking.classify_origins.st",
+        "st_name_ranking.classification.classify_origins.st",
         new_callable=MagicMock,
         create=True,
     )
@@ -288,7 +288,7 @@ class TestClassifyAllNames:
             SimpleNamespace(id=2, name="Peter"),
         ]
 
-        with patch("st_name_ranking.classify_origins.get_or_create_classifier", side_effect=ImportError):
+        with patch("st_name_ranking.classification.classify_origins.get_or_create_classifier", side_effect=ImportError):
             result = classify_origins.classify_all_names()
 
             assert result == 0

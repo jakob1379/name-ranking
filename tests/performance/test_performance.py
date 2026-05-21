@@ -17,7 +17,7 @@ def test_binary_filter_performance(tmp_path):
     """Test performance of binary filter with many interactions."""
     from streamlit.testing.v1 import AppTest
 
-    from st_name_ranking import database
+    from st_name_ranking.persistence import database
 
     print_progress("Setting up isolated database for AppTest...")
     # Create isolated database to avoid lock contention
@@ -108,7 +108,7 @@ def test_database_operations_performance(tmp_path):
     """Test database operation performance."""
     print_progress("Starting test_database_operations_performance...")
 
-    from st_name_ranking.database import get_connection, get_db_path, init_database
+    from st_name_ranking.persistence.database import get_connection, get_db_path, init_database
 
     # Create isolated database to avoid lock contention with other tests
     test_db_path = tmp_path / "test_perf_db.db"
@@ -118,7 +118,7 @@ def test_database_operations_performance(tmp_path):
 
     try:
         # Temporarily redirect database to isolated path
-        import st_name_ranking.database as db_module
+        import st_name_ranking.persistence.database as db_module
 
         db_module.set_db_path(test_db_path)
 
@@ -161,7 +161,7 @@ def test_database_operations_performance(tmp_path):
 
     finally:
         # Restore original database path
-        import st_name_ranking.database as db_module
+        import st_name_ranking.persistence.database as db_module
 
         db_module.set_db_path(original_db_path)
         print_progress("Database path restored")
@@ -171,7 +171,7 @@ def test_feature_extraction_performance():
     """Test feature extraction performance."""
     print_progress("Starting test_feature_extraction_performance...")
 
-    from st_name_ranking.features import FeatureExtractor
+    from st_name_ranking.learning.features import FeatureExtractor
 
     extractor = FeatureExtractor()
     print_progress("FeatureExtractor initialized")
@@ -204,7 +204,7 @@ def test_feature_extraction_performance():
     print_progress(f"Asserting: single_time={single_time:.2f}ms < 5ms, batch_time={batch_time:.2f}ms < 50ms")
     assert single_time < 5, f"Single extraction too slow: {single_time:.2f}ms"
     assert batch_time < 50, f"Batch extraction too slow: {batch_time:.2f}ms"
-    assert features.shape == (100, 25), f"Unexpected feature shape: {features.shape}"
+    assert features.shape == (100, len(extractor.get_feature_names())), f"Unexpected feature shape: {features.shape}"
     print_progress("Feature extraction performance assertions passed!")
 
 
@@ -212,8 +212,8 @@ def test_model_update_performance():
     """Test model update performance."""
     print_progress("Starting test_model_update_performance...")
 
-    from st_name_ranking.features import FeatureExtractor
-    from st_name_ranking.model import BradleyTerryModel
+    from st_name_ranking.learning.features import FeatureExtractor
+    from st_name_ranking.learning.model import BradleyTerryModel
 
     extractor = FeatureExtractor()
     feature_names = extractor.get_feature_names()

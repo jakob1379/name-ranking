@@ -9,18 +9,18 @@ from unittest.mock import patch
 
 import numpy as np
 
-from st_name_ranking import database
 from st_name_ranking.active_learning.selection import (
     get_or_create_feature_extractor,
     select_candidate_batch,
     select_candidates,
 )
-from st_name_ranking.model import (
+from st_name_ranking.learning.model import (
     BradleyTerryModel,
     _get_phonetic_codes_cached,
     _group_names_by_phonetic,
     _select_cross_cluster_pairs,
 )
+from st_name_ranking.persistence import database
 from st_name_ranking.phonetic_similarity import (
     batch_compute_phonetic_codes,
 )
@@ -487,7 +487,7 @@ class TestPhoneticFeatures:
         """
         Phonetic features should be part of feature vector.
         """
-        from st_name_ranking.features import extract_phonetic_features
+        from st_name_ranking.learning.features import extract_phonetic_features
 
         # Test feature extraction
         features = extract_phonetic_features("Anna")
@@ -509,7 +509,7 @@ class TestPhoneticFeatures:
 
     def test_phonetic_features_different_for_different_names(self, initialized_db):
         """Different names should have different phonetic features."""
-        from st_name_ranking.features import extract_phonetic_features
+        from st_name_ranking.learning.features import extract_phonetic_features
 
         # Names with different phonetic codes
         features_anna = extract_phonetic_features("Anna")

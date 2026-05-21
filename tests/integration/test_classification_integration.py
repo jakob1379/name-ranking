@@ -13,8 +13,8 @@ import sqlite3
 import pytest
 from metaphone import doublemetaphone
 
-from st_name_ranking import classify_origins, origin_classifier
-from st_name_ranking.database import (
+from st_name_ranking.classification import classify_origins, origin_classifier
+from st_name_ranking.persistence.database import (
     get_connection,
     get_names_with_origins,
     get_unclassified_names,
@@ -29,7 +29,7 @@ def mock_ethnidata_classifier():
     from unittest.mock import patch
 
     with patch(
-        "st_name_ranking.origin_classifier._create_ethnidata_classifier",
+        "st_name_ranking.classification.origin_classifier._create_ethnidata_classifier",
         return_value=None,
     ):
         yield

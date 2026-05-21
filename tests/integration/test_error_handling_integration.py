@@ -10,8 +10,8 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 
-from st_name_ranking import database
-from st_name_ranking.model import BradleyTerryModel
+from st_name_ranking.learning.model import BradleyTerryModel
+from st_name_ranking.persistence import database
 
 
 class TestDatabaseErrorHandling:
@@ -19,7 +19,7 @@ class TestDatabaseErrorHandling:
 
     def test_handles_database_locked_gracefully(self, initialized_db):
         """When database is locked, should not crash."""
-        from st_name_ranking.database import get_stats
+        from st_name_ranking.persistence.database import get_stats
 
         # Simulate database locked error by patching sqlite3.connect
         call_count = [0]
@@ -43,7 +43,7 @@ class TestDatabaseErrorHandling:
 
     def test_database_transaction_rollback_on_error(self, initialized_db):
         """Transaction should rollback on error."""
-        from st_name_ranking.database import get_connection, get_ratings
+        from st_name_ranking.persistence.database import get_connection, get_ratings
 
         # Insert a name first
         with get_connection() as conn:
@@ -72,7 +72,7 @@ class TestDatabaseErrorHandling:
 
     def test_get_stats_handles_corrupted_database(self, mock_db_path):
         """get_stats should handle corrupted database gracefully."""
-        from st_name_ranking.database import get_connection, get_stats
+        from st_name_ranking.persistence.database import get_connection, get_stats
 
         # Initialize database
         database.init_database()
@@ -87,7 +87,7 @@ class TestDatabaseErrorHandling:
 
     def test_database_timeout_retry(self, initialized_db):
         """Database operations should handle timeout scenarios."""
-        from st_name_ranking.database import get_connection
+        from st_name_ranking.persistence.database import get_connection
 
         # Test that we can set timeout and handle busy scenarios
         with patch("sqlite3.connect") as mock_connect:
@@ -110,7 +110,7 @@ class TestModelErrorHandling:
 
     def test_recover_from_corrupted_model_blob(self, initialized_db):
         """Corrupted pickle data should trigger reinitialization."""
-        from st_name_ranking.database import get_connection
+        from st_name_ranking.persistence.database import get_connection
 
         # Initialize a model and save it
         feature_names = ["feature1", "feature2", "feature3"]
@@ -176,7 +176,7 @@ class TestModelErrorHandling:
         model = BradleyTerryModel(["f1", "f2"])
 
         # Mock database to fail on save
-        with patch("st_name_ranking.model.get_connection") as mock_conn:
+        with patch("st_name_ranking.learning.model.get_connection") as mock_conn:
             mock_context = MagicMock()
             mock_conn.return_value.__enter__ = MagicMock(return_value=mock_context)
             mock_conn.return_value.__exit__ = MagicMock(return_value=False)
@@ -193,7 +193,7 @@ class TestEmptyDatabaseEdgeCases:
     def test_handles_empty_database(self, mock_db_path):
         """With no names, strict candidate selection should report absence."""
         from st_name_ranking.active_learning.selection import select_candidates
-        from st_name_ranking.database import init_database
+        from st_name_ranking.persistence.database import init_database
 
         # Initialize empty database
         init_database()
@@ -204,7 +204,7 @@ class TestEmptyDatabaseEdgeCases:
     def test_single_name_no_pairs(self, mock_db_path):
         """With one name, can't form comparison pairs."""
         from st_name_ranking.active_learning.selection import select_candidates
-        from st_name_ranking.database import get_connection, init_database
+        from st_name_ranking.persistence.database import get_connection, init_database
 
         # Initialize and insert single name
         init_database()
@@ -219,8 +219,8 @@ class TestEmptyDatabaseEdgeCases:
 
     def test_model_pair_selection_with_two_names(self, initialized_db):
         """Model should handle minimum case of exactly 2 names."""
-        from st_name_ranking.database import get_connection
-        from st_name_ranking.features import FeatureExtractor
+        from st_name_ranking.learning.features import FeatureExtractor
+        from st_name_ranking.persistence.database import get_connection
 
         # Insert two names
         with get_connection() as conn:
@@ -252,7 +252,7 @@ class TestEmptyDatabaseEdgeCases:
 
     def test_all_names_filtered_returns_empty(self, initialized_db):
         """When filters exclude all names, handle gracefully."""
-        from st_name_ranking.database import get_connection, get_names_by_filters
+        from st_name_ranking.persistence.database import get_connection, get_names_by_filters
 
         # Insert names with specific gender
         with get_connection() as conn:
@@ -275,7 +275,7 @@ class TestInvalidDataHandling:
 
     def test_invalid_preference_value_raises(self, initialized_db):
         """Invalid preference values should raise appropriate error."""
-        from st_name_ranking.database import get_connection, record_comparison
+        from st_name_ranking.persistence.database import get_connection, record_comparison
 
         # Insert two names
         with get_connection() as conn:
@@ -298,7 +298,7 @@ class TestInvalidDataHandling:
 
     def test_vote_with_missing_name_handles_gracefully(self, initialized_db):
         """Voting for non-existent name should not crash."""
-        from st_name_ranking.database import record_comparison
+        from st_name_ranking.persistence.database import record_comparison
 
         # Try to record comparison with non-existent names
         with pytest.raises(ValueError, match="Name not found"):
@@ -306,14 +306,14 @@ class TestInvalidDataHandling:
 
     def test_update_rating_for_nonexistent_name_raises(self, initialized_db):
         """Updating rating for non-existent name should raise error."""
-        from st_name_ranking.database import update_rating
+        from st_name_ranking.persistence.database import update_rating
 
         with pytest.raises(ValueError, match="Name not found"):
             update_rating("GhostName", 1600.0)
 
     def test_get_ratings_with_orphaned_entries(self, initialized_db):
         """get_ratings should handle orphaned rating entries."""
-        from st_name_ranking.database import get_connection, get_ratings
+        from st_name_ranking.persistence.database import get_connection, get_ratings
 
         # Insert a name and rating
         with get_connection() as conn:
@@ -342,20 +342,23 @@ class TestSubmoduleDataHandling:
 
     def test_missing_submodule_data(self, tmp_path, initialized_db):
         """Missing submodule should be handled gracefully."""
-        from st_name_ranking.data_loader import load_submodule_json
+        from st_name_ranking.persistence.data_loader import load_submodule_json
 
         # Create temp directory without submodule
         nonexistent_path = tmp_path / "nonexistent"
 
         # Patch the json_path to non-existent location
-        with patch("st_name_ranking.data_loader.os.path.join", return_value=str(nonexistent_path / "allenavne.json")):
+        with patch(
+            "st_name_ranking.persistence.data_loader.os.path.join",
+            return_value=str(nonexistent_path / "allenavne.json"),
+        ):
             with patch("streamlit.toast"):  # Suppress toast messages
                 result = load_submodule_json()
                 assert result == [], "Should return empty list when submodule missing"
 
     def test_corrupted_submodule_json(self, tmp_path, initialized_db):
         """Corrupted JSON in submodule should be handled gracefully."""
-        from st_name_ranking.data_loader import load_submodule_json
+        from st_name_ranking.persistence.data_loader import load_submodule_json
 
         # Create corrupted JSON file
         submodule_path = tmp_path / "godkendtefornavne"
@@ -363,14 +366,14 @@ class TestSubmoduleDataHandling:
         json_file = submodule_path / "allenavne.json"
         json_file.write_text("not valid json {{{")
 
-        with patch("st_name_ranking.data_loader.os.path.join", return_value=str(json_file)):
+        with patch("st_name_ranking.persistence.data_loader.os.path.join", return_value=str(json_file)):
             with patch("streamlit.toast"):  # Suppress toast messages
                 result = load_submodule_json()
                 assert result == [], "Should return empty list for corrupted JSON"
 
     def test_submodule_json_missing_columns(self, tmp_path, initialized_db):
         """JSON missing required columns should be handled."""
-        from st_name_ranking.data_loader import load_submodule_json
+        from st_name_ranking.persistence.data_loader import load_submodule_json
 
         # Create JSON with wrong columns
         submodule_path = tmp_path / "godkendtefornavne"
@@ -378,7 +381,7 @@ class TestSubmoduleDataHandling:
         json_file = submodule_path / "allenavne.json"
         json_file.write_text('[{"wrong_column": "value"}]')
 
-        with patch("st_name_ranking.data_loader.os.path.join", return_value=str(json_file)):
+        with patch("st_name_ranking.persistence.data_loader.os.path.join", return_value=str(json_file)):
             with patch("streamlit.toast"):  # Suppress toast messages
                 result = load_submodule_json()
                 assert result == [], "Should return empty list for JSON with wrong schema"
@@ -389,7 +392,7 @@ class TestConsistencyAndRecovery:
 
     def test_model_update_failure_preserves_consistency(self, initialized_db):
         """If model update fails, ratings should remain consistent."""
-        from st_name_ranking.database import get_connection, get_ratings, update_rating
+        from st_name_ranking.persistence.database import get_connection, get_ratings, update_rating
 
         # Insert test names
         with get_connection() as conn:
@@ -431,7 +434,7 @@ class TestConsistencyAndRecovery:
 
     def test_batch_update_partial_failure(self, initialized_db):
         """Batch update should handle partial failures."""
-        from st_name_ranking.database import (
+        from st_name_ranking.persistence.database import (
             get_connection,
             get_ratings,
             update_ratings_batch,
@@ -464,7 +467,7 @@ class TestConsistencyAndRecovery:
 
     def test_feature_extraction_failure_fallback(self):
         """Feature extraction should have fallback for failures."""
-        from st_name_ranking.features import extract_phonetic_features
+        from st_name_ranking.learning.features import extract_phonetic_features
 
         # Normal extraction should work
         features = extract_phonetic_features("Anna")
@@ -483,7 +486,7 @@ class TestRaceConditions:
 
     def test_concurrent_database_initialization(self, mock_db_path):
         """Multiple simultaneous init_database calls should be safe."""
-        from st_name_ranking.database import init_database
+        from st_name_ranking.persistence.database import init_database
 
         # Call init_database multiple times concurrently (simulated)
         init_database()
@@ -491,7 +494,7 @@ class TestRaceConditions:
         init_database()
 
         # Should be idempotent
-        from st_name_ranking.database import get_connection
+        from st_name_ranking.persistence.database import get_connection
 
         with get_connection() as conn:
             cursor = conn.execute("SELECT COUNT(*) FROM names")
@@ -515,7 +518,7 @@ class TestMemoryAndResourceLimits:
 
     def test_large_batch_phonetic_lookup(self, initialized_db):
         """Phonetic lookup should handle large batches."""
-        from st_name_ranking.database import get_connection, get_phonetic_codes_batch
+        from st_name_ranking.persistence.database import get_connection, get_phonetic_codes_batch
 
         # Insert many names
         names = [f"Name{i}" for i in range(100)]
@@ -535,7 +538,7 @@ class TestMemoryAndResourceLimits:
 
     def test_large_batch_name_details(self, initialized_db):
         """Name details batch lookup should handle large batches."""
-        from st_name_ranking.database import get_connection, get_name_details_batch
+        from st_name_ranking.persistence.database import get_connection, get_name_details_batch
 
         # Insert many names
         names = [f"Name{i}" for i in range(100)]
@@ -570,7 +573,7 @@ class TestBoundaryConditions:
 
     def test_preference_stats_with_no_comparisons(self, initialized_db):
         """Preference stats should handle no comparisons gracefully."""
-        from st_name_ranking.database import (
+        from st_name_ranking.persistence.database import (
             get_preference_stats_by_gender,
             get_preference_stats_by_origin,
         )
@@ -586,7 +589,7 @@ class TestBoundaryConditions:
 
     def test_comparison_count_for_uncompared_name(self, initialized_db):
         """get_comparison_count should return 0 for uncompared names."""
-        from st_name_ranking.database import get_comparison_count, get_connection
+        from st_name_ranking.persistence.database import get_comparison_count, get_connection
 
         # Insert a name
         with get_connection() as conn:
@@ -602,7 +605,7 @@ class TestBoundaryConditions:
     def test_select_candidates_with_same_name_filtered_out(self, initialized_db):
         """select_candidates should never return the same name twice."""
         from st_name_ranking.active_learning.selection import select_candidates
-        from st_name_ranking.database import get_connection
+        from st_name_ranking.persistence.database import get_connection
 
         # Insert names
         with get_connection() as conn:
@@ -625,7 +628,7 @@ class TestErrorMessages:
 
     def test_database_error_messages_are_informative(self, initialized_db):
         """Database errors should provide informative messages."""
-        from st_name_ranking.database import update_rating
+        from st_name_ranking.persistence.database import update_rating
 
         # Try to update non-existent name
         with pytest.raises(ValueError) as exc_info:
@@ -637,7 +640,7 @@ class TestErrorMessages:
 
     def test_comparison_error_messages(self, initialized_db):
         """Comparison errors should be informative."""
-        from st_name_ranking.database import record_comparison
+        from st_name_ranking.persistence.database import record_comparison
 
         with pytest.raises(ValueError) as exc_info:
             record_comparison("NonExistentA", "NonExistentB", -1)
@@ -647,7 +650,7 @@ class TestErrorMessages:
 
     def test_invalid_preference_error_message(self, initialized_db):
         """Invalid preference error should explain valid values."""
-        from st_name_ranking.database import get_connection, record_comparison
+        from st_name_ranking.persistence.database import get_connection, record_comparison
 
         # Insert names first
         with get_connection() as conn:
