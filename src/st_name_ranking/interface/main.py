@@ -7,6 +7,7 @@ import logging
 import secrets
 import sqlite3
 import time
+import traceback
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
@@ -17,37 +18,49 @@ from st_name_ranking.interface.app_actions import (
     sync_names_from_submodule,
 )
 from st_name_ranking.interface.filter_state import load_name_inclusions_json
-from st_name_ranking.interface.ui import render_binary_filter, render_rankings, render_similarity, render_tournament
+from st_name_ranking.interface.ui import (
+    MS_PER_SECOND,
+    render_binary_filter,
+    render_rankings,
+    render_similarity,
+    render_tournament,
+)
 from st_name_ranking.persistence import database
 from st_name_ranking.persistence.data_loader import DataLoaderError, load_names_by_gender
 from st_name_ranking.persistence.database import initialize_ratings
 
 logger = logging.getLogger(__name__)
 DEFAULT_TOURNAMENT_SAMPLE_SIZE: int | None = None
-logger.setLevel(logging.INFO)
 TAB_NAME_FILTER = "Name Filter"
 TAB_TOURNAMENT = "Tournament"
 TAB_RANKINGS = "Rankings"
 TAB_SIMILARITY = "Similarity Search"
-
-# Configure logging - suppress debug noise
-logging.getLogger("watchdog").setLevel(logging.WARNING)
-logging.getLogger("sqlite3").setLevel(logging.WARNING)
-
-# Only configure logging if no handlers are configured yet
-# This prevents duplicate logs when Streamlit reloads the script
-root_logger = logging.getLogger()
-if not root_logger.handlers:
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    )
+TAB_BUTTONS = (
+    ("📋 Name Filter", TAB_NAME_FILTER),
+    ("🏆 Tournament", TAB_TOURNAMENT),
+    ("🏅 Rankings", TAB_RANKINGS),
+    ("🔍 Similarity Search", TAB_SIMILARITY),
+)
 
 
 @dataclass(frozen=True)
 class ActiveTabRender:
     renderer: str
     names: list[str]
+
+
+def configure_logging() -> None:
+    """Configure application logging once the Streamlit app is running."""
+    logger.setLevel(logging.INFO)
+    logging.getLogger("watchdog").setLevel(logging.WARNING)
+    logging.getLogger("sqlite3").setLevel(logging.WARNING)
+
+    root_logger = logging.getLogger()
+    if not root_logger.handlers:
+        logging.basicConfig(
+            level=logging.INFO,
+            format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        )
 
 
 @st.dialog("⚠️ Confirm Reset Ratings", width="small")
@@ -371,9 +384,9 @@ def resolve_filtered_names() -> list[str] | None:
         filter_time = time.perf_counter()
         st.session_state.filtered_names_cache = filtered_names
         st.session_state.filtered_cache_key = cache_key
-        total_time = (filter_time - start_time) * 1000
-        db_init_time = (db_time - start_time) * 1000
-        query_time = (filter_time - db_time) * 1000
+        total_time = (filter_time - start_time) * MS_PER_SECOND
+        db_init_time = (db_time - start_time) * MS_PER_SECOND
+        query_time = (filter_time - db_time) * MS_PER_SECOND
         logger.debug(
             "Computed filtered names (cache miss): %d names, total=%.1fms, db_init=%.1fms, query=%.1fms",
             len(filtered_names),
@@ -483,39 +496,15 @@ def render_tab_selector() -> None:
     if "active_tab" not in st.session_state:
         st.session_state.active_tab = TAB_NAME_FILTER
 
-    col1, col2, col3, col4 = st.columns(4)
-    with col1:
-        if st.button(
-            "📋 Name Filter",
-            width="stretch",
-            type="primary" if st.session_state.active_tab == TAB_NAME_FILTER else "secondary",
-        ):
-            st.session_state.active_tab = TAB_NAME_FILTER
-            st.rerun()
-    with col2:
-        if st.button(
-            "🏆 Tournament",
-            width="stretch",
-            type="primary" if st.session_state.active_tab == TAB_TOURNAMENT else "secondary",
-        ):
-            st.session_state.active_tab = TAB_TOURNAMENT
-            st.rerun()
-    with col3:
-        if st.button(
-            "🏅 Rankings",
-            width="stretch",
-            type="primary" if st.session_state.active_tab == TAB_RANKINGS else "secondary",
-        ):
-            st.session_state.active_tab = TAB_RANKINGS
-            st.rerun()
-    with col4:
-        if st.button(
-            "🔍 Similarity Search",
-            width="stretch",
-            type="primary" if st.session_state.active_tab == TAB_SIMILARITY else "secondary",
-        ):
-            st.session_state.active_tab = TAB_SIMILARITY
-            st.rerun()
+    for column, (label, tab_name) in zip(st.columns(len(TAB_BUTTONS)), TAB_BUTTONS, strict=True):
+        with column:
+            if st.button(
+                label,
+                width="stretch",
+                type="primary" if st.session_state.active_tab == tab_name else "secondary",
+            ):
+                st.session_state.active_tab = tab_name
+                st.rerun()
 
 
 def resolve_active_tab_render(
@@ -553,6 +542,7 @@ def _render_active_tab(filtered_names: list[str], filtered_names_included: list[
 
 
 def main() -> None:
+    configure_logging()
     start_time = time.perf_counter()
     st.set_page_config(page_title="Name Ranker", layout="wide")
     st.title("Name Preference Ranker")
@@ -574,7 +564,7 @@ def main() -> None:
     _render_active_tab(filtered_names, filtered_names_included)
 
     end_time = time.perf_counter()
-    elapsed_ms = (end_time - start_time) * 1000
+    elapsed_ms = (end_time - start_time) * MS_PER_SECOND
     logger.debug("main() execution time: %.1fms (active tab: %s)", elapsed_ms, st.session_state.active_tab)
 
 
@@ -582,15 +572,6 @@ if __name__ == "__main__":
     try:
         main()
     except (RuntimeError, ValueError, OSError) as e:
-        import traceback
-
         logger.exception("Fatal error in main")
-        traceback.print_exc()
-        # Try to show error in Streamlit if possible
-        import sys
-
-        if "streamlit" in sys.modules:
-            import streamlit as st
-
-            st.error(f"Fatal error: {e}")
-            st.code(traceback.format_exc())
+        st.error(f"Fatal error: {e}")
+        st.code(traceback.format_exc())

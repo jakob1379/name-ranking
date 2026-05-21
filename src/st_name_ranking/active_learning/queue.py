@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 
 MIN_TRAINING_SAMPLES: Final[int] = 10
 MIN_NAMES_FOR_PAIR_SELECTION: Final[int] = 2
+MS_PER_SECOND: Final[int] = 1000
 
 
 def _normalize_pair(pair: tuple[str, str]) -> tuple[str, str]:
@@ -129,8 +130,6 @@ class QueueManager:
 
     def _refill_queue(self) -> None:
         """Refill the queue with model-selected or random pairs."""
-        import time
-
         start_time = time.perf_counter()
         logger.info("🔄 Queue refill started (current_size=%d, target=%d)", self.get_queue_size(), self.target_size)
 
@@ -167,7 +166,7 @@ class QueueManager:
 
             elapsed = time.perf_counter() - start_time
             self.refill_count += 1
-            self.last_refill_ms = elapsed * 1000
+            self.last_refill_ms = elapsed * MS_PER_SECOND
             self.avg_refill_ms += (self.last_refill_ms - self.avg_refill_ms) / self.refill_count
             self.last_refill_added = added
             self.last_refill_timestamp = time.time()
@@ -175,12 +174,6 @@ class QueueManager:
                 logger.info("✅ Added %d pairs to queue (total: %d) in %.2fs", added, len(self.queue), elapsed)
             else:
                 logger.info("⚠️ No new pairs added (all duplicates) in %.2fs", elapsed)
-
-    def __del__(self) -> None:
-        try:
-            self.stop()
-        except Exception:
-            pass
 
     def __repr__(self) -> str:
         with self._lock:
