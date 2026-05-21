@@ -8,7 +8,7 @@ import polars as pl
 
 from st_name_ranking.name_normalization import is_valid_name, strip_name_notes
 from st_name_ranking.persistence import database
-from st_name_ranking.persistence.database import INITIAL_SCORE, initialize_ratings
+from st_name_ranking.persistence.database import INITIAL_SCORE
 
 logger = logging.getLogger(__name__)
 
@@ -83,15 +83,10 @@ def save_ratings(
 
 
 def initialize_or_load_ratings(names: list[str]) -> dict[str, float]:
-    """Initialize ratings for names, loading existing ratings from file.
+    """Initialize ratings for names, loading existing ratings from the database.
     Merges saved ratings with new names (new names get INITIAL_SCORE).
     """
     saved = load_ratings()
-    if saved is None:
-        # No saved ratings, initialize fresh
-        return initialize_ratings(names)
-
-    # Merge: use saved ratings for existing names, initialize new names
     ratings = saved.copy()
     new_names_added = 0
     for name in names:
