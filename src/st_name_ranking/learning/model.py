@@ -156,6 +156,141 @@ def _sample_unique_pair_index_arrays(
     return _pairs_to_arrays(list(pairs_set))
 
 
+def _stable_sigmoid(values: np.ndarray) -> np.ndarray:
+    """Compute sigmoid values without overflow for large positive or negative inputs."""
+    return np.where(
+        values >= 0,
+        1.0 / (1.0 + np.exp(-values)),
+        np.exp(values) / (1.0 + np.exp(values)),
+    )
+
+
+def _comparison_targets(
+    comparisons: list[tuple[np.ndarray, np.ndarray, int]],
+    feature_dim: int,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Build the design matrix and preference targets for Bradley-Terry updates."""
+    x = np.zeros((len(comparisons), feature_dim))
+    y = np.zeros(len(comparisons))
+
+    for i, (feat_a, feat_b, pref) in enumerate(comparisons):
+        x[i] = feat_a - feat_b
+
+        if pref == -1:  # A preferred
+            y[i] = 1.0
+        elif pref == 1:  # B preferred
+            y[i] = 0.0
+        else:  # draw
+            y[i] = 0.5
+
+    return x, y
+
+
+def _irls_weight_mean(
+    x: np.ndarray,
+    y: np.ndarray,
+    initial_mean: np.ndarray,
+    covariance_inverse: np.ndarray,
+) -> np.ndarray:
+    """Fit a posterior weight mean by IRLS using the previous posterior as prior."""
+    max_iter = 10
+    tolerance = 1e-6
+    w = initial_mean.copy()
+
+    for _ in range(max_iter):
+        eta = x @ w
+        p = _stable_sigmoid(eta)
+        weights = p * (1 - p)
+        adjusted_response = eta + (y - p) / (weights + 1e-10)
+
+        weighted_x = x.T * weights
+        system_matrix = weighted_x @ x + covariance_inverse
+        system_rhs = weighted_x @ adjusted_response + covariance_inverse @ initial_mean
+        next_w = np.linalg.solve(system_matrix, system_rhs)
+
+        if np.linalg.norm(next_w - w) < tolerance:
+            return next_w
+
+        w = next_w
+
+    return w
+
+
+def _posterior_covariance(
+    x: np.ndarray,
+    weight_mean: np.ndarray,
+    covariance_inverse: np.ndarray,
+) -> np.ndarray:
+    """Compute the Laplace posterior covariance at the fitted weight mean."""
+    probabilities = _stable_sigmoid(x @ weight_mean)
+    weights = probabilities * (1 - probabilities)
+    weighted_x = x.T * weights
+    return np.linalg.inv(weighted_x @ x + covariance_inverse)
+
+
+def _top_pair_indices(scores: np.ndarray, k: int) -> np.ndarray:
+    """Return candidate-score indices ordered from best to worst."""
+    if k >= len(scores):
+        return np.argsort(scores)[::-1]
+
+    top_indices = np.argpartition(scores, -k)[-k:]
+    return top_indices[np.argsort(scores[top_indices])[::-1]]
+
+
+def _name_pair(i: int, j: int, names: list[str]) -> NamePair:
+    return NamePair(idx_a=i, idx_b=j, name_a=names[i], name_b=names[j])
+
+
+def _first_pair_repeated(names: list[str], k: int) -> list[NamePair]:
+    return [_name_pair(0, 1, names) for _ in range(k)]
+
+
+def _unique_candidate_pairs(
+    candidates: CandidatePairScores,
+    names: list[str],
+    top_indices: np.ndarray,
+    k: int,
+) -> tuple[list[NamePair], set[tuple[int, int]]]:
+    pairs_seen: set[tuple[int, int]] = set()
+    result: list[NamePair] = []
+
+    for idx in top_indices:
+        i = int(candidates.idx_a[idx])
+        j = int(candidates.idx_b[idx])
+        pair = (min(i, j), max(i, j))
+        if pair in pairs_seen:
+            continue
+        pairs_seen.add(pair)
+        result.append(_name_pair(i, j, names))
+        if len(result) >= k:
+            break
+
+    return result, pairs_seen
+
+
+def _fill_missing_pairs(
+    result: list[NamePair],
+    pairs_seen: set[tuple[int, int]],
+    names: list[str],
+    k: int,
+) -> list[NamePair]:
+    """Append deterministic fallback pairs until result contains k pairs."""
+    if len(result) >= k:
+        return result
+
+    all_pairs = [(i, j) for i in range(len(names)) for j in range(i + 1, len(names))]
+    available_pairs = [pair for pair in all_pairs if pair not in pairs_seen]
+    needed = k - len(result)
+
+    for i, j in available_pairs[:needed]:
+        result.append(_name_pair(i, j, names))
+
+    while len(result) < k:
+        result.append(_name_pair(0, 1, names))
+
+    return result
+
+
 @dataclass
 class ModelState:
     """Container for model parameters."""
@@ -278,63 +413,12 @@ class BradleyTerryModel:
             return
 
         n = len(comparisons)
-        d = self.d
-
-        # Design matrix: differences for each comparison
-        X = np.zeros((n, d))
-        y = np.zeros(n)
-
-        for i, (feat_a, feat_b, pref) in enumerate(comparisons):
-            diff = feat_a - feat_b
-            X[i] = diff
-
-            if pref == -1:  # A preferred
-                y[i] = 1.0
-            elif pref == 1:  # B preferred
-                y[i] = 0.0
-            else:  # draw
-                y[i] = 0.5
-
-        # Iterative reweighted least squares (IRLS) for logistic regression
-        max_iter = 10
-        tol = 1e-6
-
-        w = self.state.weight_mean.copy()
+        X, y = _comparison_targets(comparisons, self.d)
         cov_inv = np.linalg.inv(self.state.weight_cov)
-
-        for _ in range(max_iter):
-            # Current predictions
-            eta = X @ w
-            # Vectorized stable sigmoid
-            p = np.where(eta >= 0, 1.0 / (1.0 + np.exp(-eta)), np.exp(eta) / (1.0 + np.exp(eta)))
-
-            # Weights for IRLS
-            W = p * (1 - p)
-            z = eta + (y - p) / (p * (1 - p) + 1e-10)
-
-            # Solve weighted least squares with prior
-            XW = X.T * W
-            A = XW @ X + cov_inv
-            b = XW @ z + cov_inv @ self.state.weight_mean
-
-            w_new = np.linalg.solve(A, b)
-
-            if np.linalg.norm(w_new - w) < tol:
-                w = w_new
-                break
-
-            w = w_new
-
-        eta = X @ w
-        # Vectorized stable sigmoid
-        p = np.where(eta >= 0, 1.0 / (1.0 + np.exp(-eta)), np.exp(eta) / (1.0 + np.exp(eta)))
-        W = p * (1 - p)
-        XW = X.T * W
-        posterior_cov_inv = XW @ X + cov_inv
-        posterior_cov = np.linalg.inv(posterior_cov_inv)
+        w = _irls_weight_mean(X, y, self.state.weight_mean, cov_inv)
 
         self.state.weight_mean = w
-        self.state.weight_cov = posterior_cov
+        self.state.weight_cov = _posterior_covariance(X, w, cov_inv)
         self.state.training_samples += n
 
     def select_pair(
@@ -356,13 +440,13 @@ class BradleyTerryModel:
         candidates = self._score_candidate_pairs(features, names)
         if len(candidates.idx_a) == 0:
             # Fallback: first two names
-            return NamePair(idx_a=0, idx_b=1, name_a=names[0], name_b=names[1])
+            return _name_pair(0, 1, names)
 
         best_idx = np.argmax(candidates.score)
         i = int(candidates.idx_a[best_idx])
         j = int(candidates.idx_b[best_idx])
 
-        return NamePair(idx_a=i, idx_b=j, name_a=names[i], name_b=names[j])
+        return _name_pair(i, j, names)
 
     def select_top_k_pairs(
         self,
@@ -385,48 +469,11 @@ class BradleyTerryModel:
         candidates = self._score_candidate_pairs(features, names)
         if len(candidates.idx_a) == 0:
             # Fallback: first two names repeated
-            return [NamePair(idx_a=0, idx_b=1, name_a=names[0], name_b=names[1]) for _ in range(k)]
+            return _first_pair_repeated(names, k)
 
-        if k >= len(candidates.score):
-            top_indices = np.argsort(candidates.score)[::-1]  # all indices
-        else:
-            top_indices = np.argpartition(candidates.score, -k)[-k:]
-            top_indices = top_indices[np.argsort(candidates.score[top_indices])[::-1]]
-
-        # Deduplicate pairs (by normalized index tuple)
-        pairs_seen: set[tuple[int, int]] = set()
-        result: list[NamePair] = []
-        for idx in top_indices:
-            i = int(candidates.idx_a[idx])
-            j = int(candidates.idx_b[idx])
-            pair = (min(i, j), max(i, j))
-            if pair in pairs_seen:
-                continue
-            pairs_seen.add(pair)
-            result.append(NamePair(idx_a=i, idx_b=j, name_a=names[i], name_b=names[j]))
-            if len(result) >= k:
-                break
-
-        # If we don't have enough pairs, add fallback pairs
-        if len(result) < k:
-            # Generate all possible unique pairs
-            all_pairs = [(i, j) for i in range(n) for j in range(i + 1, n)]
-            available_pairs = [p for p in all_pairs if p not in pairs_seen]
-
-            # If we still don't have enough, we may need to reuse pairs
-            # This should rarely happen since n >= 2 and k is small
-            needed = k - len(result)
-            if len(available_pairs) >= needed:
-                # Take the first 'needed' pairs (they're already in deterministic order)
-                for i, j in available_pairs[:needed]:
-                    result.append(NamePair(idx_a=i, idx_b=j, name_a=names[i], name_b=names[j]))
-            else:
-                # Not enough unique pairs - fill with (0, 1) duplicates
-                # This only happens when n=2 and k>1
-                while len(result) < k:
-                    result.append(NamePair(idx_a=0, idx_b=1, name_a=names[0], name_b=names[1]))
-
-        return result
+        top_indices = _top_pair_indices(candidates.score, k)
+        result, pairs_seen = _unique_candidate_pairs(candidates, names, top_indices, k)
+        return _fill_missing_pairs(result, pairs_seen, names, k)
 
     def _score_candidate_pairs(
         self,
