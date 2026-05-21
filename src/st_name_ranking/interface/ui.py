@@ -3,6 +3,8 @@
 import json
 import logging
 import time
+from collections.abc import Mapping
+from dataclasses import dataclass
 from typing import Any, Literal
 
 import numpy as np
@@ -63,6 +65,43 @@ MIN_NON_NOISE_CLUSTERS = 2
 FAST_REFILL_THRESHOLD_MS = 120
 MODERATE_REFILL_THRESHOLD_MS = 300
 SLOW_RENDER_THRESHOLD_MS = 100
+MS_PER_SECOND = 1000
+FILTER_SAVE_INTERVAL = 50
+MAX_EXCLUDED_NAMES_DISPLAY = 100
+
+
+@dataclass(frozen=True)
+class RenderTimer:
+    """Small timing helper for Streamlit fragments."""
+
+    label: str
+    start_time: float
+
+    @classmethod
+    def start(cls, label: str) -> "RenderTimer":
+        return cls(label=label, start_time=time.perf_counter())
+
+    def log(self, step: str) -> None:
+        logger.debug("%s [%s]: %.2fms", self.label, step, (time.perf_counter() - self.start_time) * MS_PER_SECOND)
+
+
+@dataclass(frozen=True)
+class FilterRenderContext:
+    names: list[str]
+    inclusions: dict[str, bool]
+    undecided_names: list[str]
+    progress_placeholder: Any
+    stats_placeholder: Any
+    name_display_placeholder: Any
+
+
+@dataclass(frozen=True)
+class TournamentVoteClicks:
+    prefer_a: bool
+    prefer_b: bool
+    draw: bool
+    dislike_both: bool
+
 
 try:
     import altair as alt
@@ -228,75 +267,65 @@ def _record_vote_and_get_next_pair(names: list[str], manager: Any, preference: i
     return next_pair
 
 
-@st.fragment
-def render_tournament(names: list[str]) -> None:
-    """Render tournament interface for comparing names.
+def _render_tournament_pair_display(
+    pair_display_placeholder: Any,
+    candidate_a: str,
+    candidate_b: str,
+    ratings: Mapping[str, float],
+) -> None:
+    """Render the active tournament pair inside the stable placeholder."""
+    rating_a = ratings.get(candidate_a, INITIAL_SCORE)
+    rating_b = ratings.get(candidate_b, INITIAL_SCORE)
+    delta_a = rating_a - rating_b
+    delta_b = rating_b - rating_a
 
-    Shows two names side by side with rating scores.
-    User clicks on which name they prefer.
-    Uses lazy model updates for instant UI feedback.
-    """
-    start_time = time.perf_counter()
+    with pair_display_placeholder.container():
+        _, col_left, _, col_right, _ = st.columns([0.8, 1, 0.4, 1, 0.8])
 
-    def log_timing(step: str) -> None:
-        logger.debug("Tournament [%s]: %.2fms", step, (time.perf_counter() - start_time) * 1000)
+        with col_left:
+            display_name_with_rating(candidate_a, rating_a, delta=delta_a)
 
-    logger.debug("Tournament render started with %d names", len(names))
+        with col_right:
+            display_name_with_rating(candidate_b, rating_b, delta=delta_b)
 
-    if len(names) < MIN_NAMES_FOR_COMPARISON:
-        if len(names) == 0:
-            st.info("No names to compare. Please select at least two names.")
-        else:
-            st.info(f"Only one name ('{names[0]}') selected. Please select at least two names to compare.")
-        return
 
-    selected_sample_size = int(st.session_state.get("tournament_sample_size", len(names)))
-
-    log_timing("Before queue manager")
-
-    try:
-        manager = get_or_start_tournament_queue(names, selected_sample_size)
-        round_state = prepare_tournament_round(
-            names,
-            manager,
-            get_current_pair(names),
-            get_queue_manager_stats(),
-        )
-    except ValueError:
-        st.info("No names to compare. Please select at least two names.")
-        return
-
-    manager = round_state.manager
-    set_current_pair((round_state.candidate_a, round_state.candidate_b))
-    log_timing("After queue manager")
-
-    queue_stats = round_state.queue_stats
-    if queue_stats and int(queue_stats.get("refill_count", 0)) > 0:
-        last_refill_ms = float(queue_stats.get("last_refill_ms", 0.0))
-        avg_refill_ms = float(queue_stats.get("avg_refill_ms", 0.0))
-        refill_added = int(queue_stats.get("last_refill_added", 0))
-        current_queue_size = int(queue_stats.get("queue_size", 0))
-        target_queue_size = int(queue_stats.get("target_size", manager.target_size))
-
-        if last_refill_ms <= FAST_REFILL_THRESHOLD_MS:
-            latency_indicator = "🟢"
-        elif last_refill_ms <= MODERATE_REFILL_THRESHOLD_MS:
-            latency_indicator = "🟡"
-        else:
-            latency_indicator = "🔴"
-
-        st.caption(
-            f"{latency_indicator} Queue {current_queue_size}/{target_queue_size} | "
-            f"Last refill {last_refill_ms:.0f} ms (avg {avg_refill_ms:.0f} ms, +{refill_added} pairs) | "
-            "Choose the name you prefer",
-        )
-    else:
+def _render_tournament_queue_caption(queue_stats: Mapping[str, object] | None, manager: Any) -> None:
+    if not queue_stats or int(queue_stats.get("refill_count", 0)) <= 0:
         st.caption("Queue warming up... | Choose the name you prefer")
+        return
 
-    # Create placeholders for dynamic content
-    pair_display_placeholder = st.empty()
-    st.empty()
+    last_refill_ms = float(queue_stats.get("last_refill_ms", 0.0))
+    avg_refill_ms = float(queue_stats.get("avg_refill_ms", 0.0))
+    refill_added = int(queue_stats.get("last_refill_added", 0))
+    current_queue_size = int(queue_stats.get("queue_size", 0))
+    target_queue_size = int(queue_stats.get("target_size", manager.target_size))
 
+    if last_refill_ms <= FAST_REFILL_THRESHOLD_MS:
+        latency_indicator = "🟢"
+    elif last_refill_ms <= MODERATE_REFILL_THRESHOLD_MS:
+        latency_indicator = "🟡"
+    else:
+        latency_indicator = "🔴"
+
+    st.caption(
+        f"{latency_indicator} Queue {current_queue_size}/{target_queue_size} | "
+        f"Last refill {last_refill_ms:.0f} ms (avg {avg_refill_ms:.0f} ms, +{refill_added} pairs) | "
+        "Choose the name you prefer",
+    )
+
+
+def _handle_tournament_vote(
+    names: list[str],
+    manager: Any,
+    *,
+    preference: int,
+    pair_display_placeholder: Any,
+) -> None:
+    next_pair = _record_vote_and_get_next_pair(names, manager, preference)
+    _render_tournament_pair_display(pair_display_placeholder, next_pair[0], next_pair[1], st.session_state.ratings)
+
+
+def _inject_tournament_styles() -> None:
     st.markdown(
         """
     <style>
@@ -352,35 +381,13 @@ def render_tournament(names: list[str]) -> None:
         unsafe_allow_html=True,
     )
 
-    def update_display(candidate_a: str, candidate_b: str, ratings: dict) -> None:
-        """Update the display with new pair and ratings.
 
-        Called instantly after vote without requiring a full rerun.
-        """
-        # Get both ratings
-        rating_a = ratings.get(candidate_a, INITIAL_SCORE)
-        rating_b = ratings.get(candidate_b, INITIAL_SCORE)
-
-        # Calculate rating differences for delta display
-        delta_a = rating_a - rating_b  # Positive if A is higher rated
-        delta_b = rating_b - rating_a  # Positive if B is higher rated
-
-        # Update pair display
-        with pair_display_placeholder.container():
-            _, col_left, _, col_right, _ = st.columns([0.8, 1, 0.4, 1, 0.8])
-
-            with col_left:
-                display_name_with_rating(candidate_a, rating_a, delta=delta_a)
-
-            with col_right:
-                display_name_with_rating(candidate_b, rating_b, delta=delta_b)
-
-    # Button handlers with background QueueManager for instant transitions
+def _render_tournament_vote_buttons() -> TournamentVoteClicks:
     _, col_left, _, col_right, _ = st.columns([0.8, 1, 0.4, 1, 0.8])
 
     with col_left:
         st.markdown("<div style='text-align: center'>", unsafe_allow_html=True)
-        vote_a_clicked = st.button(
+        prefer_a = st.button(
             f"Prefer {st.session_state.candidate_a}",
             key="vote_a",
             width="stretch",
@@ -392,7 +399,7 @@ def render_tournament(names: list[str]) -> None:
 
     with col_right:
         st.markdown("<div style='text-align: center'>", unsafe_allow_html=True)
-        vote_b_clicked = st.button(
+        prefer_b = st.button(
             f"Prefer {st.session_state.candidate_b}",
             key="vote_b",
             width="stretch",
@@ -402,10 +409,9 @@ def render_tournament(names: list[str]) -> None:
         )
         st.markdown("</div>", unsafe_allow_html=True)
 
-    # Draw and both-disliked buttons centered below both names
     _, col_mid, _ = st.columns([1, 0.4, 1])
     with col_mid:
-        draw_clicked = st.button(
+        draw = st.button(
             "🤝 Draw / Equal Preference",
             key="vote_draw",
             width="stretch",
@@ -413,7 +419,7 @@ def render_tournament(names: list[str]) -> None:
             shortcut="Up",
             help="Mark both names as equally preferred (Up arrow key)",
         )
-        vote_both_disliked_clicked = st.button(
+        dislike_both = st.button(
             "👎 Down / Dislike Both",
             key="vote_both_disliked",
             width="stretch",
@@ -422,37 +428,93 @@ def render_tournament(names: list[str]) -> None:
             help="Mark both names as disliked (Down arrow key)",
         )
 
-    log_timing("After button creation")
+    return TournamentVoteClicks(prefer_a=prefer_a, prefer_b=prefer_b, draw=draw, dislike_both=dislike_both)
 
-    def handle_vote(*, preference: int, timing_label: str) -> None:
-        log_timing(f"{timing_label} clicked - handling")
-        next_pair = _record_vote_and_get_next_pair(names, manager, preference)
-        update_display(next_pair[0], next_pair[1], st.session_state.ratings)
 
-    vote_action: tuple[int, str] | None = None
+def _selected_tournament_vote_action(clicks: TournamentVoteClicks) -> tuple[int, str] | None:
+    if clicks.prefer_a:
+        return -1, "Vote A"
+    if clicks.prefer_b:
+        return 1, "Vote B"
+    if clicks.draw:
+        return 0, "Draw"
+    if clicks.dislike_both:
+        return 2, "Both disliked"
+    return None
 
-    if vote_a_clicked:
-        vote_action = (-1, "Vote A")
-    elif vote_b_clicked:
-        vote_action = (1, "Vote B")
-    elif draw_clicked:
-        vote_action = (0, "Draw")
-    elif vote_both_disliked_clicked:
-        vote_action = (2, "Both disliked")
+
+@st.fragment
+def render_tournament(names: list[str]) -> None:
+    """Render tournament interface for comparing names.
+
+    Shows two names side by side with rating scores.
+    User clicks on which name they prefer.
+    Uses lazy model updates for instant UI feedback.
+    """
+    timer = RenderTimer.start("Tournament")
+    logger.debug("Tournament render started with %d names", len(names))
+
+    if len(names) < MIN_NAMES_FOR_COMPARISON:
+        if len(names) == 0:
+            st.info("No names to compare. Please select at least two names.")
+        else:
+            st.info(f"Only one name ('{names[0]}') selected. Please select at least two names to compare.")
+        return
+
+    selected_sample_size = int(st.session_state.get("tournament_sample_size", len(names)))
+
+    timer.log("Before queue manager")
+
+    try:
+        manager = get_or_start_tournament_queue(names, selected_sample_size)
+        round_state = prepare_tournament_round(
+            names,
+            manager,
+            get_current_pair(names),
+            get_queue_manager_stats(),
+        )
+    except ValueError:
+        st.info("No names to compare. Please select at least two names.")
+        return
+
+    manager = round_state.manager
+    set_current_pair((round_state.candidate_a, round_state.candidate_b))
+    timer.log("After queue manager")
+    _render_tournament_queue_caption(round_state.queue_stats, manager)
+
+    # Create placeholders for dynamic content
+    pair_display_placeholder = st.empty()
+    st.empty()
+
+    _inject_tournament_styles()
+    vote_action = _selected_tournament_vote_action(_render_tournament_vote_buttons())
+
+    timer.log("After button creation")
 
     # Update session state and UI instantly after vote (no rerun needed)
     if vote_action is not None:
         preference, timing_label = vote_action
-        handle_vote(preference=preference, timing_label=timing_label)
+        timer.log(f"{timing_label} clicked - handling")
+        _handle_tournament_vote(
+            names,
+            manager,
+            preference=preference,
+            pair_display_placeholder=pair_display_placeholder,
+        )
 
     # Render display with current candidates (will reflect any updates above)
-    update_display(st.session_state.candidate_a, st.session_state.candidate_b, st.session_state.ratings)
-    log_timing("After display render")
+    _render_tournament_pair_display(
+        pair_display_placeholder,
+        st.session_state.candidate_a,
+        st.session_state.candidate_b,
+        st.session_state.ratings,
+    )
+    timer.log("After display render")
 
     # NOTE: Statistics expander removed due to 20+ second render time
     # The dataframes and tabs were being processed even when collapsed
 
-    log_timing("At end")
+    timer.log("At end")
 
 
 @st.cache_data(show_spinner=False)
@@ -876,8 +938,222 @@ def _ensure_filter_counts(names: list[str], inclusions: dict[str, bool], names_h
         counts.not_decided,
         counts.included,
         counts.excluded,
-        (time.perf_counter() - count_loop_start) * 1000,
+        (time.perf_counter() - count_loop_start) * MS_PER_SECOND,
     )
+
+
+def _sync_filter_session(names_hash: str) -> None:
+    if "filter_names_hash" not in st.session_state or st.session_state.filter_names_hash != names_hash:
+        st.session_state.filter_names_hash = names_hash
+        st.session_state.filter_index = 0
+
+    if "filter_index" not in st.session_state:
+        st.session_state.filter_index = 0
+
+
+def _current_filter_selection(undecided_names: list[str]) -> tuple[str, int]:
+    current_idx = st.session_state.filter_index
+    if current_idx >= len(undecided_names):
+        current_idx = 0
+        st.session_state.filter_index = 0
+    return undecided_names[current_idx], current_idx
+
+
+def _clamp_filter_index(names: list[str]) -> None:
+    if st.session_state.filter_index >= len(names):
+        st.session_state.filter_index = 0
+
+
+def _render_filter_name_display(context: FilterRenderContext, current_name: str, current_idx: int) -> None:
+    progress = current_idx / len(context.undecided_names)
+    context.progress_placeholder.progress(
+        progress,
+        text=f"Progress: {current_idx + 1} of {len(context.undecided_names)} remaining",
+    )
+
+    not_decided = st.session_state.filter_counts_not_decided
+    explicitly_included = st.session_state.filter_counts_included
+    explicitly_excluded = st.session_state.filter_counts_excluded
+    context.stats_placeholder.caption(
+        f"Not decided: {not_decided} | Included: {explicitly_included} | Excluded: {explicitly_excluded}",
+    )
+
+    if current_name not in context.inclusions:
+        border_color = "#757575"
+        status_text = "Not decided"
+        bg_color = "#FAFAFA"
+    elif context.inclusions[current_name]:
+        border_color = "#4CAF50"
+        status_text = "Included"
+        bg_color = "#E8F5E9"
+    else:
+        border_color = "#F44336"
+        status_text = "Excluded"
+        bg_color = "#FFEBEE"
+
+    context.name_display_placeholder.markdown(
+        f"<div style='border: 4px solid {border_color}; background-color: {bg_color}; "
+        f"border-radius: 12px; padding: 20px; text-align: center;'>"
+        f"<h1 style='font-size: 72px; margin: 0; color: #212121;'>{current_name}</h1>"
+        f"<p style='font-size: 16px; margin: 10px 0 0 0; color: {border_color}; "
+        f"font-weight: bold;'>{status_text}</p>"
+        f"</div>",
+        unsafe_allow_html=True,
+    )
+
+
+def _display_next_undecided_name(context: FilterRenderContext, current_name: str) -> None:
+    if current_name in context.undecided_names:
+        context.undecided_names.remove(current_name)
+
+    if st.session_state.filter_index >= len(context.undecided_names):
+        st.session_state.filter_index = 0
+
+    next_idx = st.session_state.filter_index
+    if context.undecided_names:
+        _render_filter_name_display(context, context.undecided_names[next_idx], next_idx)
+    else:
+        st.success("✅ All names processed! Switch to Tournament tab.")
+
+
+def _apply_filter_decision(
+    context: FilterRenderContext,
+    current_name: str,
+    *,
+    status: bool,
+    label: str,
+    icon: str,
+) -> None:
+    logger.info("%s %s: %s", icon, label, current_name)
+    button_click_start = time.perf_counter()
+
+    old_status = context.inclusions.get(current_name)
+    context.inclusions[current_name] = status
+    _update_filter_counts(old_status=old_status, new_status=status)
+    st.toast(f"{label}: {current_name}", icon=icon)
+    st.session_state.last_button_press_time = time.perf_counter()
+    _persist_name_inclusions(context.inclusions)
+    _display_next_undecided_name(context, current_name)
+
+    logger.debug("%s handled in %.1fms", label, (time.perf_counter() - button_click_start) * MS_PER_SECOND)
+
+
+def _move_filter_name_to_undecided(context: FilterRenderContext, name: str, source_label: str) -> None:
+    old_status = context.inclusions.get(name)
+    if old_status is None:
+        return
+
+    del context.inclusions[name]
+    _update_filter_counts(old_status=old_status, new_status=None)
+    logger.info("🔄 %s moved from %s to not decided", name, source_label)
+    st.toast(f"{name} moved to not decided", icon="🔄")
+    _persist_name_inclusions(context.inclusions)
+    st.rerun(scope="fragment")
+
+
+def _render_filter_decision_buttons(context: FilterRenderContext, current_name: str) -> None:
+    col_exclude, col_include = st.columns(2)
+    with col_exclude:
+        if st.button(
+            "Exclude",
+            key="exclude_btn",
+            width="stretch",
+            type="secondary",
+            shortcut="Left",
+        ):
+            _apply_filter_decision(context, current_name, status=False, label="Excluded", icon="👎")
+    with col_include:
+        if st.button(
+            "Include",
+            key="include_btn",
+            width="stretch",
+            type="primary",
+            shortcut="Right",
+        ):
+            _apply_filter_decision(context, current_name, status=True, label="Included", icon="👍")
+
+
+def _save_filter_periodically(context: FilterRenderContext, current_idx: int) -> None:
+    if current_idx % FILTER_SAVE_INTERVAL != 0:
+        return
+
+    json_start = time.perf_counter()
+    inclusions_json = json.dumps(context.inclusions)
+    json_time = (time.perf_counter() - json_start) * MS_PER_SECOND
+
+    save_start = time.perf_counter()
+    _persist_name_inclusions_json(inclusions_json)
+    save_time = (time.perf_counter() - save_start) * MS_PER_SECOND
+
+    logger.debug("Periodic save: JSON=%.1fms, DB=%.1fms, entries=%d", json_time, save_time, len(context.inclusions))
+
+
+def _render_filter_batch_buttons(context: FilterRenderContext, current_idx: int) -> None:
+    col_batch1, col_batch2 = st.columns(2)
+    with col_batch1:
+        if st.button("Include All Remaining", type="secondary", help="Include all remaining undecided names"):
+            count = set_many_filter_statuses(context.inclusions, context.undecided_names[current_idx:], status=True)
+            st.session_state.filter_index = 0  # Reset since undecided list will be empty
+            _clear_filter_count_cache()
+            st.toast(f"Included {count} remaining names", icon="✅")
+            st.session_state.last_button_press_time = time.perf_counter()
+            _persist_name_inclusions(context.inclusions)
+            st.rerun(scope="fragment")
+    with col_batch2:
+        if st.button("Exclude All Remaining", type="secondary", help="Exclude all remaining undecided names"):
+            count = set_many_filter_statuses(context.inclusions, context.undecided_names[current_idx:], status=False)
+            st.session_state.filter_index = 0  # Reset since undecided list will be empty
+            _clear_filter_count_cache()
+            st.toast(f"Excluded {count} remaining names", icon="✅")
+            st.session_state.last_button_press_time = time.perf_counter()
+            _persist_name_inclusions(context.inclusions)
+            st.rerun(scope="fragment")
+
+
+def _render_filter_selection_editor(context: FilterRenderContext) -> None:
+    included_names = get_included_names(context.names, context.inclusions)
+    excluded_count = st.session_state.filter_counts_excluded
+
+    st.divider()
+    st.subheader("📋 Your Selections")
+
+    if included_names:
+        sorted_included = sorted(included_names)
+        selected_included = st.multiselect(
+            f"✅ Included names for tournament ({len(sorted_included)})",
+            options=sorted_included,
+            default=sorted_included,
+            help="Uncheck names to move them back to 'not decided'",
+        )
+
+        selected_set = set(selected_included)
+        for name in sorted_included:
+            if name not in selected_set:
+                _move_filter_name_to_undecided(context, name, "included")
+    else:
+        st.info("No names included yet. Use 'Include' button above to add names.")
+
+    if excluded_count > 0:
+        with st.expander(f"❌ Show Excluded Names ({excluded_count})"):
+            excluded_names = get_excluded_names(context.names, context.inclusions)
+            if excluded_names:
+                sorted_excluded = sorted(excluded_names)[:MAX_EXCLUDED_NAMES_DISPLAY]
+                remaining = len(excluded_names) - MAX_EXCLUDED_NAMES_DISPLAY
+
+                if remaining > 0:
+                    st.caption(f"Showing first {MAX_EXCLUDED_NAMES_DISPLAY} of {len(excluded_names)} excluded names")
+
+                selected_excluded = st.multiselect(
+                    "Uncheck names to include them again",
+                    options=sorted_excluded,
+                    default=sorted_excluded,
+                    help="Uncheck names to move them back to 'not decided'",
+                )
+
+                selected_set = set(selected_excluded)
+                for name in sorted_excluded:
+                    if name not in selected_set:
+                        _move_filter_name_to_undecided(context, name, "excluded")
 
 
 @st.fragment
@@ -887,13 +1163,8 @@ def render_binary_filter(names: list[str]) -> None:
     Users review names one by one, marking them as included or excluded.
     """
     logger.debug("Filter render started with %d names", len(names))
-    start_time = time.perf_counter()
+    timer = RenderTimer.start("Filter")
 
-    def log_timing(step_name: str) -> None:
-        elapsed = (time.perf_counter() - start_time) * 1000
-        logger.debug("%s: %.1fms", step_name, elapsed)
-
-    # Clear last button press time (used for performance monitoring)
     if "last_button_press_time" in st.session_state:
         del st.session_state.last_button_press_time
 
@@ -906,250 +1177,48 @@ def render_binary_filter(names: list[str]) -> None:
         "💡 **Keyboard shortcuts**: Left arrow (←) to exclude, Right arrow (→) to include, Space to include",
     )
 
-    # Create placeholders for instant updates
     progress_placeholder = st.empty()
     stats_placeholder = st.empty()
     name_display_placeholder = st.empty()
 
     inclusions = _load_cached_name_inclusions()
-    log_timing("After inclusions loaded")
+    timer.log("After inclusions loaded")
 
     names_hash = _names_filter_hash(names)
-
-    if "filter_names_hash" not in st.session_state:
-        st.session_state.filter_names_hash = names_hash
-        st.session_state.filter_index = 0
-    elif st.session_state.filter_names_hash != names_hash:
-        # Names list changed, reset index
-        st.session_state.filter_names_hash = names_hash
-        st.session_state.filter_index = 0
-
-    # Initialize current index if not exists (should be handled above)
-    if "filter_index" not in st.session_state:
-        st.session_state.filter_index = 0
-
-    # Ensure index is within bounds
-    if st.session_state.filter_index >= len(names):
-        st.session_state.filter_index = 0
-
+    _sync_filter_session(names_hash)
+    _clamp_filter_index(names)
     _ensure_filter_counts(names, inclusions, names_hash)
-    log_timing("After counts")
+    timer.log("After counts")
 
-    # Filter to only undecided names for the progress tracking
-    # This allows users to resume filtering without going through all already-decided names
     undecided_names = get_undecided_names(names, inclusions)
-
-    # If no undecided names, show completion message
     if not undecided_names:
         st.success("✅ All names have been processed! Switch to the Tournament tab to compare your selected names.")
         return
 
-    # Get current name from undecided list
-    current_idx = st.session_state.filter_index
-    if current_idx >= len(undecided_names):
-        current_idx = 0
-        st.session_state.filter_index = 0
-    current_name = undecided_names[current_idx]
+    context = FilterRenderContext(
+        names=names,
+        inclusions=inclusions,
+        undecided_names=undecided_names,
+        progress_placeholder=progress_placeholder,
+        stats_placeholder=stats_placeholder,
+        name_display_placeholder=name_display_placeholder,
+    )
+    current_name, current_idx = _current_filter_selection(undecided_names)
 
-    def update_display(current_name: str, current_idx: int) -> None:
-        """Update display instantly without rerun."""
-        # Progress bar - show progress through UNDECIDED names only
-        progress = current_idx / len(undecided_names)
-        progress_placeholder.progress(progress, text=f"Progress: {current_idx + 1} of {len(undecided_names)} remaining")
+    _render_filter_name_display(context, current_name, current_idx)
+    timer.log("After display update")
 
-        # Stats
-        not_decided = st.session_state.filter_counts_not_decided
-        explicitly_included = st.session_state.filter_counts_included
-        explicitly_excluded = st.session_state.filter_counts_excluded
-        stats_placeholder.caption(
-            f"Not decided: {not_decided} | Included: {explicitly_included} | Excluded: {explicitly_excluded}",
-        )
+    _render_filter_decision_buttons(context, current_name)
+    _save_filter_periodically(context, current_idx)
+    _render_filter_batch_buttons(context, current_idx)
+    timer.log("After buttons")
 
-        # Name display with colors
-        if current_name not in inclusions:
-            border_color = "#757575"
-            status_text = "Not decided"
-            bg_color = "#FAFAFA"
-        elif inclusions[current_name]:
-            border_color = "#4CAF50"
-            status_text = "Included"
-            bg_color = "#E8F5E9"
-        else:
-            border_color = "#F44336"
-            status_text = "Excluded"
-            bg_color = "#FFEBEE"
+    _render_filter_selection_editor(context)
 
-        name_display_placeholder.markdown(
-            f"<div style='border: 4px solid {border_color}; background-color: {bg_color}; "
-            f"border-radius: 12px; padding: 20px; text-align: center;'>"
-            f"<h1 style='font-size: 72px; margin: 0; color: #212121;'>{current_name}</h1>"
-            f"<p style='font-size: 16px; margin: 10px 0 0 0; color: {border_color}; "
-            f"font-weight: bold;'>{status_text}</p>"
-            f"</div>",
-            unsafe_allow_html=True,
-        )
-
-    # Initial display
-    update_display(current_name, current_idx)
-    log_timing("After display update")
-
-    def display_next_undecided_name() -> None:
-        if current_name in undecided_names:
-            undecided_names.remove(current_name)
-
-        if st.session_state.filter_index >= len(undecided_names):
-            st.session_state.filter_index = 0
-
-        next_idx = st.session_state.filter_index
-        if undecided_names:
-            update_display(undecided_names[next_idx], next_idx)
-        else:
-            st.success("✅ All names processed! Switch to Tournament tab.")
-
-    def apply_current_decision(*, status: bool, label: str, icon: str) -> None:
-        logger.info("%s %s: %s", icon, label, current_name)
-        button_click_start = time.perf_counter()
-
-        old_status = inclusions.get(current_name)
-        inclusions[current_name] = status
-        _update_filter_counts(old_status=old_status, new_status=status)
-        st.toast(f"{label}: {current_name}", icon=icon)
-        st.session_state.last_button_press_time = time.perf_counter()
-        _persist_name_inclusions(inclusions)
-        display_next_undecided_name()
-
-        logger.debug("%s handled in %.1fms", label, (time.perf_counter() - button_click_start) * 1000)
-
-    def move_name_to_undecided(name: str, source_label: str) -> None:
-        old_status = inclusions.get(name)
-        if old_status is None:
-            return
-
-        del inclusions[name]
-        _update_filter_counts(old_status=old_status, new_status=None)
-        logger.info("🔄 %s moved from %s to not decided", name, source_label)
-        st.toast(f"{name} moved to not decided", icon="🔄")
-        _persist_name_inclusions(inclusions)
-        st.rerun(scope="fragment")
-
-    # Decision buttons - simplified to two clear options
-    col_exclude, col_include = st.columns(2)
-    with col_exclude:
-        if st.button(
-            "Exclude",
-            key="exclude_btn",
-            width="stretch",
-            type="secondary",
-            shortcut="Left",
-        ):
-            apply_current_decision(status=False, label="Excluded", icon="👎")
-    with col_include:
-        if st.button(
-            "Include",
-            key="include_btn",
-            width="stretch",
-            type="primary",
-            shortcut="Right",
-        ):
-            apply_current_decision(status=True, label="Included", icon="👍")
-
-    # Save decisions periodically (every 50 actions to reduce DB writes)
-    if current_idx % 50 == 0:
-        # Time JSON serialization and database save
-        json_start = time.perf_counter()
-        inclusions_json = json.dumps(inclusions)
-        json_time = (time.perf_counter() - json_start) * 1000
-
-        save_start = time.perf_counter()
-        _persist_name_inclusions_json(inclusions_json)
-        save_time = (time.perf_counter() - save_start) * 1000
-
-        logger.debug("Periodic save: JSON=%.1fms, DB=%.1fms, entries=%d", json_time, save_time, len(inclusions))
-
-    # Batch operations
-    col_batch1, col_batch2 = st.columns(2)
-    with col_batch1:
-        if st.button("Include All Remaining", type="secondary", help="Include all remaining undecided names"):
-            count = set_many_filter_statuses(inclusions, undecided_names[current_idx:], status=True)
-            st.session_state.filter_index = 0  # Reset since undecided list will be empty
-            _clear_filter_count_cache()
-            st.toast(f"Included {count} remaining names", icon="✅")
-            st.session_state.last_button_press_time = time.perf_counter()
-            _persist_name_inclusions(inclusions)
-            # Fragment-level refresh for batch operations
-            st.rerun(scope="fragment")
-    with col_batch2:
-        if st.button("Exclude All Remaining", type="secondary", help="Exclude all remaining undecided names"):
-            count = set_many_filter_statuses(inclusions, undecided_names[current_idx:], status=False)
-            st.session_state.filter_index = 0  # Reset since undecided list will be empty
-            _clear_filter_count_cache()
-            st.toast(f"Excluded {count} remaining names", icon="✅")
-            st.session_state.last_button_press_time = time.perf_counter()
-            _persist_name_inclusions(inclusions)
-            # Fragment-level refresh for batch operations
-            st.rerun(scope="fragment")
-
-    log_timing("After buttons")
-
-    # Show included names in a multiselect (usually small number, performant)
-    # Get list of included names for the multiselect
-    included_names = get_included_names(names, inclusions)
-    excluded_count = st.session_state.filter_counts_excluded
-
-    st.divider()
-    st.subheader("📋 Your Selections")
-
-    # Only show multiselect if there are included names
-    if included_names:
-        # Sort for consistent display
-        sorted_included = sorted(included_names)
-
-        selected_included = st.multiselect(
-            f"✅ Included names for tournament ({len(sorted_included)})",
-            options=sorted_included,
-            default=sorted_included,
-            help="Uncheck names to move them back to 'not decided'",
-        )
-
-        # Check if any were deselected
-        selected_set = set(selected_included)
-        for name in sorted_included:
-            if name not in selected_set:
-                move_name_to_undecided(name, "included")
-    else:
-        st.info("No names included yet. Use 'Include' button above to add names.")
-
-    # Show excluded names in an expander (lazy loaded to avoid performance issues)
-    if excluded_count > 0:
-        with st.expander(f"❌ Show Excluded Names ({excluded_count})"):
-            # Get list of excluded names
-            excluded_names = get_excluded_names(names, inclusions)
-            if excluded_names:
-                # Sort and limit for performance
-                sorted_excluded = sorted(excluded_names)[:100]
-                remaining = len(excluded_names) - 100
-
-                if remaining > 0:
-                    st.caption(f"Showing first 100 of {len(excluded_names)} excluded names")
-
-                # Allow user to un-exclude (move back to undecided)
-                selected_excluded = st.multiselect(
-                    "Uncheck names to include them again",
-                    options=sorted_excluded,
-                    default=sorted_excluded,
-                    help="Uncheck names to move them back to 'not decided'",
-                )
-
-                # Check if any were deselected
-                selected_set = set(selected_excluded)
-                for name in sorted_excluded:
-                    if name not in selected_set:
-                        move_name_to_undecided(name, "excluded")
-
-    log_timing("At end")
+    timer.log("At end")
 
     end_time = time.perf_counter()
-    elapsed_ms = (end_time - start_time) * 1000
+    elapsed_ms = (end_time - timer.start_time) * MS_PER_SECOND
 
     if elapsed_ms > SLOW_RENDER_THRESHOLD_MS:
         logger.info("Filter render slow: %.1fms", elapsed_ms)
