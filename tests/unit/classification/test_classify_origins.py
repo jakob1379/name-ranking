@@ -174,7 +174,7 @@ class TestClassifyName:
         # Need to patch the specific module where _create_ethnidata_classifier is used
         with patch(
             "st_name_ranking.classification.origin_classifier._create_ethnidata_classifier",
-            side_effect=ImportError,
+            return_value=None,
         ):
             # When ethnidata fails, classifier falls back to International
             result = classify_origins.classify_name("Anna")
@@ -184,9 +184,8 @@ class TestClassifyName:
         """Test handling of classifier exceptions."""
         mock_classifier.side_effect = RuntimeError("Classifier error")
 
-        result = classify_origins.classify_name("Anna")
-        # classify_name catches RuntimeError and returns None
-        assert result is None
+        with pytest.raises(RuntimeError, match="Classifier error"):
+            classify_origins.classify_name("Anna")
 
     def test_reference_name_database_failure_is_not_cached_empty(self, initialized_db):
         """Reference lookup failures should remain distinguishable from no reference data."""
@@ -289,11 +288,30 @@ class TestClassifyAllNames:
         ]
 
         with patch("st_name_ranking.classification.classify_origins.get_or_create_classifier", side_effect=ImportError):
-            result = classify_origins.classify_all_names()
+            with pytest.raises(ImportError):
+                classify_origins.classify_all_names()
 
-            assert result == 0
             # Note: classify_all_names uses logging, not Streamlit toast
             # Original test expected toast but it's not implemented
+
+    @patch("st_name_ranking.classification.classify_origins.get_unclassified_names")
+    def test_classify_all_names_reference_database_failure_aborts(
+        self,
+        mock_get_unclassified,
+        initialized_db,
+    ):
+        """Database failures while loading reference names should abort the run."""
+        classify_origins.reset_reference_cache()
+        mock_get_unclassified.return_value = [SimpleNamespace(id=1, name="Anna")]
+
+        with patch(
+            "st_name_ranking.classification.classify_origins.get_names_with_origins",
+            side_effect=sqlite3.OperationalError("database is locked"),
+        ):
+            with pytest.raises(RuntimeError, match="Failed to load origin-classification reference names"):
+                classify_origins.classify_all_names()
+
+        assert not hasattr(classify_origins._get_reference_names, "_cache")
 
 
 if __name__ == "__main__":

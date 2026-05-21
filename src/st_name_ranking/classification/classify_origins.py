@@ -28,26 +28,20 @@ MIN_CONFIDENCE_THRESHOLD = 0.1
 
 def classify_name(name: str) -> OriginResult | None:
     """Classify a single name, returning None when classification is unavailable."""
-    try:
-        reference_names = _get_reference_names()
-        classifier = get_or_create_classifier(reference_names)
+    reference_names = _get_reference_names()
+    classifier = get_or_create_classifier(reference_names)
 
-        region, confidence = classifier.classify(name)
-
-    except (ImportError, AttributeError, ValueError, RuntimeError, OSError) as e:
-        logger.warning("Error classifying name '%s': %s", name, e)
+    region, confidence = classifier.classify(name)
+    if confidence < MIN_CONFIDENCE_THRESHOLD:
         return None
-    else:
-        if confidence < MIN_CONFIDENCE_THRESHOLD:  # Fallback if classifier returns minimal confidence
-            return None
 
-        logger.debug(
-            "Classified %s -> %s (confidence: %.2f)",
-            name,
-            region,
-            confidence,
-        )
-        return OriginResult(region, confidence)
+    logger.debug(
+        "Classified %s -> %s (confidence: %.2f)",
+        name,
+        region,
+        confidence,
+    )
+    return OriginResult(region, confidence)
 
 
 def _get_reference_names() -> dict[str, tuple[str, float, str, str]]:
