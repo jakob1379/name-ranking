@@ -11,7 +11,7 @@ import shutil
 import sqlite3
 import sys
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated
 
 import typer
 from rich.console import Console
@@ -35,7 +35,12 @@ from st_name_ranking.persistence.database import (
     init_database,
     sync_names_with_submodule,
 )
-from st_name_ranking.persistence.feature_store import get_feature_stats, has_feature_cache, rebuild_feature_cache
+from st_name_ranking.persistence.feature_store import (
+    FeatureStatusStats,
+    get_feature_stats,
+    has_feature_cache,
+    rebuild_feature_cache,
+)
 from st_name_ranking.types import DatabaseStats
 
 app = typer.Typer(
@@ -307,7 +312,7 @@ def stats_command() -> None:
     _print_origin_distribution(stats)
 
 
-def _print_feature_table(feature_stats: dict[str, Any], total_names: int) -> None:
+def _print_feature_table(feature_stats: FeatureStatusStats, total_names: int) -> None:
     """Print feature cache statistics."""
 
     # Feature cache status table

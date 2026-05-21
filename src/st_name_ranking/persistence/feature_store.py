@@ -42,6 +42,14 @@ class FeatureCacheStats(TypedDict):
     feature_sets: list[FeatureSetCacheStats]
 
 
+class FeatureStatusStats(TypedDict):
+    """Feature-cache status counters for CLI/status output."""
+
+    feature_sets_count: int
+    names_with_features: int
+    active_version: str | None
+
+
 class CorruptFeatureCacheError(RuntimeError):
     """Raised when cached feature JSON cannot be decoded."""
 
@@ -304,7 +312,7 @@ def has_feature_cache() -> bool:
         return False
 
 
-def get_feature_stats() -> dict[str, int | str | None]:
+def get_feature_stats() -> FeatureStatusStats:
     """Get feature-cache summary statistics for CLI/status output."""
     with get_connection() as conn:
         existing_tables = _existing_tables(conn, {"feature_sets", "name_features"})
