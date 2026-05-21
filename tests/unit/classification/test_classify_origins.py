@@ -7,6 +7,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from st_name_ranking.classification import classify_origins, origin_classifier
+from st_name_ranking.persistence import database
 
 
 class TestOriginClassifierFactory:
@@ -198,6 +199,34 @@ class TestClassifyName:
                 classify_origins._get_reference_names()
 
         assert not hasattr(classify_origins._get_reference_names, "_cache")
+
+    def test_reference_name_cache_reloads_after_db_path_change(self, tmp_path):
+        """Reference-name cache entries should be scoped to the active database."""
+        classify_origins.reset_reference_cache()
+        original_path = database.get_db_path()
+
+        with patch(
+            "st_name_ranking.classification.classify_origins.get_names_with_origins",
+            side_effect=[
+                {"Anna": ("Nordic", 0.9, "AN", "")},
+                {"Maria": ("European", 0.8, "MR", "")},
+            ],
+        ) as get_names_with_origins:
+            try:
+                database.set_db_path(tmp_path / "first.db")
+                first = classify_origins._get_reference_names()
+                first_again = classify_origins._get_reference_names()
+
+                database.set_db_path(tmp_path / "second.db")
+                second = classify_origins._get_reference_names()
+            finally:
+                database.set_db_path(original_path)
+                classify_origins.reset_reference_cache()
+
+        assert first is first_again
+        assert first == {"Anna": ("Nordic", 0.9, "AN", "")}
+        assert second == {"Maria": ("European", 0.8, "MR", "")}
+        assert get_names_with_origins.call_count == 2
 
 
 class TestClassifyAllNames:

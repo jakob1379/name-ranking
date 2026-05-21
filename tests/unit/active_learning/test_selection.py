@@ -115,9 +115,54 @@ def test_active_learning_singletons_initialize_once_under_concurrency(monkeypatc
 
 def test_reset_active_learning_state_clears_model_and_extractor_caches():
     selection.get_or_initialize_active_learning_model._cache = object()
+    selection.get_or_initialize_active_learning_model._cache_db_path = "model.db"
     selection.get_or_create_feature_extractor._cache = object()
+    selection.get_or_create_feature_extractor._cache_db_path = "extractor.db"
 
     selection.reset_active_learning_state()
 
     assert selection.get_or_initialize_active_learning_model._cache is None
+    assert selection.get_or_initialize_active_learning_model._cache_db_path is None
     assert selection.get_or_create_feature_extractor._cache is None
+    assert selection.get_or_create_feature_extractor._cache_db_path is None
+
+
+def test_active_learning_singletons_reinitialize_after_db_path_change(monkeypatch, tmp_path):
+    selection.reset_active_learning_state()
+    original_path = selection.database.get_db_path()
+    extractor_instances = []
+    model_instances = []
+
+    class FakeFeatureExtractor:
+        def get_feature_names(self):
+            return ["length"]
+
+    def new_feature_extractor():
+        extractor = FakeFeatureExtractor()
+        extractor_instances.append(extractor)
+        return extractor
+
+    def initialize_model(feature_names):
+        model = SimpleNamespace(feature_names=feature_names)
+        model_instances.append(model)
+        return model
+
+    monkeypatch.setattr(selection, "FeatureExtractor", new_feature_extractor)
+    monkeypatch.setattr(selection, "initialize_model_if_needed", initialize_model)
+
+    try:
+        selection.database.set_db_path(tmp_path / "first.db")
+        first_model = selection.get_or_initialize_active_learning_model()
+        first_extractor = selection.get_or_create_feature_extractor()
+
+        selection.database.set_db_path(tmp_path / "second.db")
+        second_model = selection.get_or_initialize_active_learning_model()
+        second_extractor = selection.get_or_create_feature_extractor()
+    finally:
+        selection.database.set_db_path(original_path)
+        selection.reset_active_learning_state()
+
+    assert first_model is not second_model
+    assert first_extractor is not second_extractor
+    assert len(model_instances) == 2
+    assert len(extractor_instances) == 2

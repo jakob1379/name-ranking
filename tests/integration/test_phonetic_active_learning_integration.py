@@ -563,12 +563,13 @@ class TestPhoneticCache:
 
         # First call - should hit database
         start_time = time.perf_counter()
-        result1 = _get_phonetic_codes_cached(tuple(names))
+        db_path = str(database.get_db_path())
+        result1 = _get_phonetic_codes_cached(db_path, tuple(names))
         first_call_time = time.perf_counter() - start_time
 
         # Second call - should hit cache
         start_time = time.perf_counter()
-        result2 = _get_phonetic_codes_cached(tuple(names))
+        result2 = _get_phonetic_codes_cached(db_path, tuple(names))
         second_call_time = time.perf_counter() - start_time
 
         # Results should be identical

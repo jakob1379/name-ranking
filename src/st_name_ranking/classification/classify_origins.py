@@ -14,6 +14,7 @@ from st_name_ranking.classification.origin_classifier import (
     reset_classifier_cache,
 )
 from st_name_ranking.persistence.database import (
+    get_db_path,
     get_names_with_origins,
     get_unclassified_names,
     update_name_origin,
@@ -46,8 +47,10 @@ def classify_name(name: str) -> OriginResult | None:
 
 def _get_reference_names() -> dict[str, tuple[str, float, str, str]]:
     """Load known names used as origin-classification references."""
+    current_db_path = str(get_db_path())
     cache = getattr(_get_reference_names, "_cache", None)
-    if cache is not None:
+    cache_db_path = getattr(_get_reference_names, "_cache_db_path", None)
+    if cache is not None and cache_db_path == current_db_path:
         return cache
 
     try:
@@ -59,6 +62,7 @@ def _get_reference_names() -> dict[str, tuple[str, float, str, str]]:
         raise RuntimeError(msg) from e
 
     _get_reference_names._cache = reference_names
+    _get_reference_names._cache_db_path = current_db_path
     logger.debug(
         "Loaded %d reference names",
         len(_get_reference_names._cache),
@@ -70,6 +74,8 @@ def reset_reference_cache() -> None:
     """Clear cached reference data and classifier instances."""
     if hasattr(_get_reference_names, "_cache"):
         delattr(_get_reference_names, "_cache")
+    if hasattr(_get_reference_names, "_cache_db_path"):
+        delattr(_get_reference_names, "_cache_db_path")
     reset_classifier_cache()
 
 

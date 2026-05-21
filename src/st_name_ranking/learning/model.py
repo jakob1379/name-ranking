@@ -14,7 +14,7 @@ from functools import lru_cache
 import numpy as np
 
 from st_name_ranking.learning.pair_selection import MIN_NAMES_FOR_PAIR_SELECTION
-from st_name_ranking.persistence.database import get_connection, get_phonetic_codes_batch
+from st_name_ranking.persistence.database import get_connection, get_db_path, get_phonetic_codes_batch
 from st_name_ranking.types import NamePair, PhoneticCodes
 
 logger = logging.getLogger(__name__)
@@ -30,10 +30,11 @@ MAX_PAIR_ATTEMPTS_MULTIPLIER = 10
 
 
 @lru_cache(maxsize=PHONETIC_CACHE_SIZE)
-def _get_phonetic_codes_cached(names_tuple: tuple[str, ...]) -> dict[str, PhoneticCodes]:
+def _get_phonetic_codes_cached(_db_path: str, names_tuple: tuple[str, ...]) -> dict[str, PhoneticCodes]:
     """Cached version of get_phonetic_codes_batch.
 
     Uses tuple for hashability with LRU cache.
+    Includes the database path so active DB switches cannot reuse stale codes.
     Cache size 128 ~ 50KB for typical name datasets.
     """
     return get_phonetic_codes_batch(list(names_tuple))
@@ -42,7 +43,7 @@ def _get_phonetic_codes_cached(names_tuple: tuple[str, ...]) -> dict[str, Phonet
 def _group_names_by_phonetic(names: list[str]) -> dict[str, list[int]]:
     """Group name indices by phonetic primary code."""
     names_tuple = tuple(names)
-    phonetic_map = _get_phonetic_codes_cached(names_tuple)
+    phonetic_map = _get_phonetic_codes_cached(str(get_db_path()), names_tuple)
 
     clusters: dict[str, list[int]] = {}
     for idx, name in enumerate(names):
