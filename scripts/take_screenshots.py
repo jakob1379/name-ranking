@@ -3,7 +3,7 @@
 Screenshot utility for Name Ranking application.
 
 This script helps capture screenshots of the application for documentation.
-It requires the Streamlit app to be running on http://localhost:8501.
+It requires the Streamlit app to be running locally.
 
 Usage:
     uv run python scripts/take_screenshots.py [--output-dir DIR]
@@ -14,8 +14,11 @@ Requirements:
 
 import argparse
 import asyncio
-import sys
 from pathlib import Path
+
+DEFAULT_APP_HOST = "localhost"
+DEFAULT_APP_PORT = 8501
+DEFAULT_APP_URL = f"http://{DEFAULT_APP_HOST}:{DEFAULT_APP_PORT}"
 
 try:
     from playwright.async_api import async_playwright
@@ -25,12 +28,11 @@ except ImportError:
     PLAYWRIGHT_AVAILABLE = False
 
 
-async def capture_screenshots(output_dir: Path, url: str = "http://localhost:8501"):
+async def capture_screenshots(output_dir: Path, url: str = DEFAULT_APP_URL) -> None:
     """Capture screenshots of the running application."""
     if not PLAYWRIGHT_AVAILABLE:
-        print("Error: playwright not available. Install with:")
-        print("  uv run playwright install")
-        sys.exit(1)
+        msg = "playwright is not available; install browser binaries with `uv run playwright install chromium`"
+        raise RuntimeError(msg)
 
     output_dir.mkdir(exist_ok=True)
 
@@ -73,7 +75,7 @@ async def capture_screenshots(output_dir: Path, url: str = "http://localhost:850
     print("  ![Sidebar Controls](screenshots/03_sidebar.png)")
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(description="Capture application screenshots")
     parser.add_argument(
         "--output-dir",
@@ -82,8 +84,8 @@ def main():
     )
     parser.add_argument(
         "--url",
-        default="http://localhost:8501",
-        help="URL of running Streamlit app (default: http://localhost:8501)",
+        default=DEFAULT_APP_URL,
+        help=f"URL of running Streamlit app (default: {DEFAULT_APP_URL})",
     )
     args = parser.parse_args()
 
@@ -99,7 +101,7 @@ def main():
         print("Alternatively, take screenshots manually:")
         print("  1. Start the application:")
         print("     uv run streamlit run src/st_name_ranking/main.py")
-        print("  2. Open http://localhost:8501 in your browser")
+        print(f"  2. Open {DEFAULT_APP_URL} in your browser")
         print("  3. Capture screenshots of:")
         print("     - Main tournament view")
         print("     - Similarity search tab")
@@ -107,7 +109,7 @@ def main():
         print("=" * 60)
         return
 
-    asyncio.run(capture_screenshots(output_dir, args.url))
+    asyncio.run(capture_screenshots(output_dir, str(args.url)))
 
 
 if __name__ == "__main__":
