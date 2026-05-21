@@ -4,6 +4,31 @@ from unittest.mock import Mock
 
 from st_name_ranking import tournament_orchestration
 from st_name_ranking.active_learning.lazy_updates import ModelUpdateStatus
+from st_name_ranking.interface import tournament_session
+
+
+def test_get_current_pair_reuses_valid_session_candidates(monkeypatch):
+    mock_st = Mock()
+    mock_st.session_state = {"candidate_a": "Anna", "candidate_b": "Bo"}
+    monkeypatch.setattr(tournament_session, "st", mock_st)
+
+    assert tournament_session.get_current_pair(["Anna", "Bo", "Maria"]) == ("Anna", "Bo")
+
+
+def test_get_current_pair_rejects_stale_session_candidates(monkeypatch):
+    mock_st = Mock()
+    mock_st.session_state = {"candidate_a": "Anna", "candidate_b": "Retired"}
+    monkeypatch.setattr(tournament_session, "st", mock_st)
+
+    assert tournament_session.get_current_pair(["Anna", "Bo", "Maria"]) is None
+
+
+def test_get_current_pair_rejects_same_session_candidate(monkeypatch):
+    mock_st = Mock()
+    mock_st.session_state = {"candidate_a": "Anna", "candidate_b": "Anna"}
+    monkeypatch.setattr(tournament_session, "st", mock_st)
+
+    assert tournament_session.get_current_pair(["Anna", "Bo", "Maria"]) is None
 
 
 def test_prepare_tournament_round_reuses_current_pair_without_touching_queue():
@@ -77,10 +102,11 @@ def test_prepare_tournament_round_requires_at_least_two_names():
 def test_record_tournament_vote_advances_after_recorded_vote(monkeypatch):
     manager = Mock()
     manager.get_pair.return_value = ("Maria", "Peter")
+    record_comparison = Mock(return_value=ModelUpdateStatus(recorded=True, model_updated=None, ratings_fresh=None))
     monkeypatch.setattr(
         tournament_orchestration,
         "record_comparison_instant",
-        Mock(return_value=ModelUpdateStatus(recorded=True, model_updated=None, ratings_fresh=None)),
+        record_comparison,
     )
 
     result = tournament_orchestration.record_tournament_vote(
@@ -95,6 +121,7 @@ def test_record_tournament_vote_advances_after_recorded_vote(monkeypatch):
     assert result.next_pair == ("Maria", "Peter")
     assert result.pair_source == "queue"
     assert result.update_status.recorded is True
+    record_comparison.assert_called_once_with("Anna", "Bo", -1)
     manager.get_pair.assert_called_once_with()
 
 
@@ -102,11 +129,12 @@ def test_record_tournament_vote_falls_back_to_random_pair_after_recorded_vote(mo
     manager = Mock()
     manager.get_pair.return_value = None
     select_random_pair = Mock(return_value=("Maria", "Peter"))
+    record_comparison = Mock(return_value=ModelUpdateStatus(recorded=True, model_updated=False, ratings_fresh=True))
     monkeypatch.setattr(tournament_orchestration, "select_random_pair", select_random_pair)
     monkeypatch.setattr(
         tournament_orchestration,
         "record_comparison_instant",
-        Mock(return_value=ModelUpdateStatus(recorded=True, model_updated=False, ratings_fresh=True)),
+        record_comparison,
     )
 
     result = tournament_orchestration.record_tournament_vote(
@@ -121,6 +149,7 @@ def test_record_tournament_vote_falls_back_to_random_pair_after_recorded_vote(mo
     assert result.next_pair == ("Maria", "Peter")
     assert result.pair_source == "random"
     assert result.update_status.recorded is True
+    record_comparison.assert_called_once_with("Anna", "Bo", -1)
     manager.get_pair.assert_called_once_with()
     select_random_pair.assert_called_once_with(["Anna", "Bo", "Maria", "Peter"])
 
@@ -128,18 +157,19 @@ def test_record_tournament_vote_falls_back_to_random_pair_after_recorded_vote(mo
 def test_record_tournament_vote_keeps_pair_when_vote_was_not_recorded(monkeypatch):
     manager = Mock()
     manager.get_pair.side_effect = AssertionError("next pair should not be selected")
+    record_comparison = Mock(
+        return_value=ModelUpdateStatus(
+            recorded=False,
+            model_updated=False,
+            ratings_fresh=False,
+            fallback_used=True,
+            error="database locked",
+        ),
+    )
     monkeypatch.setattr(
         tournament_orchestration,
         "record_comparison_instant",
-        Mock(
-            return_value=ModelUpdateStatus(
-                recorded=False,
-                model_updated=False,
-                ratings_fresh=False,
-                fallback_used=True,
-                error="database locked",
-            ),
-        ),
+        record_comparison,
     )
 
     result = tournament_orchestration.record_tournament_vote(
@@ -155,4 +185,5 @@ def test_record_tournament_vote_keeps_pair_when_vote_was_not_recorded(monkeypatc
     assert result.pair_source == "unchanged"
     assert result.update_status.recorded is False
     assert result.update_status.error == "database locked"
+    record_comparison.assert_called_once_with("Anna", "Bo", -1)
     manager.get_pair.assert_not_called()
