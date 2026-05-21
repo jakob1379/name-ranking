@@ -571,10 +571,8 @@ def get_or_create_classifier(
     return _CLASSIFIER_CACHE[cache_key]
 
 
-if __name__ == "__main__":
-    # Simple test
-    import sys
-
+def _run_demo() -> None:
+    """Print sample origin classifications for manual inspection."""
     classifier = OriginClassifier()
 
     test_names = [
@@ -595,4 +593,6 @@ if __name__ == "__main__":
         region, confidence = classifier.classify(name)
         print(f"  {name:15} → {region:15} (confidence: {confidence:.2f})")
 
-    sys.exit(0)
+
+if __name__ == "__main__":
+    _run_demo()
