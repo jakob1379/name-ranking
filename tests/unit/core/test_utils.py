@@ -132,8 +132,34 @@ class TestPullSubmoduleUpdates:
 
         result = app_actions.pull_submodule_updates()
 
-        # Should still return True (sync error is caught)
-        assert result is True
+        assert result is False
+        mock_st.toast.assert_any_call(
+            "Failed to sync names: DB error",
+            icon="❌",
+            duration="long",
+        )
+
+    @patch("st_name_ranking.interface.app_actions.subprocess.run")
+    @patch("st_name_ranking.interface.app_actions.st")
+    @patch("st_name_ranking.interface.app_actions.database")
+    def test_sync_error_skips_classification(self, mock_db, mock_st, mock_run):
+        """Origin classification should not run after a database sync failure."""
+        mock_result = MagicMock()
+        mock_result.returncode = 0
+        mock_run.return_value = mock_result
+        mock_db.sync_names_with_submodule.side_effect = RuntimeError("DB error")
+        classify_origins_mock = MagicMock()
+
+        with patch.dict(
+            "sys.modules",
+            {
+                "st_name_ranking.classification.classify_origins": classify_origins_mock,
+            },
+        ):
+            result = app_actions.pull_submodule_updates(classify_origins=True)
+
+        assert result is False
+        classify_origins_mock.classify_all_names.assert_not_called()
         mock_st.toast.assert_any_call(
             "Failed to sync names: DB error",
             icon="❌",

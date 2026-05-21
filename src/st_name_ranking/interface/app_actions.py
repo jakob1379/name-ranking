@@ -45,7 +45,9 @@ def pull_submodule_updates(*, classify_origins: bool = False) -> bool:
     if result.stdout:
         st.text(f"Output: {result.stdout[:200]}")
 
-    _sync_after_submodule_pull()
+    if not _sync_after_submodule_pull():
+        return False
+
     if classify_origins:
         _classify_origins_after_sync()
 
@@ -99,7 +101,7 @@ def sync_names_from_submodule() -> int:
         return 0
 
 
-def _sync_after_submodule_pull() -> None:
+def _sync_after_submodule_pull() -> bool:
     with st.spinner("Syncing new names with database..."):
         try:
             database.init_database()
@@ -117,6 +119,8 @@ def _sync_after_submodule_pull() -> None:
                 icon="❌",
                 duration="long",
             )
+            return False
+    return True
 
 
 def _classify_origins_after_sync() -> None:
