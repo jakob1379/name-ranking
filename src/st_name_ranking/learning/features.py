@@ -222,6 +222,14 @@ class FeatureCacheOptions:
     use_cache: bool = True
 
 
+@dataclass(frozen=True)
+class FeatureBatchContext:
+    """Persistent-cache metadata for extracting a batch of names."""
+
+    name_ids: Sequence[int | None] | None = None
+    use_cache: bool = True
+
+
 def extract_suffix_features(name: str) -> dict[str, float]:
     """Extract suffix and prefix-based gender cue features.
 
@@ -620,19 +628,19 @@ class FeatureExtractor:
         genders: Sequence[str | None] | None = None,
         origin_regions: Sequence[str | None] | None = None,
         *,
-        name_ids: Sequence[int | None] | None = None,
-        use_cache: bool = True,
+        context: FeatureBatchContext | None = None,
     ) -> np.ndarray:
         """Extract feature vectors as an array of shape (n_names, n_features)."""
+        context = context or FeatureBatchContext()
         genders = _metadata_sequence(names, genders, "genders")
         origin_regions = _metadata_sequence(names, origin_regions, "origin_regions")
-        name_ids = _metadata_sequence(names, name_ids, "name_ids")
+        name_ids = _metadata_sequence(names, context.name_ids, "name_ids")
 
         vectors = []
         for name, gender, origin, name_id in zip(names, genders, origin_regions, name_ids, strict=True):
             cache_options = FeatureCacheOptions(
                 name_id=name_id,
-                use_cache=use_cache,
+                use_cache=context.use_cache,
             )
             vectors.append(self.extract(name, gender, origin, cache_options))
 

@@ -17,7 +17,12 @@ import numpy as np
 import pytest
 
 from st_name_ranking.active_learning.selection import get_name_features, get_names_features
-from st_name_ranking.learning.features import FeatureExtractor, extract_all_features, extract_suffix_features
+from st_name_ranking.learning.features import (
+    FeatureBatchContext,
+    FeatureExtractor,
+    extract_all_features,
+    extract_suffix_features,
+)
 from st_name_ranking.learning.model import BradleyTerryModel
 from st_name_ranking.persistence.database import get_connection
 
@@ -173,7 +178,7 @@ def test_batch_and_single_extraction_equivalent(initialized_db, test_names_with_
     [
         ({"genders": ["Female"]}, "genders"),
         ({"origin_regions": ["Nordic"]}, "origin_regions"),
-        ({"name_ids": [1]}, "name_ids"),
+        ({"context": FeatureBatchContext(name_ids=[1])}, "name_ids"),
     ],
 )
 def test_batch_extract_rejects_metadata_length_mismatch(feature_extractor, kwargs, field):
