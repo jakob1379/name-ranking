@@ -9,11 +9,11 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
+from st_name_ranking.active_learning.phonetic_similarity import phonetic_similarity
 from st_name_ranking.learning.features import FeatureExtractor
 from st_name_ranking.learning.model import BradleyTerryModel, initialize_model_if_needed
 from st_name_ranking.learning.pair_selection import MIN_NAMES_FOR_PAIR_SELECTION
 from st_name_ranking.persistence import database
-from st_name_ranking.phonetic_similarity import phonetic_similarity
 
 logger = logging.getLogger(__name__)
 

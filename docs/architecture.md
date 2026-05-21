@@ -67,7 +67,7 @@ and tests.
 | UI app actions                      | `st_name_ranking.interface.app_actions`              |
 | Tournament state helpers            | `st_name_ranking.interface.tournament_session`       |
 | Tournament orchestration            | `st_name_ranking.interface.tournament_orchestration` |
-| Similarity search                   | `st_name_ranking.interface.similarity_search`        |
+| Similarity search                   | `st_name_ranking.interface.similarity`               |
 | Active-learning selection           | `st_name_ranking.active_learning.selection`          |
 | Candidate queue                     | `st_name_ranking.active_learning.queue`              |
 | Comparison/model refresh            | `st_name_ranking.active_learning.lazy_updates`       |
@@ -88,22 +88,19 @@ and tests.
 | Origin classifier implementation    | `st_name_ranking.classification.origin_classifier`   |
 | CLI                                 | `st_name_ranking.commands.cli`                       |
 
-## Shared Root Modules
+## Shared Package Modules
 
-Only a small set of root modules are stable shared infrastructure:
+Only a small set of package modules are stable shared infrastructure:
 
-| Module                                | Owner and purpose                                                    |
-| ------------------------------------- | -------------------------------------------------------------------- |
-| `st_name_ranking.types`               | Shared record types used across interface, learning, and persistence |
-| `st_name_ranking.name_normalization`  | Shared name cleanup for submodule loading and persistence sync       |
-| `st_name_ranking.phonetic_similarity` | Generic phonetic scoring used by active learning and tests           |
+| Module                                                | Owner and purpose                                                    |
+| ----------------------------------------------------- | -------------------------------------------------------------------- |
+| `st_name_ranking.types`                               | Shared record types used across interface, learning, and persistence |
+| `st_name_ranking.persistence.name_normalization`      | Shared name cleanup for submodule loading and persistence sync       |
+| `st_name_ranking.active_learning.phonetic_similarity` | Generic phonetic scoring used by active learning and tests           |
 
-Everything else at the package root is either internal
-(`st_name_ranking._compat`) or a deprecated compatibility shim that forwards to
-a package-owned module. Examples include `st_name_ranking.database`,
-`st_name_ranking.features`, `st_name_ranking.ui`, `st_name_ranking.similarity`,
-and `st_name_ranking.tournament_orchestration`. New code should not import those
-shim paths.
+Everything else at the package root is either internal compatibility support or
+a deprecated shim that forwards to a package-owned module. New code should not
+import those shim paths.
 
 ## Component Architecture
 

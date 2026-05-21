@@ -6,7 +6,7 @@ from typing import Literal
 import polars as pl
 import streamlit as st
 
-from st_name_ranking.interface.similarity_search import (
+from st_name_ranking.interface.similarity import (
     get_string_similarity_scores,
     get_vector_similarity_scores,
     load_embedding_model,

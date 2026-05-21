@@ -9,6 +9,9 @@ from unittest.mock import patch
 
 import numpy as np
 
+from st_name_ranking.active_learning.phonetic_similarity import (
+    batch_compute_phonetic_codes,
+)
 from st_name_ranking.active_learning.selection import (
     PairSelectionOptions,
     get_or_create_feature_extractor,
@@ -22,9 +25,6 @@ from st_name_ranking.learning.model import (
     _select_cross_cluster_pairs,
 )
 from st_name_ranking.persistence import database
-from st_name_ranking.phonetic_similarity import (
-    batch_compute_phonetic_codes,
-)
 from st_name_ranking.types import NamePair
 
 
@@ -604,7 +604,7 @@ class TestPhoneticCache:
 
     def test_phonetic_similarity_function(self):
         """Test phonetic similarity computation."""
-        from st_name_ranking.phonetic_similarity import phonetic_similarity
+        from st_name_ranking.active_learning.phonetic_similarity import phonetic_similarity
 
         # Same name should have similarity 1.0
         assert phonetic_similarity("Anna", "Anna") == 1.0

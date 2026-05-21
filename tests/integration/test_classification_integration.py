@@ -503,7 +503,7 @@ class TestPhoneticSimilarityIntegration:
 
     def test_phonetic_similarity_module_directly(self):
         """Test the phonetic_similarity module functions."""
-        from st_name_ranking.phonetic_similarity import (
+        from st_name_ranking.active_learning.phonetic_similarity import (
             compute_phonetic_codes,
             get_phonetic_neighbors,
             phonetic_similarity,
@@ -529,7 +529,7 @@ class TestPhoneticSimilarityIntegration:
 
     def test_phonetic_batch_operations(self):
         """Test batch phonetic operations."""
-        from st_name_ranking.phonetic_similarity import (
+        from st_name_ranking.active_learning.phonetic_similarity import (
             batch_compute_phonetic_codes,
             phonetic_similarity_batch,
         )

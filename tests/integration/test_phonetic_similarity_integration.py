@@ -1,6 +1,6 @@
 """Integration tests for phonetic_similarity module."""
 
-from st_name_ranking import phonetic_similarity
+from st_name_ranking.active_learning import phonetic_similarity
 
 
 class TestPhoneticSimilarityIntegration:

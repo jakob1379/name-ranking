@@ -7,8 +7,8 @@ from pathlib import Path
 
 from metaphone import doublemetaphone
 
-from st_name_ranking.name_normalization import is_valid_name, strip_name_notes
 from st_name_ranking.persistence.connection import get_connection
+from st_name_ranking.persistence.name_normalization import is_valid_name, strip_name_notes
 from st_name_ranking.types import SourceVersion
 
 logger = logging.getLogger(__name__)

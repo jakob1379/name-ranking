@@ -6,9 +6,9 @@ from pathlib import Path
 
 import polars as pl
 
-from st_name_ranking.name_normalization import is_valid_name, strip_name_notes
 from st_name_ranking.persistence import database
 from st_name_ranking.persistence.database import INITIAL_SCORE
+from st_name_ranking.persistence.name_normalization import is_valid_name, strip_name_notes
 
 logger = logging.getLogger(__name__)
 
