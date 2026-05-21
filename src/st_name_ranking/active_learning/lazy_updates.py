@@ -33,8 +33,8 @@ class ModelUpdateStatus:
 
 
 @functools.lru_cache
-def get_thread_executor() -> ThreadPoolExecutor:
-    """Shared thread pool for background model/rating updates."""
+def get_or_create_thread_executor() -> ThreadPoolExecutor:
+    """Return the shared thread pool, creating it on first use."""
     return ThreadPoolExecutor(max_workers=2)
 
 
@@ -59,7 +59,7 @@ def record_comparison_instant(
         )
 
     if not blocking:
-        get_thread_executor().submit(_update_model_then_refresh_ratings, name_a, name_b, preference)
+        get_or_create_thread_executor().submit(_update_model_then_refresh_ratings, name_a, name_b, preference)
         return ModelUpdateStatus(recorded=True, model_updated=None, ratings_fresh=None)
 
     model_updated, ratings_fresh = _update_model_then_refresh_ratings(name_a, name_b, preference)

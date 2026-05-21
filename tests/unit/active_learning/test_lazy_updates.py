@@ -29,7 +29,7 @@ def test_record_comparison_returns_fallback_status_when_database_write_fails(mon
     )
     monkeypatch.setattr(
         lazy_updates,
-        "get_thread_executor",
+        "get_or_create_thread_executor",
         Mock(side_effect=AssertionError("executor should not start after failed write")),
     )
 
@@ -47,7 +47,7 @@ def test_record_comparison_blocking_reports_completed_model_and_rating_updates(m
     record_comparison = Mock()
 
     monkeypatch.setattr(lazy_updates.database, "record_comparison", record_comparison)
-    monkeypatch.setattr(lazy_updates, "get_thread_executor", Mock(return_value=executor))
+    monkeypatch.setattr(lazy_updates, "get_or_create_thread_executor", Mock(return_value=executor))
     monkeypatch.setattr(lazy_updates, "_update_model_sync", Mock(return_value=True))
     monkeypatch.setattr(lazy_updates, "_update_ratings_from_model", Mock(return_value=True))
 
@@ -66,7 +66,7 @@ def test_record_comparison_blocking_marks_fallback_when_model_update_fails(monke
     executor = ImmediateExecutor()
 
     monkeypatch.setattr(lazy_updates.database, "record_comparison", Mock())
-    monkeypatch.setattr(lazy_updates, "get_thread_executor", Mock(return_value=executor))
+    monkeypatch.setattr(lazy_updates, "get_or_create_thread_executor", Mock(return_value=executor))
     monkeypatch.setattr(lazy_updates, "_update_model_sync", Mock(return_value=False))
     update_ratings = Mock(return_value=True)
     monkeypatch.setattr(lazy_updates, "_update_ratings_from_model", update_ratings)
@@ -85,7 +85,7 @@ def test_record_comparison_nonblocking_returns_pending_status_after_scheduling(m
     executor = ImmediateExecutor()
 
     monkeypatch.setattr(lazy_updates.database, "record_comparison", Mock())
-    monkeypatch.setattr(lazy_updates, "get_thread_executor", Mock(return_value=executor))
+    monkeypatch.setattr(lazy_updates, "get_or_create_thread_executor", Mock(return_value=executor))
     monkeypatch.setattr(lazy_updates, "_update_model_sync", Mock(return_value=True))
     monkeypatch.setattr(lazy_updates, "_update_ratings_from_model", Mock(return_value=True))
 
