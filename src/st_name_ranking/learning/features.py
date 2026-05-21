@@ -7,6 +7,8 @@ All features are normalized to [0, 1] range for model compatibility.
 import logging
 import re
 from collections.abc import Sequence
+from dataclasses import dataclass
+from itertools import pairwise
 
 import numpy as np
 import pyphen
@@ -178,6 +180,56 @@ SUFFIX_FEATURE_KEYS = [
     "coda_weight",
     "closed_heavy",
 ]
+SUFFIX_FLAG_ENDINGS = {
+    "ends_with_a": "a",
+    "ends_with_o": "o",
+    "ends_with_us": "us",
+    "ends_with_ie": "ie",
+    "ends_with_ette": "ette",
+    "ends_with_elle": "elle",
+    "ends_with_ck": "ck",
+    "ends_with_sh": "sh",
+}
+CLUSTER_FEATURE_KEYS = (
+    "consonant_clusters",
+    "max_cluster_len",
+    "has_complex_cluster",
+    "initial_cluster",
+    "final_cluster",
+    "medial_cluster_density",
+    "cv_alternation_ratio",
+    "starts_consonant",
+    "ends_vowel",
+    "has_cvc_pattern",
+    "has_vcv_pattern",
+)
+
+
+@dataclass(frozen=True)
+class FeatureGroupOptions:
+    """Feature groups included in one extraction pass."""
+
+    include_phonetic: bool = True
+    include_linguistic: bool = True
+    include_metadata: bool = True
+
+
+@dataclass(frozen=True)
+class FeatureCacheOptions:
+    """Persistent-cache controls for extracting one name."""
+
+    name_id: int | None = None
+    use_cache: bool = True
+
+
+@dataclass(frozen=True)
+class FeatureBatchContext:
+    """Metadata and cache controls for extracting a name batch."""
+
+    genders: Sequence[str | None] | None = None
+    origin_regions: Sequence[str | None] | None = None
+    name_ids: Sequence[int | None] | None = None
+    use_cache: bool = True
 
 
 def extract_suffix_features(name: str) -> dict[str, float]:
@@ -190,25 +242,11 @@ def extract_suffix_features(name: str) -> dict[str, float]:
         return dict.fromkeys(SUFFIX_FEATURE_KEYS, 0.0)
 
     name_lower = name.lower()
-    features: dict[str, float] = {}
-
-    features["ends_with_a"] = 1.0 if name_lower.endswith("a") else 0.0
-    features["ends_with_o"] = 1.0 if name_lower.endswith("o") else 0.0
-    features["ends_with_us"] = 1.0 if name_lower.endswith("us") else 0.0
-    features["ends_with_ie"] = 1.0 if name_lower.endswith("ie") else 0.0
-    features["ends_with_ette"] = 1.0 if name_lower.endswith("ette") else 0.0
-    features["ends_with_elle"] = 1.0 if name_lower.endswith("elle") else 0.0
-    features["ends_with_ck"] = 1.0 if name_lower.endswith("ck") else 0.0
-    features["ends_with_sh"] = 1.0 if name_lower.endswith("sh") else 0.0
-
-    fem_scores = [score for suffix, score in FEMININE_SUFFIXES.items() if name_lower.endswith(suffix)]
-    features["suffix_feminine_score"] = max(fem_scores) if fem_scores else 0.0
-
-    masc_scores = [score for suffix, score in MASCULINE_SUFFIXES.items() if name_lower.endswith(suffix)]
-    features["suffix_masculine_score"] = max(masc_scores) if masc_scores else 0.0
-
-    features["prefix_feminine"] = 1.0 if any(name_lower.startswith(prefix) for prefix in FEMININE_PREFIXES) else 0.0
-    features["prefix_masculine"] = 1.0 if any(name_lower.startswith(prefix) for prefix in MASCULINE_PREFIXES) else 0.0
+    features = {key: float(name_lower.endswith(suffix)) for key, suffix in SUFFIX_FLAG_ENDINGS.items()}
+    features["suffix_feminine_score"] = _best_suffix_score(name_lower, FEMININE_SUFFIXES)
+    features["suffix_masculine_score"] = _best_suffix_score(name_lower, MASCULINE_SUFFIXES)
+    features["prefix_feminine"] = float(any(name_lower.startswith(prefix) for prefix in FEMININE_PREFIXES))
+    features["prefix_masculine"] = float(any(name_lower.startswith(prefix) for prefix in MASCULINE_PREFIXES))
 
     trailing_consonants = 0
     for char in reversed(name_lower):
@@ -221,6 +259,12 @@ def extract_suffix_features(name: str) -> dict[str, float]:
     features["closed_heavy"] = 1.0 if trailing_consonants >= 2 else 0.0
 
     return features
+
+
+def _best_suffix_score(name_lower: str, scores: dict[str, float]) -> float:
+    """Return the strongest matching suffix score."""
+    matches = (score for suffix, score in scores.items() if name_lower.endswith(suffix))
+    return max(matches, default=0.0)
 
 
 def extract_phonetic_features(name: str) -> dict[str, float]:
@@ -364,6 +408,28 @@ def name_to_cv_pattern(name: str) -> str:
     return "".join("V" if c in VOWELS else "C" for c in name.lower())
 
 
+def _empty_cluster_features() -> dict[str, float]:
+    """Return the zero vector for consonant-cluster features."""
+    return dict.fromkeys(CLUSTER_FEATURE_KEYS, 0.0)
+
+
+def _edge_cluster_features(name_lower: str) -> tuple[float, float]:
+    """Return initial and final cluster flags."""
+    if len(name_lower) < 2:
+        return 0.0, 0.0
+    starts_with_cluster = name_lower[0] not in VOWELS and name_lower[1] not in VOWELS
+    ends_with_cluster = name_lower[-1] not in VOWELS and name_lower[-2] not in VOWELS
+    return float(starts_with_cluster), float(ends_with_cluster)
+
+
+def _cv_transition_ratio(cv_pattern: str) -> float:
+    """Return the ratio of consonant/vowel transitions in a CV pattern."""
+    if len(cv_pattern) <= 1:
+        return 0.0
+    transitions = sum(left != right for left, right in pairwise(cv_pattern))
+    return transitions / (len(cv_pattern) - 1)
+
+
 def extract_cluster_features(name: str) -> dict[str, float]:
     """Extract consonant cluster complexity features.
 
@@ -372,65 +438,33 @@ def extract_cluster_features(name: str) -> dict[str, float]:
 
     """
     if not name:
-        return {
-            "consonant_clusters": 0.0,
-            "max_cluster_len": 0.0,
-            "has_complex_cluster": 0.0,
-            "initial_cluster": 0.0,
-            "final_cluster": 0.0,
-            "medial_cluster_density": 0.0,
-            "cv_alternation_ratio": 0.0,
-            "starts_consonant": 0.0,
-            "ends_vowel": 0.0,
-            "has_cvc_pattern": 0.0,
-            "has_vcv_pattern": 0.0,
-        }
+        return _empty_cluster_features()
 
     name_lower = name.lower()
     name_len = len(name)
 
     clusters = CLUSTER_PATTERN.findall(name_lower)
     cluster_count = len(clusters)
-
-    features: dict[str, float] = {
-        "consonant_clusters": min(cluster_count / max(name_len, 1), 1.0),
-    }
-
     max_cluster = max((len(c) for c in clusters), default=0)
-    features["max_cluster_len"] = min(max_cluster / 4.0, 1.0)
+    initial_cluster, final_cluster = _edge_cluster_features(name_lower)
 
-    features["has_complex_cluster"] = 1.0 if any(len(c) > 2 for c in clusters) else 0.0
-
-    features["initial_cluster"] = (
-        1.0 if (name_len >= 2 and name_lower[0] not in VOWELS and name_lower[1] not in VOWELS) else 0.0
-    )
-
-    features["final_cluster"] = (
-        1.0 if (name_len >= 2 and name_lower[-1] not in VOWELS and name_lower[-2] not in VOWELS) else 0.0
-    )
-
-    # Internal clusters exclude initial and final if they exist
-    internal_clusters = cluster_count
-    if features["initial_cluster"] > 0.5:
-        internal_clusters -= 1
-    if features["final_cluster"] > 0.5:
-        internal_clusters -= 1
-    features["medial_cluster_density"] = min(max(internal_clusters, 0) / max(name_len, 1), 1.0)
+    internal_clusters = cluster_count - int(initial_cluster) - int(final_cluster)
+    medial_cluster_density = min(max(internal_clusters, 0) / name_len, 1.0)
 
     cv_pattern = name_to_cv_pattern(name)
-
-    transitions = sum(1 for i in range(len(cv_pattern) - 1) if cv_pattern[i] != cv_pattern[i + 1])
-    features["cv_alternation_ratio"] = transitions / max(name_len - 1, 1) if name_len > 1 else 0.0
-
-    features["starts_consonant"] = 1.0 if name_lower[0] not in VOWELS else 0.0
-
-    features["ends_vowel"] = 1.0 if name_lower[-1] in VOWELS else 0.0
-
-    features["has_cvc_pattern"] = 1.0 if "CVC" in cv_pattern else 0.0
-
-    features["has_vcv_pattern"] = 1.0 if "VCV" in cv_pattern else 0.0
-
-    return features
+    return {
+        "consonant_clusters": min(cluster_count / name_len, 1.0),
+        "max_cluster_len": min(max_cluster / 4.0, 1.0),
+        "has_complex_cluster": float(any(len(cluster) > 2 for cluster in clusters)),
+        "initial_cluster": initial_cluster,
+        "final_cluster": final_cluster,
+        "medial_cluster_density": medial_cluster_density,
+        "cv_alternation_ratio": _cv_transition_ratio(cv_pattern),
+        "starts_consonant": float(name_lower[0] not in VOWELS),
+        "ends_vowel": float(name_lower[-1] in VOWELS),
+        "has_cvc_pattern": float("CVC" in cv_pattern),
+        "has_vcv_pattern": float("VCV" in cv_pattern),
+    }
 
 
 def extract_gender_features(gender: str | None) -> dict[str, float]:
@@ -473,24 +507,22 @@ def extract_all_features(
     name: str,
     gender: str | None = None,
     origin_region: str | None = None,
-    *,
-    include_phonetic: bool = True,
-    include_linguistic: bool = True,
-    include_metadata: bool = True,
+    options: FeatureGroupOptions | None = None,
 ) -> tuple[dict[str, float], list[str]]:
     """Extract enabled feature groups and return values plus a stable feature order."""
+    options = options or FeatureGroupOptions()
     features = {}
 
-    if include_phonetic:
+    if options.include_phonetic:
         features.update(extract_phonetic_features(name))
 
-    if include_linguistic:
+    if options.include_linguistic:
         features.update(extract_linguistic_features(name))
         features.update(extract_sonority_features(name))
         features.update(extract_suffix_features(name))
         features.update(extract_cluster_features(name))
 
-    if include_metadata:
+    if options.include_metadata:
         features.update(extract_gender_features(gender))
         features.update(extract_origin_features(origin_region))
 
@@ -567,17 +599,17 @@ class FeatureExtractor:
         name: str,
         gender: str | None = None,
         origin_region: str | None = None,
-        name_id: int | None = None,
-        use_cache: bool = True,
+        cache_options: FeatureCacheOptions | None = None,
     ) -> np.ndarray:
         """Extract one feature vector, using local and persistent caches when available."""
+        cache_options = cache_options or FeatureCacheOptions()
         cache_key = (name, gender, origin_region)
 
         if cache_key in self._local_cache:
             return self._local_cache[cache_key]
 
-        if use_cache and name_id is not None:
-            cached_vector = self._load_cached_vector(name, name_id)
+        if cache_options.use_cache and cache_options.name_id is not None:
+            cached_vector = self._load_cached_vector(name, cache_options.name_id)
             if cached_vector is not None:
                 self._local_cache[cache_key] = cached_vector
                 return cached_vector
@@ -587,8 +619,8 @@ class FeatureExtractor:
 
         self._local_cache[cache_key] = vector
 
-        if use_cache and name_id is not None:
-            self._store_cached_features(name, name_id, features)
+        if cache_options.use_cache and cache_options.name_id is not None:
+            self._store_cached_features(name, cache_options.name_id, features)
 
         return vector
 
@@ -597,17 +629,37 @@ class FeatureExtractor:
         names: list[str],
         genders: Sequence[str | None] | None = None,
         origin_regions: Sequence[str | None] | None = None,
-        name_ids: Sequence[int | None] | None = None,
-        use_cache: bool = True,
+        context: FeatureBatchContext | None = None,
+        **legacy_options: object,
     ) -> np.ndarray:
         """Extract feature vectors as an array of shape (n_names, n_features)."""
-        genders = _metadata_sequence(names, genders, "genders")
-        origin_regions = _metadata_sequence(names, origin_regions, "origin_regions")
-        name_ids = _metadata_sequence(names, name_ids, "name_ids")
+        name_ids = legacy_options.pop("name_ids", None)
+        use_cache = legacy_options.pop("use_cache", True)
+        if legacy_options:
+            unknown = ", ".join(sorted(legacy_options))
+            msg = f"Unknown batch_extract option(s): {unknown}"
+            raise TypeError(msg)
+        if name_ids is not None and not isinstance(name_ids, Sequence):
+            msg = "name_ids must be a sequence when provided"
+            raise TypeError(msg)
+        if context is None:
+            context = FeatureBatchContext(
+                genders=genders,
+                origin_regions=origin_regions,
+                name_ids=name_ids,
+                use_cache=bool(use_cache),
+            )
+        genders = _metadata_sequence(names, context.genders, "genders")
+        origin_regions = _metadata_sequence(names, context.origin_regions, "origin_regions")
+        name_ids = _metadata_sequence(names, context.name_ids, "name_ids")
 
         vectors = []
         for name, gender, origin, name_id in zip(names, genders, origin_regions, name_ids, strict=True):
-            vectors.append(self.extract(name, gender, origin, name_id, use_cache))
+            cache_options = FeatureCacheOptions(
+                name_id=name_id,
+                use_cache=context.use_cache,
+            )
+            vectors.append(self.extract(name, gender, origin, cache_options))
 
         return np.stack(vectors, axis=0)
 
