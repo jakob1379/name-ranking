@@ -15,7 +15,8 @@ import logging
 import re
 import unicodedata
 from collections.abc import Callable, Mapping
-from typing import Any, NamedTuple
+from functools import cache
+from typing import Any, Literal, NamedTuple
 
 from metaphone import doublemetaphone
 
@@ -538,11 +539,6 @@ class OriginClassifier:
         return results
 
 
-ReferenceCacheKey = tuple[str, FrozenReferenceNames]
-
-_CLASSIFIER_CACHE: dict[ReferenceCacheKey, OriginClassifier] = {}
-
-
 def _freeze_reference_names(reference_names: ReferenceNames | None) -> FrozenReferenceNames:
     """Return stable immutable reference-name content for cache keys and classifier state."""
     if not reference_names:
@@ -550,26 +546,29 @@ def _freeze_reference_names(reference_names: ReferenceNames | None) -> FrozenRef
     return tuple(sorted(reference_names.items()))
 
 
-def _reference_cache_key(
-    reference_names: ReferenceNames | None,
-) -> ReferenceCacheKey:
-    """Return the classifier-cache key for a reference-name set."""
-    return ("reference_names", _freeze_reference_names(reference_names))
+ReferenceState = Literal["provided", "default"]
+
+
+@cache
+def _cached_classifier(
+    reference_state: ReferenceState,
+    frozen_reference_names: FrozenReferenceNames,
+) -> OriginClassifier:
+    reference_names = dict(frozen_reference_names) if reference_state == "provided" else None
+    return OriginClassifier(reference_names)
 
 
 def reset_classifier_cache() -> None:
     """Clear cached classifier instances."""
-    _CLASSIFIER_CACHE.clear()
+    _cached_classifier.cache_clear()
 
 
 def get_or_create_classifier(
     reference_names: ReferenceNames | None = None,
 ) -> OriginClassifier:
     """Return the cached classifier for a reference-name set, creating it when needed."""
-    cache_key = _reference_cache_key(reference_names)
-    if cache_key not in _CLASSIFIER_CACHE:
-        _CLASSIFIER_CACHE[cache_key] = OriginClassifier(reference_names)
-    return _CLASSIFIER_CACHE[cache_key]
+    reference_state: ReferenceState = "provided" if reference_names is not None else "default"
+    return _cached_classifier(reference_state, _freeze_reference_names(reference_names))
 
 
 def _run_demo() -> None:
