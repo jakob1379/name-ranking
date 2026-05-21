@@ -540,6 +540,28 @@ class FeatureExtractor:
             self._feature_names = feature_names
         return self._feature_names
 
+    def _load_cached_vector(self, name: str, name_id: int) -> np.ndarray | None:
+        """Return a cached feature vector, or None when cache state is unavailable."""
+        try:
+            cached_features = self._get_cache().get_features(name_id)
+        except ValueError as exc:
+            logger.debug("Feature cache unavailable for %s: %s", name, exc)
+            return None
+
+        if cached_features is None:
+            return None
+
+        feature_names = self.get_feature_names()
+        return features_to_vector(cached_features, feature_names)
+
+    def _store_cached_features(self, name: str, name_id: int, features: dict[str, float]) -> None:
+        """Persist computed features when the cache is usable."""
+        try:
+            self._get_cache().set_features(name_id, features_dict=features)
+        except (RuntimeError, ValueError, OSError) as exc:
+            logger.warning("Disabling feature cache after write failure for %s: %s", name, exc)
+            self._feature_cache = None
+
     def extract(
         self,
         name: str,
@@ -555,16 +577,10 @@ class FeatureExtractor:
             return self._local_cache[cache_key]
 
         if use_cache and name_id is not None:
-            try:
-                cached_features = self._get_cache().get_features(name_id)
-                if cached_features is not None:
-                    feature_names = self.get_feature_names()
-                    vector = features_to_vector(cached_features, feature_names)
-                    self._local_cache[cache_key] = vector
-                    return vector
-            except ValueError:
-                # Feature set doesn't exist yet, will compute and cache
-                pass
+            cached_vector = self._load_cached_vector(name, name_id)
+            if cached_vector is not None:
+                self._local_cache[cache_key] = cached_vector
+                return cached_vector
 
         features, _ = extract_all_features(name, gender, origin_region)
         vector = features_to_vector(features, self.get_feature_names())
@@ -572,10 +588,7 @@ class FeatureExtractor:
         self._local_cache[cache_key] = vector
 
         if use_cache and name_id is not None:
-            try:
-                self._get_cache().set_features(name_id, features_dict=features)
-            except Exception as e:
-                logger.warning("Failed to cache features for %s: %s", name, e)
+            self._store_cached_features(name, name_id, features)
 
         return vector
 
