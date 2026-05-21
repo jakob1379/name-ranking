@@ -26,6 +26,7 @@ from st_name_ranking.interface.ui_support import MS_PER_SECOND
 from st_name_ranking.persistence import database
 from st_name_ranking.persistence.data_loader import DataLoaderError, load_names_by_gender
 from st_name_ranking.persistence.database import initialize_ratings
+from st_name_ranking.types import DatabaseStats
 
 logger = logging.getLogger(__name__)
 DEFAULT_TOURNAMENT_SAMPLE_SIZE: int | None = None
@@ -330,10 +331,8 @@ def render_sidebar() -> None:
         render_sidebar_export_controls()
 
 
-def _stats_total_names(stats: object) -> int:
-    if isinstance(stats, dict):
-        return int(stats.get("total_names", 0))
-    return int(getattr(stats, "total_names", 0))
+def _stats_total_names(stats: DatabaseStats) -> int:
+    return stats.total_names
 
 
 def _render_missing_names_message() -> None:

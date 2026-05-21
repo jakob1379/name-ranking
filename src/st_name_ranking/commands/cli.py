@@ -36,6 +36,7 @@ from st_name_ranking.persistence.database import (
     sync_names_with_submodule,
 )
 from st_name_ranking.persistence.feature_store import get_feature_stats, has_feature_cache, rebuild_feature_cache
+from st_name_ranking.types import DatabaseStats
 
 app = typer.Typer(
     help="Name Ranking Database Management CLI - Uses SQLite database",
@@ -344,11 +345,9 @@ def _print_model_table() -> None:
         console.print()
 
 
-def _print_origin_distribution(stats: Any) -> None:
+def _print_origin_distribution(stats: DatabaseStats) -> None:
     """Print origin distribution statistics."""
-    origin_distribution = _stat(stats, "origin_distribution")
-    total_names = int(_stat(stats, "total_names"))
-    if origin_distribution:
+    if stats.origin_distribution:
         dist_table = Table(
             title="Origin Distribution",
             show_header=True,
@@ -359,11 +358,11 @@ def _print_origin_distribution(stats: Any) -> None:
         dist_table.add_column("Percentage", justify="right")
 
         for region, count in sorted(
-            origin_distribution.items(),
+            stats.origin_distribution.items(),
             key=lambda x: x[1],
             reverse=True,
         ):
-            percentage = count / total_names * 100
+            percentage = count / stats.total_names * 100
             dist_table.add_row(
                 region,
                 str(count),
@@ -380,19 +379,12 @@ def _print_origin_distribution(stats: Any) -> None:
 # ----------------------------------------------------------------------
 
 
-def _stat(stats: Any, name: str) -> Any:
-    """Read a statistic from either the current dataclass or legacy dict shape."""
-    if isinstance(stats, dict):
-        return stats[name]
-    return getattr(stats, name)
-
-
 def _print_origin_classification_stats(label: str = "Origin Classification Statistics") -> None:
     """Print focused origin classification statistics."""
     stats = get_stats()
-    total = int(_stat(stats, "total_names"))
-    classified = int(_stat(stats, "classified_names"))
-    unclassified = int(_stat(stats, "unclassified_names"))
+    total = stats.total_names
+    classified = stats.classified_names
+    unclassified = stats.unclassified_names
 
     table = Table(title=label, show_header=False, box=None)
     table.add_column("Metric", style="cyan")
