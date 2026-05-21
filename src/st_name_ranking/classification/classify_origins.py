@@ -19,7 +19,7 @@ from st_name_ranking.persistence.database import (
     get_unclassified_names,
     update_name_origin,
 )
-from st_name_ranking.types import UnclassifiedName
+from st_name_ranking.types import ProgressCallback, UnclassifiedName
 
 logger = logging.getLogger(__name__)
 
@@ -108,7 +108,7 @@ def classify_batch(names_batch: list[UnclassifiedName], batch_size: int = 100) -
 def classify_all_names(
     limit: int | None = None,
     batch_size: int = 100,
-    progress_callback: "Callable[[int, int], None] | None" = None,
+    progress_callback: ProgressCallback | None = None,
 ) -> int:
     """Classify unclassified names and return the number of stored results."""
     logger.info("Fetching unclassified names...")

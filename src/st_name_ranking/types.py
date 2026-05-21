@@ -4,7 +4,7 @@ This module provides structured type definitions to replace raw dicts and tuples
 throughout the codebase, improving type safety and code clarity.
 """
 
-from typing import NamedTuple, TypedDict
+from typing import NamedTuple, Protocol, TypedDict
 
 
 class UnclassifiedName(NamedTuple):
@@ -48,6 +48,12 @@ class PhoneticCodes(NamedTuple):
 
 
 FeatureValues = dict[str, float]
+
+
+class ProgressCallback(Protocol):
+    """Callable notified as a long-running batch process advances."""
+
+    def __call__(self, current: int, total: int) -> None: ...
 
 
 class FeatureSetRecord(TypedDict):

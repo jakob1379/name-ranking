@@ -6,18 +6,12 @@ import logging
 import sqlite3
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any, Protocol, TypedDict
+from typing import Any, TypedDict
 
 from st_name_ranking.persistence.connection import MAX_SQL_PARAMS, get_connection
-from st_name_ranking.types import FeatureSetRecord, FeatureValues
+from st_name_ranking.types import FeatureSetRecord, FeatureValues, ProgressCallback
 
 logger = logging.getLogger(__name__)
-
-
-class ProgressCallback(Protocol):
-    """Callable notified as feature-cache rebuilds advance."""
-
-    def __call__(self, current: int, total: int) -> None: ...
 
 
 @dataclass(frozen=True)
