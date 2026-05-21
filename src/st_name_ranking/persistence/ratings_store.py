@@ -52,45 +52,19 @@ def update_rating(name: str, rating: float) -> list[str]:
 
 def update_ratings_batch(ratings_dict: dict[str, float]) -> list[str]:
     """Update multiple ratings in one transaction, incrementing match counts."""
-    if not ratings_dict:
-        return []
-
-    missing_names: list[str] = []
-    with get_connection() as conn:
-        for name, rating in ratings_dict.items():
-            name_id = conn.execute(
-                "SELECT id FROM names WHERE name = ?",
-                (name,),
-            ).fetchone()
-            if not name_id:
-                logger.warning("Name not found in database: %s", name)
-                missing_names.append(name)
-                continue
-
-            name_id = name_id[0]
-
-            conn.execute(
-                """
-                INSERT OR REPLACE INTO ratings
-                (name_id, rating, matches, last_updated)
-                VALUES (
-                    ?,
-                    ?,
-                    COALESCE((
-                        SELECT matches + 1 FROM ratings
-                        WHERE name_id = ?
-                    ), 1),
-                    CURRENT_TIMESTAMP
-                )
-            """,
-                (name_id, rating, name_id),
-            )
-
-    return missing_names
+    return _update_ratings_batch(ratings_dict, increment_matches=True)
 
 
 def update_ratings_batch_values(ratings_dict: dict[str, float]) -> list[str]:
     """Update multiple ratings without incrementing match counts."""
+    return _update_ratings_batch(ratings_dict, increment_matches=False)
+
+
+def _update_ratings_batch(
+    ratings_dict: dict[str, float],
+    *,
+    increment_matches: bool,
+) -> list[str]:
     if not ratings_dict:
         return []
 
@@ -107,22 +81,19 @@ def update_ratings_batch_values(ratings_dict: dict[str, float]) -> list[str]:
                 continue
 
             name_id = name_id[0]
+            existing_rating = conn.execute(
+                "SELECT matches FROM ratings WHERE name_id = ?",
+                (name_id,),
+            ).fetchone()
+            matches = existing_rating[0] + int(increment_matches) if existing_rating else int(increment_matches)
 
             conn.execute(
                 """
                 INSERT OR REPLACE INTO ratings
                 (name_id, rating, matches, last_updated)
-                VALUES (
-                    ?,
-                    ?,
-                    COALESCE((
-                        SELECT matches FROM ratings
-                        WHERE name_id = ?
-                    ), 0),
-                    CURRENT_TIMESTAMP
-                )
+                VALUES (?, ?, ?, CURRENT_TIMESTAMP)
             """,
-                (name_id, rating, name_id),
+                (name_id, rating, matches),
             )
 
     return missing_names
