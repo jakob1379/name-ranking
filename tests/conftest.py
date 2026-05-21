@@ -197,6 +197,9 @@ def pytest_collection_modifyitems(config, items):
     skip_playwright = pytest.mark.skip(reason="Need --run-playwright option to run")
 
     for item in items:
+        if _is_path_opt_in_integration(item):
+            item.add_marker(pytest.mark.integration)
+
         # Skip integration tests unless --run-integration is set
         if "integration" in item.keywords and not config.getoption("--run-integration"):
             item.add_marker(skip_integration)
@@ -204,6 +207,13 @@ def pytest_collection_modifyitems(config, items):
         # Skip playwright tests unless --run-playwright is set
         if "playwright" in item.keywords and not config.getoption("--run-playwright"):
             item.add_marker(skip_playwright)
+
+
+def _is_path_opt_in_integration(item) -> bool:
+    """Return whether a collected item lives in an opt-in integration directory."""
+    path = Path(str(item.path))
+    parts = path.parts
+    return any(part == "tests" and parts[index + 1] in {"integration", "e2e"} for index, part in enumerate(parts[:-1]))
 
 
 @pytest.fixture
