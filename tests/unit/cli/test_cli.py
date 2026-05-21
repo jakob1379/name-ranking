@@ -184,7 +184,7 @@ def test_cli_classify(mock_db_path, cli_runner):
     with patch("st_name_ranking.commands.cli.classify_all_names") as mock_classify:
         mock_classify.return_value = 10  # 10 names classified
 
-        result = cli_runner.invoke(app, ["process", "--limit", "50"])
+        result = cli_runner.invoke(app, ["db", "origins", "classify", "--limit", "50"])
         assert result.exit_code == 0
         assert "Processing Data Enrichment" in result.output
         assert "Classified 10 names" in result.output
@@ -220,7 +220,7 @@ def test_cli_classify_with_batch_size(mock_db_path, cli_runner):
     with patch("st_name_ranking.commands.cli.classify_all_names") as mock_classify:
         mock_classify.return_value = 5  # 5 names classified
 
-        result = cli_runner.invoke(app, ["process", "--batch-size", "20"])
+        result = cli_runner.invoke(app, ["db", "origins", "classify", "--batch-size", "20"])
         assert result.exit_code == 0
         assert "Processing Data Enrichment" in result.output
         assert "Classified 5 names" in result.output

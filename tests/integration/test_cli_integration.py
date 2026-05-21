@@ -372,15 +372,15 @@ class TestCLIInit:
 
 
 # -----------------------------------------------------------------------------
-# CLI Process Command Tests
+# CLI Origin Classification Command Tests
 # -----------------------------------------------------------------------------
 
 
-class TestCLIProcess:
-    """Tests for the `name-db process` command with real database operations."""
+class TestCLIOriginClassification:
+    """Tests for `db origins classify` with real database operations."""
 
-    def test_process_classifies_names_with_limit(self, initialized_real_db, cli_runner):
-        """Test that process command classifies names up to the limit."""
+    def test_db_origins_classify_classifies_names_with_limit(self, initialized_real_db, cli_runner):
+        """Test that origin classification classifies names up to the limit."""
 
         # First, manually classify some names so we have reference data
         test_classifications = [
@@ -393,7 +393,7 @@ class TestCLIProcess:
         with patch("st_name_ranking.commands.cli.classify_all_names") as mock_classify:
             mock_classify.return_value = 5  # Simulate 5 classifications
 
-            result = cli_runner.invoke(app, ["process", "--limit", "10"])
+            result = cli_runner.invoke(app, ["db", "origins", "classify", "--limit", "10"])
 
         assert result.exit_code == 0, f"Exit code: {result.exit_code}, Output: {result.output}"
 
@@ -403,8 +403,8 @@ class TestCLIProcess:
         # Verify classify was called with correct parameters
         mock_classify.assert_called_once_with(10, 100)
 
-    def test_process_shows_no_unclassified_message(self, initialized_real_db, cli_runner):
-        """Test that process shows message when no unclassified names exist."""
+    def test_db_origins_classify_shows_no_unclassified_message(self, initialized_real_db, cli_runner):
+        """Test that classification handles no remaining unclassified names."""
 
         # First, classify all existing names
         with sqlite3.connect(initialized_real_db) as conn:
@@ -414,32 +414,32 @@ class TestCLIProcess:
         with patch("st_name_ranking.commands.cli.classify_all_names") as mock_classify:
             mock_classify.return_value = 0  # No names to classify
 
-            result = cli_runner.invoke(app, ["process"])
+            result = cli_runner.invoke(app, ["db", "origins", "classify"])
 
         assert result.exit_code == 0
         assert "Processing Data Enrichment" in result.output
 
-    def test_process_with_custom_batch_size(self, initialized_real_db, cli_runner):
-        """Test that process command respects batch-size parameter."""
+    def test_db_origins_classify_with_custom_batch_size(self, initialized_real_db, cli_runner):
+        """Test that origin classification respects batch-size parameter."""
 
         with patch("st_name_ranking.commands.cli.classify_all_names") as mock_classify:
             mock_classify.return_value = 3
 
-            result = cli_runner.invoke(app, ["process", "--batch-size", "25"])
+            result = cli_runner.invoke(app, ["db", "origins", "classify", "--batch-size", "25"])
 
         assert result.exit_code == 0
 
         # Verify classify was called with custom batch size
         mock_classify.assert_called_once_with(None, 25)
 
-    def test_process_handles_classification_error(self, initialized_real_db, cli_runner):
-        """Test that process handles classification errors gracefully."""
+    def test_db_origins_classify_handles_classification_error(self, initialized_real_db, cli_runner):
+        """Test that origin classification handles classification errors gracefully."""
 
         with patch("st_name_ranking.commands.cli.classify_all_names") as mock_classify:
             # Simulate ImportError for ethnidata
             mock_classify.side_effect = ImportError("ethnidata not installed")
 
-            result = cli_runner.invoke(app, ["process"])
+            result = cli_runner.invoke(app, ["db", "origins", "classify"])
 
         # Should exit with error code 1
         assert result.exit_code == 1
@@ -649,8 +649,8 @@ class TestCLIModelCommands:
 class TestCLIErrorHandling:
     """Tests for CLI error handling with real operations."""
 
-    def test_process_with_missing_database_tables(self, real_db_path, cli_runner):
-        """Test process command when database exists but tables are missing."""
+    def test_stats_with_missing_database_tables(self, real_db_path, cli_runner):
+        """Test stats command when database exists but tables are missing."""
 
         # Create empty database file without schema
         real_db_path.touch()
@@ -664,9 +664,9 @@ class TestCLIErrorHandling:
     def test_invalid_argument_handling(self, cli_runner):
         """Test CLI behavior with invalid arguments."""
         # Test with negative limit
-        result = cli_runner.invoke(app, ["process", "--limit", "-5"])
+        result = cli_runner.invoke(app, ["db", "origins", "classify", "--limit", "-5"])
 
-        # Typer validates integers, should work but process may handle it
+        # Typer validates integers, so this either reaches the command or fails validation.
         # or return an error
         assert result.exit_code == 0 or result.exit_code == 2
 
@@ -676,21 +676,26 @@ class TestCLIErrorHandling:
 
         assert result.exit_code == 0
 
-        # Verify all commands are listed
-        assert "init" in result.output
-        assert "process" in result.output
-        assert "stats" in result.output
-        assert "model-status" in result.output
-        assert "model-reset" in result.output
+        # Verify top-level command groups are listed.
+        assert "serve" in result.output
+        assert "db" in result.output
 
     def test_command_specific_help(self, cli_runner):
         """Test that each command has its own help text."""
-        commands = ["init", "process", "stats", "model-status", "model-reset"]
+        commands = [
+            ["serve"],
+            ["db"],
+            ["db", "init"],
+            ["db", "stats"],
+            ["db", "origins", "classify"],
+            ["db", "model", "status"],
+            ["db", "model", "reset"],
+        ]
 
         for command in commands:
-            result = cli_runner.invoke(app, [command, "--help"])
+            result = cli_runner.invoke(app, [*command, "--help"])
             assert result.exit_code == 0, f"Help failed for {command}"
-            assert "Usage:" in result.output or command in result.output
+            assert "Usage:" in result.output or command[-1] in result.output
 
 
 # -----------------------------------------------------------------------------
@@ -701,8 +706,8 @@ class TestCLIErrorHandling:
 class TestCLIIntegrationFlow:
     """End-to-end integration tests for common CLI workflows."""
 
-    def test_full_init_process_stats_workflow(self, real_db_path, mock_submodule_with_names, cli_runner):
-        """Test complete workflow: init -> process -> stats."""
+    def test_full_init_classify_stats_workflow(self, real_db_path, mock_submodule_with_names, cli_runner):
+        """Test complete workflow: init -> classify origins -> stats."""
 
         # Step 1: Initialize database with real sync
         with patch("st_name_ranking.commands.cli.sync_names_with_submodule") as mock_sync:
@@ -721,12 +726,12 @@ class TestCLIIntegrationFlow:
         name_count = get_name_count(real_db_path)
         assert name_count > 0, f"Expected names in database, got {name_count}"
 
-        # Step 2: Process/classify names (mocked)
+        # Step 2: Classify origin data (mocked)
         with patch("st_name_ranking.commands.cli.classify_all_names") as mock_classify:
             mock_classify.return_value = 5
 
-            process_result = cli_runner.invoke(app, ["process", "--limit", "10"])
-            assert process_result.exit_code == 0, "Process failed"
+            classify_result = cli_runner.invoke(app, ["db", "origins", "classify", "--limit", "10"])
+            assert classify_result.exit_code == 0, "Origin classification failed"
 
         # Step 3: Check stats
         stats_result = cli_runner.invoke(app, ["stats"])

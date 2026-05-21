@@ -443,16 +443,6 @@ def _run_origin_classification(
     return classified
 
 
-@app.command("process", hidden=True)
-def process(
-    *,
-    limit: Annotated[int | None, ORIGIN_LIMIT_OPTION] = None,
-    batch_size: Annotated[int, ORIGIN_BATCH_SIZE_OPTION] = 100,
-) -> None:
-    """Compatibility alias for `st-name-ranking db origins classify`."""
-    _run_origin_classification(limit=limit, batch_size=batch_size)
-
-
 # ----------------------------------------------------------------------
 # Features Subcommands
 # ----------------------------------------------------------------------
