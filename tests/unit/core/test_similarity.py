@@ -90,11 +90,11 @@ class TestGetStringSimilarityScores:
 class TestLoadEmbeddingModel:
     """Tests for load_embedding_model function."""
 
-    @patch("st_name_ranking.interface.similarity.SentenceTransformer")
-    def test_load_model(self, mock_sentence_transformer):
+    def test_load_model(self, monkeypatch):
         """Test loading the embedding model."""
         mock_model = MagicMock()
-        mock_sentence_transformer.return_value = mock_model
+        mock_sentence_transformer = MagicMock(return_value=mock_model)
+        monkeypatch.setattr(similarity, "_get_sentence_transformer_class", lambda: mock_sentence_transformer)
 
         model = similarity.load_embedding_model()
 

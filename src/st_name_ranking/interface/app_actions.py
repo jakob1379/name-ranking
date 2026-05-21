@@ -7,6 +7,7 @@ import time
 
 import streamlit as st
 
+from st_name_ranking.classification.classify_origins import classify_all_names
 from st_name_ranking.persistence import database
 from st_name_ranking.persistence.data_loader import DataLoaderError, initialize_or_load_ratings
 from st_name_ranking.persistence.database import initialize_ratings
@@ -132,7 +133,6 @@ def _sync_after_submodule_pull() -> bool:
 def _classify_origins_after_sync() -> None:
     try:
         database.init_database()
-        from st_name_ranking.classification.classify_origins import classify_all_names  # noqa: PLC0415
 
         with st.spinner("Classifying name origins..."):
             classified = classify_all_names(limit=None)

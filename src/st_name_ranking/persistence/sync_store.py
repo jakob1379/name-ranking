@@ -5,6 +5,7 @@ import shutil
 import subprocess  # nosec B404 - sync reads git metadata from the checked-out submodule.
 from pathlib import Path
 
+import polars as pl
 from metaphone import doublemetaphone
 
 from st_name_ranking.persistence.connection import get_connection
@@ -109,8 +110,6 @@ def _current_submodule_commit(submodule_path: Path) -> str:
 
 
 def _load_valid_names(json_path: Path) -> list[tuple[str, str, str, str]]:
-    import polars as pl  # noqa: PLC0415
-
     df = pl.read_json(json_path)
     logger.info("Loaded %d rows from JSON", df.height)
 

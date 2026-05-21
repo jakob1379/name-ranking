@@ -1,7 +1,9 @@
 """Similarity functions for name matching."""
 
+import importlib
 import logging
-from typing import Any, Protocol
+from functools import cache
+from typing import Any, Protocol, cast
 
 import numpy as np
 from rapidfuzz import fuzz, process
@@ -12,7 +14,6 @@ logger = logging.getLogger(__name__)
 
 SENTENCE_TRANSFORMER_MODEL = "paraphrase-multilingual-MiniLM-L12-v2"
 SEMANTIC_SEARCH_EXTRA = "st-name-ranking[semantic-search]"
-SentenceTransformer: type[Any] | None = None
 
 
 class EmbeddingModel(Protocol):
@@ -55,13 +56,10 @@ def load_embedding_model() -> EmbeddingModel:
     return transformer_cls(SENTENCE_TRANSFORMER_MODEL)
 
 
+@cache
 def _get_sentence_transformer_class() -> type[Any]:
-    global SentenceTransformer  # noqa: PLW0603
-    if SentenceTransformer is not None:
-        return SentenceTransformer
-
     try:
-        from sentence_transformers import SentenceTransformer as SentenceTransformerClass  # noqa: PLC0415
+        sentence_transformers = importlib.import_module("sentence_transformers")
     except ImportError as e:
         msg = (
             "Semantic search requires the optional sentence-transformers stack. "
@@ -69,8 +67,7 @@ def _get_sentence_transformer_class() -> type[Any]:
         )
         raise RuntimeError(msg) from e
 
-    SentenceTransformer = SentenceTransformerClass
-    return SentenceTransformerClass
+    return cast("type[Any]", sentence_transformers.SentenceTransformer)
 
 
 def get_vector_similarity_scores(

@@ -15,6 +15,7 @@ _INIT_STATE = {"db_initialized": False, "db_path": None}
 
 INITIAL_SCORE = 1500.0
 MAX_SQL_PARAMS = 500
+MILLISECONDS_PER_SECOND = 1000
 
 
 def reset_database_init_state() -> None:
@@ -38,7 +39,7 @@ def set_db_path(path: str | Path) -> None:
 @contextmanager
 def get_connection(timeout: float = 30.0) -> Iterator[sqlite3.Connection]:
     """Context manager for database connections with atomic transactions."""
-    timeout_ms = int(timeout * 1000)
+    timeout_ms = int(timeout * MILLISECONDS_PER_SECOND)
     conn = sqlite3.connect(get_db_path(), timeout=timeout)
     conn.row_factory = sqlite3.Row
 
