@@ -4,12 +4,23 @@ from __future__ import annotations
 
 import logging
 from collections import deque
-from typing import Any
+from typing import TypedDict
 
 logger = logging.getLogger(__name__)
 
 
-def compute_name_data(name: str, index: int, inclusions: dict[str, bool]) -> dict[str, Any]:
+class NameQueueItem(TypedDict):
+    """Pre-computed display properties for a queued name."""
+
+    name: str
+    index: int
+    status: bool | None
+    status_text: str
+    border_color: str
+    bg_color: str
+
+
+def compute_name_data(name: str, index: int, inclusions: dict[str, bool]) -> NameQueueItem:
     """Pre-compute display properties for a name.
 
     Args:
@@ -19,7 +30,7 @@ def compute_name_data(name: str, index: int, inclusions: dict[str, bool]) -> dic
                    (True=included, False=excluded, None/Not present=not decided)
 
     Returns:
-        Dictionary containing name data with display properties
+        Name data with display properties.
     """
     status = inclusions.get(name)
 
@@ -73,7 +84,7 @@ class NameQueue:
         self._current_index = current_index
         self._inclusions = inclusions
         self._queue_size = queue_size
-        self._queue: deque[dict[str, Any]] = deque()
+        self._queue: deque[NameQueueItem] = deque()
         self._total_names = len(names)
 
         logger.debug(
