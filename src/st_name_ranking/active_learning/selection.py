@@ -22,6 +22,10 @@ if TYPE_CHECKING:
 
 DEFAULT_PAIR_SAMPLE_SIZE = 50
 _ACTIVE_LEARNING_STATE_LOCK = threading.RLock()
+_ACTIVE_LEARNING_MODEL_CACHE: BradleyTerryModel | None = None
+_ACTIVE_LEARNING_MODEL_CACHE_DB_PATH: str | None = None
+_FEATURE_EXTRACTOR_CACHE: FeatureExtractor | None = None
+_FEATURE_EXTRACTOR_CACHE_DB_PATH: str | None = None
 
 
 @dataclass(frozen=True)
@@ -40,55 +44,50 @@ class PairSelectionOptions:
 
 def get_or_initialize_active_learning_model() -> BradleyTerryModel:
     """Return the cached active-learning model, initializing it when needed."""
+    global _ACTIVE_LEARNING_MODEL_CACHE, _ACTIVE_LEARNING_MODEL_CACHE_DB_PATH  # noqa: PLW0603
+
     current_db_path = str(database.get_db_path())
-    if (
-        get_or_initialize_active_learning_model._cache is None
-        or get_or_initialize_active_learning_model._cache_db_path != current_db_path
-    ):
+    if _ACTIVE_LEARNING_MODEL_CACHE is None or current_db_path != _ACTIVE_LEARNING_MODEL_CACHE_DB_PATH:
         with _ACTIVE_LEARNING_STATE_LOCK:
-            if (
-                get_or_initialize_active_learning_model._cache is None
-                or get_or_initialize_active_learning_model._cache_db_path != current_db_path
-            ):
+            if _ACTIVE_LEARNING_MODEL_CACHE is None or current_db_path != _ACTIVE_LEARNING_MODEL_CACHE_DB_PATH:
                 extractor = get_or_create_feature_extractor()
                 feature_names = extractor.get_feature_names()
-                get_or_initialize_active_learning_model._cache = initialize_model_if_needed(feature_names)
-                get_or_initialize_active_learning_model._cache_db_path = current_db_path
-    return get_or_initialize_active_learning_model._cache
+                _ACTIVE_LEARNING_MODEL_CACHE = initialize_model_if_needed(feature_names)
+                _ACTIVE_LEARNING_MODEL_CACHE_DB_PATH = current_db_path
 
-
-get_or_initialize_active_learning_model._cache = None
-get_or_initialize_active_learning_model._cache_db_path = None
+    if _ACTIVE_LEARNING_MODEL_CACHE is None:
+        msg = "Active-learning model initialization failed"
+        raise RuntimeError(msg)
+    return _ACTIVE_LEARNING_MODEL_CACHE
 
 
 def get_or_create_feature_extractor() -> FeatureExtractor:
     """Return the cached feature extractor, creating it when needed."""
+    global _FEATURE_EXTRACTOR_CACHE, _FEATURE_EXTRACTOR_CACHE_DB_PATH  # noqa: PLW0603
+
     current_db_path = str(database.get_db_path())
-    if (
-        get_or_create_feature_extractor._cache is None
-        or get_or_create_feature_extractor._cache_db_path != current_db_path
-    ):
+    if _FEATURE_EXTRACTOR_CACHE is None or current_db_path != _FEATURE_EXTRACTOR_CACHE_DB_PATH:
         with _ACTIVE_LEARNING_STATE_LOCK:
-            if (
-                get_or_create_feature_extractor._cache is None
-                or get_or_create_feature_extractor._cache_db_path != current_db_path
-            ):
-                get_or_create_feature_extractor._cache = FeatureExtractor()
-                get_or_create_feature_extractor._cache_db_path = current_db_path
-    return get_or_create_feature_extractor._cache
+            if _FEATURE_EXTRACTOR_CACHE is None or current_db_path != _FEATURE_EXTRACTOR_CACHE_DB_PATH:
+                _FEATURE_EXTRACTOR_CACHE = FeatureExtractor()
+                _FEATURE_EXTRACTOR_CACHE_DB_PATH = current_db_path
 
-
-get_or_create_feature_extractor._cache = None
-get_or_create_feature_extractor._cache_db_path = None
+    if _FEATURE_EXTRACTOR_CACHE is None:
+        msg = "Feature extractor initialization failed"
+        raise RuntimeError(msg)
+    return _FEATURE_EXTRACTOR_CACHE
 
 
 def reset_active_learning_state() -> None:
     """Clear active-learning singletons in one synchronized lifecycle step."""
+    global _ACTIVE_LEARNING_MODEL_CACHE, _ACTIVE_LEARNING_MODEL_CACHE_DB_PATH  # noqa: PLW0603
+    global _FEATURE_EXTRACTOR_CACHE, _FEATURE_EXTRACTOR_CACHE_DB_PATH  # noqa: PLW0603
+
     with _ACTIVE_LEARNING_STATE_LOCK:
-        get_or_initialize_active_learning_model._cache = None
-        get_or_initialize_active_learning_model._cache_db_path = None
-        get_or_create_feature_extractor._cache = None
-        get_or_create_feature_extractor._cache_db_path = None
+        _ACTIVE_LEARNING_MODEL_CACHE = None
+        _ACTIVE_LEARNING_MODEL_CACHE_DB_PATH = None
+        _FEATURE_EXTRACTOR_CACHE = None
+        _FEATURE_EXTRACTOR_CACHE_DB_PATH = None
 
 
 def get_name_features(name: str) -> np.ndarray:

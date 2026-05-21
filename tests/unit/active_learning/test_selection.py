@@ -114,17 +114,17 @@ def test_active_learning_singletons_initialize_once_under_concurrency(monkeypatc
 
 
 def test_reset_active_learning_state_clears_model_and_extractor_caches():
-    selection.get_or_initialize_active_learning_model._cache = object()
-    selection.get_or_initialize_active_learning_model._cache_db_path = "model.db"
-    selection.get_or_create_feature_extractor._cache = object()
-    selection.get_or_create_feature_extractor._cache_db_path = "extractor.db"
+    selection._ACTIVE_LEARNING_MODEL_CACHE = object()
+    selection._ACTIVE_LEARNING_MODEL_CACHE_DB_PATH = "model.db"
+    selection._FEATURE_EXTRACTOR_CACHE = object()
+    selection._FEATURE_EXTRACTOR_CACHE_DB_PATH = "extractor.db"
 
     selection.reset_active_learning_state()
 
-    assert selection.get_or_initialize_active_learning_model._cache is None
-    assert selection.get_or_initialize_active_learning_model._cache_db_path is None
-    assert selection.get_or_create_feature_extractor._cache is None
-    assert selection.get_or_create_feature_extractor._cache_db_path is None
+    assert selection._ACTIVE_LEARNING_MODEL_CACHE is None
+    assert selection._ACTIVE_LEARNING_MODEL_CACHE_DB_PATH is None
+    assert selection._FEATURE_EXTRACTOR_CACHE is None
+    assert selection._FEATURE_EXTRACTOR_CACHE_DB_PATH is None
 
 
 def test_active_learning_singletons_reinitialize_after_db_path_change(monkeypatch, tmp_path):

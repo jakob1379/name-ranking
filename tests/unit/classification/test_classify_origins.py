@@ -198,7 +198,8 @@ class TestClassifyName:
             with pytest.raises(RuntimeError, match="Failed to load origin-classification reference names"):
                 classify_origins._get_reference_names()
 
-        assert not hasattr(classify_origins._get_reference_names, "_cache")
+        assert classify_origins._REFERENCE_NAMES_CACHE is None
+        assert classify_origins._REFERENCE_NAMES_CACHE_DB_PATH is None
 
     def test_reference_name_cache_reloads_after_db_path_change(self, tmp_path):
         """Reference-name cache entries should be scoped to the active database."""
@@ -340,7 +341,8 @@ class TestClassifyAllNames:
             with pytest.raises(RuntimeError, match="Failed to load origin-classification reference names"):
                 classify_origins.classify_all_names()
 
-        assert not hasattr(classify_origins._get_reference_names, "_cache")
+        assert classify_origins._REFERENCE_NAMES_CACHE is None
+        assert classify_origins._REFERENCE_NAMES_CACHE_DB_PATH is None
 
 
 if __name__ == "__main__":

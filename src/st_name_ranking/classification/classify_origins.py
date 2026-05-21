@@ -25,6 +25,9 @@ logger = logging.getLogger(__name__)
 
 # Minimum confidence threshold for classification results
 MIN_CONFIDENCE_THRESHOLD = 0.1
+ReferenceNamesCache = dict[str, tuple[str, float, str, str]]
+_REFERENCE_NAMES_CACHE: ReferenceNamesCache | None = None
+_REFERENCE_NAMES_CACHE_DB_PATH: str | None = None
 
 
 def classify_name(name: str) -> OriginResult | None:
@@ -47,11 +50,11 @@ def classify_name(name: str) -> OriginResult | None:
 
 def _get_reference_names() -> dict[str, tuple[str, float, str, str]]:
     """Load known names used as origin-classification references."""
+    global _REFERENCE_NAMES_CACHE, _REFERENCE_NAMES_CACHE_DB_PATH  # noqa: PLW0603
+
     current_db_path = str(get_db_path())
-    cache = getattr(_get_reference_names, "_cache", None)
-    cache_db_path = getattr(_get_reference_names, "_cache_db_path", None)
-    if cache is not None and cache_db_path == current_db_path:
-        return cache
+    if _REFERENCE_NAMES_CACHE is not None and current_db_path == _REFERENCE_NAMES_CACHE_DB_PATH:
+        return _REFERENCE_NAMES_CACHE
 
     try:
         reference_names = get_names_with_origins(
@@ -61,21 +64,18 @@ def _get_reference_names() -> dict[str, tuple[str, float, str, str]]:
         msg = "Failed to load origin-classification reference names from database"
         raise RuntimeError(msg) from e
 
-    _get_reference_names._cache = reference_names
-    _get_reference_names._cache_db_path = current_db_path
-    logger.debug(
-        "Loaded %d reference names",
-        len(_get_reference_names._cache),
-    )
-    return _get_reference_names._cache
+    _REFERENCE_NAMES_CACHE = reference_names
+    _REFERENCE_NAMES_CACHE_DB_PATH = current_db_path
+    logger.debug("Loaded %d reference names", len(_REFERENCE_NAMES_CACHE))
+    return _REFERENCE_NAMES_CACHE
 
 
 def reset_reference_cache() -> None:
     """Clear cached reference data and classifier instances."""
-    if hasattr(_get_reference_names, "_cache"):
-        delattr(_get_reference_names, "_cache")
-    if hasattr(_get_reference_names, "_cache_db_path"):
-        delattr(_get_reference_names, "_cache_db_path")
+    global _REFERENCE_NAMES_CACHE, _REFERENCE_NAMES_CACHE_DB_PATH  # noqa: PLW0603
+
+    _REFERENCE_NAMES_CACHE = None
+    _REFERENCE_NAMES_CACHE_DB_PATH = None
     reset_classifier_cache()
 
 
