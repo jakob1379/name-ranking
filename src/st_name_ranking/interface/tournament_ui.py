@@ -1,9 +1,10 @@
 """Tournament screen rendering."""
 
+from __future__ import annotations
+
 import logging
-from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import streamlit as st
 
@@ -21,6 +22,11 @@ from st_name_ranking.interface.ui_support import (
     RenderTimer,
 )
 from st_name_ranking.persistence.database import INITIAL_SCORE
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
+
+    from st_name_ranking.active_learning.queue import QueueManager
 
 logger = logging.getLogger(__name__)
 
@@ -50,7 +56,7 @@ def display_name_with_rating(
     st.metric(value=name, label=f"{rating:.0f}", delta=delta_str, border=True)
 
 
-def _record_vote_and_get_next_pair(names: list[str], manager: Any, preference: int) -> tuple[str, str]:
+def _record_vote_and_get_next_pair(names: list[str], manager: QueueManager, preference: int) -> tuple[str, str]:
     candidate_a = st.session_state.candidate_a
     candidate_b = st.session_state.candidate_b
 
@@ -101,7 +107,7 @@ def _render_tournament_pair_display(
             display_name_with_rating(candidate_b, rating_b, delta=delta_b)
 
 
-def _render_tournament_queue_caption(queue_stats: Mapping[str, object] | None, manager: Any) -> None:
+def _render_tournament_queue_caption(queue_stats: Mapping[str, object] | None, manager: QueueManager) -> None:
     if not queue_stats or int(queue_stats.get("refill_count", 0)) <= 0:
         st.caption("Queue warming up... | Choose the name you prefer")
         return
@@ -128,7 +134,7 @@ def _render_tournament_queue_caption(queue_stats: Mapping[str, object] | None, m
 
 def _handle_tournament_vote(
     names: list[str],
-    manager: Any,
+    manager: QueueManager,
     *,
     preference: int,
     pair_display_placeholder: Any,
