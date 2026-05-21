@@ -20,10 +20,10 @@ import st_name_ranking.commands.cli as cli
 import st_name_ranking.commands.init_database as init_database
 import st_name_ranking.interface.app_actions as app_actions
 import st_name_ranking.interface.main as main
+import st_name_ranking.interface.name_queue as name_queue
 import st_name_ranking.interface.ui as ui
 import st_name_ranking.learning.features as features
 import st_name_ranking.learning.model as model
-import st_name_ranking.learning.name_queue as name_queue
 import st_name_ranking.name_normalization as name_normalization
 import st_name_ranking.persistence.data_loader as data_loader
 import st_name_ranking.persistence.database as database

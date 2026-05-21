@@ -1,6 +1,6 @@
 """Tests for queued name display data."""
 
-from st_name_ranking.learning.name_queue import compute_name_data
+from st_name_ranking.interface.name_queue import compute_name_data
 
 
 def test_compute_name_data_returns_fixed_item_shape():

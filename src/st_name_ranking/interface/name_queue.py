@@ -21,17 +21,7 @@ class NameQueueItem(TypedDict):
 
 
 def compute_name_data(name: str, index: int, inclusions: dict[str, bool]) -> NameQueueItem:
-    """Pre-compute display properties for a name.
-
-    Args:
-        name: The name string
-        index: The index of the name in the list
-        inclusions: Dictionary mapping names to inclusion status
-                   (True=included, False=excluded, None/Not present=not decided)
-
-    Returns:
-        Name data with display properties.
-    """
+    """Pre-compute display properties for a name."""
     status = inclusions.get(name)
 
     if status is None:
@@ -72,14 +62,7 @@ class NameQueue:
         inclusions: dict[str, bool],
         queue_size: int = 5,
     ) -> None:
-        """Initialize the NameQueue.
-
-        Args:
-            names: List of all names
-            current_index: Current position in the names list
-            inclusions: Dictionary mapping names to inclusion status
-            queue_size: Number of names to preload ahead (default 5)
-        """
+        """Initialize the queue around the current name position."""
         self._names = names
         self._current_index = current_index
         self._inclusions = inclusions
@@ -94,7 +77,6 @@ class NameQueue:
             queue_size,
         )
 
-        # Preload initial batch
         self.preload_next()
 
     @property
@@ -131,21 +113,12 @@ class NameQueue:
         )
 
     def has_more(self) -> bool:
-        """Check if there are more names to load.
-
-        Returns:
-            True if there are more names after current position
-        """
+        """Return whether there are names after the current position."""
         return self._current_index < self._total_names - 1
 
     def update_inclusions(self, inclusions: dict[str, bool]) -> None:
-        """Update the inclusions dictionary and refresh queue.
-
-        Args:
-            inclusions: New inclusions dictionary
-        """
+        """Update inclusion state and refresh queued display data."""
         self._inclusions = inclusions
-        # Refresh queue with new inclusion data
         self._queue.clear()
         self.preload_next()
         logger.debug("Updated inclusions and refreshed queue")

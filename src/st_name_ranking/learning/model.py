@@ -40,16 +40,10 @@ def _get_phonetic_codes_cached(names_tuple: tuple[str, ...]) -> dict[str, Phonet
 
 
 def _group_names_by_phonetic(names: list[str]) -> dict[str, list[int]]:
-    """Group name indices by phonetic primary code.
-
-    Returns dict mapping phonetic_primary -> list of name indices.
-    Uses database lookup with LRU caching for efficiency.
-    """
-    # Get phonetic codes from database (cached)
+    """Group name indices by phonetic primary code."""
     names_tuple = tuple(names)
     phonetic_map = _get_phonetic_codes_cached(names_tuple)
 
-    # Group by primary code
     clusters: dict[str, list[int]] = {}
     for idx, name in enumerate(names):
         codes = phonetic_map.get(name, PhoneticCodes(primary="", secondary=""))
@@ -89,7 +83,6 @@ def _select_cross_cluster_pairs(
         idx_a = rng.choice(clusters[cluster1])
         idx_b = rng.choice(clusters[cluster2])
 
-        # Normalize order to avoid duplicates
         if idx_a > idx_b:
             idx_a, idx_b = idx_b, idx_a
 
@@ -228,13 +221,7 @@ class BradleyTerryModel:
     """
 
     def __init__(self, feature_names: list[str], prior_variance: float = 1.0) -> None:
-        """Initialize model.
-
-        Args:
-            feature_names: Ordered list of feature names
-            prior_variance: Prior variance for isotropic Gaussian prior
-
-        """
+        """Initialize model with ordered feature names and isotropic prior variance."""
         self.feature_names = feature_names
         self.d = len(feature_names)
         self.state = ModelState.initialize(feature_names, prior_variance)
@@ -242,21 +229,11 @@ class BradleyTerryModel:
         self.rng = np.random.default_rng()
 
     def sample_utilities(self, features: np.ndarray) -> np.ndarray:
-        """Sample utilities for names from posterior predictive distribution.
-
-        Args:
-            features: Feature matrix shape (n, d)
-
-        Returns:
-            Sampled utilities shape (n,)
-
-        """
-        # Sample weights from posterior
+        """Sample name utilities from the posterior predictive distribution."""
         sampled_weights = self.rng.multivariate_normal(
             self.state.weight_mean,
             self.state.weight_cov,
         )
-        # Compute utilities
         return features @ sampled_weights
 
     def update(
@@ -265,15 +242,7 @@ class BradleyTerryModel:
         features_b: np.ndarray,
         preference: int,
     ) -> None:
-        """Update model with a single comparison.
-
-        Args:
-            features_a: Feature vector for name A
-            features_b: Feature vector for name B
-            preference: -1 (A preferred), 0 (draw), 1 (B preferred)
-
-        """
-        # Convert to batch update
+        """Update model with one preference: -1 A, 0 draw, 1 B."""
         self.update_batch([(features_a, features_b, preference)])
 
     def update_both_disliked(
@@ -285,10 +254,6 @@ class BradleyTerryModel:
 
         Treats both names as less preferred than a neutral baseline.
         Adds two comparisons: neutral preferred over A, neutral preferred over B.
-
-        Args:
-            features_a: Feature vector for name A
-            features_b: Feature vector for name B
         """
         d = self.d
         neutral = np.zeros(d, dtype=features_a.dtype)
@@ -306,10 +271,7 @@ class BradleyTerryModel:
     ) -> None:
         """Update model with a batch of comparisons using IRLS.
 
-        Args:
-            comparisons: List of (features_a, features_b, preference)
-                where preference: -1 (a preferred), 0 (draw), 1 (b preferred)
-
+        Comparison preference is -1 for A, 0 for draw, and 1 for B.
         """
         if not comparisons:
             return
@@ -325,7 +287,6 @@ class BradleyTerryModel:
             diff = feat_a - feat_b
             X[i] = diff
 
-            # Convert preference to target probability
             if pref == -1:  # A preferred
                 y[i] = 1.0
             elif pref == 1:  # B preferred
@@ -357,14 +318,12 @@ class BradleyTerryModel:
 
             w_new = np.linalg.solve(A, b)
 
-            # Check convergence
             if np.linalg.norm(w_new - w) < tol:
                 w = w_new
                 break
 
             w = w_new
 
-        # Update covariance (inverse of Hessian)
         eta = X @ w
         # Vectorized stable sigmoid
         p = np.where(eta >= 0, 1.0 / (1.0 + np.exp(-eta)), np.exp(eta) / (1.0 + np.exp(eta)))
@@ -373,7 +332,6 @@ class BradleyTerryModel:
         posterior_cov_inv = XW @ X + cov_inv
         posterior_cov = np.linalg.inv(posterior_cov_inv)
 
-        # Update state
         self.state.weight_mean = w
         self.state.weight_cov = posterior_cov
         self.state.training_samples += n
@@ -388,14 +346,6 @@ class BradleyTerryModel:
         Strategy: Sample utilities, then select pair from different phonetic
         clusters where probability of preference is closest to 0.5 (maximally
         uncertain). Falls back to any pair if no cross-cluster options exist.
-
-        Args:
-            features: Feature matrix shape (n, d)
-            names: List of names corresponding to rows
-
-        Returns:
-            NamePair with idx_a, idx_b, name_a, name_b
-
         """
         n = len(names)
         if n < MIN_NAMES_FOR_PAIR_SELECTION:
@@ -436,12 +386,10 @@ class BradleyTerryModel:
             # Fallback: first two names repeated
             return [NamePair(idx_a=0, idx_b=1, name_a=names[0], name_b=names[1]) for _ in range(k)]
 
-        # Get top k indices by score
         if k >= len(candidates.score):
             top_indices = np.argsort(candidates.score)[::-1]  # all indices
         else:
             top_indices = np.argpartition(candidates.score, -k)[-k:]
-            # Sort descending
             top_indices = top_indices[np.argsort(candidates.score[top_indices])[::-1]]
 
         # Deduplicate pairs (by normalized index tuple)
@@ -450,7 +398,6 @@ class BradleyTerryModel:
         for idx in top_indices:
             i = int(candidates.idx_a[idx])
             j = int(candidates.idx_b[idx])
-            # Normalize pair order
             pair = (min(i, j), max(i, j))
             if pair in pairs_seen:
                 continue
@@ -463,7 +410,6 @@ class BradleyTerryModel:
         if len(result) < k:
             # Generate all possible unique pairs
             all_pairs = [(i, j) for i in range(n) for j in range(i + 1, n)]
-            # Filter out already selected pairs
             available_pairs = [p for p in all_pairs if p not in pairs_seen]
 
             # If we still don't have enough, we may need to reuse pairs
@@ -506,15 +452,7 @@ class BradleyTerryModel:
         return CandidatePairScores(idx_a=idx_a, idx_b=idx_b, score=score)
 
     def get_utility(self, features: np.ndarray) -> np.ndarray:
-        """Compute expected utility for names.
-
-        Args:
-            features: Feature matrix shape (n, d)
-
-        Returns:
-            Expected utilities shape (n,)
-
-        """
+        """Compute expected utility for feature rows."""
         return features @ self.state.weight_mean
 
     def save_to_db(self) -> None:
@@ -522,7 +460,6 @@ class BradleyTerryModel:
         weights_blob, cov_blob, feature_names = self.state.to_blob()
 
         with get_connection() as conn:
-            # Serialize feature names as JSON
             feature_names_json = json.dumps(feature_names)
 
             conn.execute(
@@ -540,12 +477,7 @@ class BradleyTerryModel:
             )
 
     def load_from_db(self) -> bool:
-        """Load model state from database.
-
-        Returns:
-            True if loaded successfully, False if no model exists
-
-        """
+        """Load model state from database."""
         with get_connection() as conn:
             cursor = conn.execute("""
                 SELECT feature_weights, uncertainty_matrix, training_samples, feature_names_json
@@ -559,9 +491,7 @@ class BradleyTerryModel:
             weights_blob, cov_blob, training_samples, feature_names_json = row
 
             if feature_names_json:
-                # Load feature names from JSON
                 stored_feature_names = json.loads(feature_names_json)
-                # Verify dimension matches weights blob
                 weights_buffer = io.BytesIO(weights_blob)
                 weight_mean = np.load(weights_buffer)
                 if len(stored_feature_names) != len(weight_mean):
@@ -571,7 +501,6 @@ class BradleyTerryModel:
                         len(weight_mean),
                     )
                     return False
-                # Check if stored feature names match expected feature names
                 if set(stored_feature_names) != set(self.feature_names):
                     logger.warning(
                         "Stored feature names differ from expected features. Model outdated, reinitializing.",
@@ -591,27 +520,17 @@ class BradleyTerryModel:
                 feature_names,
                 training_samples,
             )
-            # Update self.feature_names to match stored names
             self.feature_names = feature_names
             self.d = len(feature_names)
             return True
 
 
-# Helper functions for database integration
-
-
 def initialize_model_if_needed(feature_names: list[str]) -> BradleyTerryModel:
-    """Initialize or load model from database.
-
-    Returns:
-        BradleyTerryModel instance
-
-    """
+    """Initialize or load model from database."""
     model = BradleyTerryModel(feature_names)
 
     if not model.load_from_db():
         logger.info("No existing model found, initializing new model")
-        # Save initial model to database
         model.save_to_db()
 
     return model

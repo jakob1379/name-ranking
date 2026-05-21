@@ -68,7 +68,7 @@ and tests.
 | Comparison/model refresh            | `st_name_ranking.active_learning.lazy_updates`       |
 | Feature extraction                  | `st_name_ranking.learning.features`                  |
 | Bradley-Terry model                 | `st_name_ranking.learning.model`                     |
-| Name queue helpers                  | `st_name_ranking.learning.name_queue`                |
+| Name queue helpers                  | `st_name_ranking.interface.name_queue`               |
 | Schema/bootstrap facade             | `st_name_ranking.persistence.database`               |
 | Low-level connection state          | `st_name_ranking.persistence.connection`             |
 | Name/origin queries                 | `st_name_ranking.persistence.name_store`             |

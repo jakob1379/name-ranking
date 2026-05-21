@@ -17,14 +17,7 @@ def compute_phonetic_codes(name: str) -> tuple[str, str]:
 
 
 def phonetic_similarity(name1: str, name2: str) -> float:
-    """Compute phonetic similarity score between two names.
-
-    Returns:
-        1.0 if primary codes match
-        0.5 if primary of one matches secondary of the other
-        0.0 otherwise
-
-    """
+    """Compute a 0.0, 0.5, or 1.0 phonetic similarity score."""
     primary1, secondary1 = compute_phonetic_codes(name1)
     primary2, secondary2 = compute_phonetic_codes(name2)
 
@@ -56,11 +49,7 @@ def phonetic_similarity_batch(
     target_codes: tuple[str, str],
     name_codes_dict: dict[str, tuple[str, str]],
 ) -> dict[str, float]:
-    """Compute phonetic similarity between target and multiple names.
-    target_codes: (primary, secondary) for target name
-    name_codes_dict: dict mapping name -> (primary, secondary)
-    Returns dict mapping name -> similarity score.
-    """
+    """Compute phonetic similarity between target codes and many names."""
     target_primary, target_secondary = target_codes
     similarities = {}
 
@@ -92,7 +81,6 @@ def get_phonetic_neighbors(
     name_codes = batch_compute_phonetic_codes(names)
     similarities = phonetic_similarity_batch(target_codes, name_codes)
 
-    # Filter by threshold and sort
     filtered = [(name, score) for name, score in similarities.items() if score >= threshold]
     filtered.sort(key=lambda x: x[1], reverse=True)
 

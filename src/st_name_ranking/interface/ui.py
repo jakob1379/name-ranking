@@ -135,11 +135,9 @@ def display_name_with_rating(
     delta: difference in preference score compared to opponent (positive if higher,
     negative if lower).
     """
-    # Format delta for display
     delta_str = (f"{delta:+.0f}" if isinstance(delta, (int, float)) else str(delta)) if delta is not None else None
 
     # Use st.metric with swapped label/value to get desired visual hierarchy
-    # Value will be large (name), label will be smaller (rating)
     st.metric(value=name, label=f"{rating:.0f}", delta=delta_str, border=True)
 
 
@@ -147,7 +145,6 @@ def render_preferences_panel() -> None:
     """Render panel showing overall preferences across different groups."""
     st.subheader("Overall Preferences")
 
-    # Get statistics
     gender_stats = get_preference_stats_by_gender()
     origin_stats = get_preference_stats_by_origin()
     phonetic_stats = get_preference_stats_by_phonetic()
@@ -157,16 +154,10 @@ def render_preferences_panel() -> None:
         if df.is_empty():
             return
 
-        # Create percentage columns for stacked bar chart
         chart_df = df.select(["Group", "win_pct", "loss_pct", "draw_pct"])
-
-        # Sort by win percentage (descending)
         chart_df = chart_df.sort("win_pct", descending=True)
-
-        # Create stacked bar chart
         st.subheader(title, divider="gray")
 
-        # Display chart with custom colors
         st.bar_chart(
             chart_df,
             x="Group",
@@ -176,10 +167,8 @@ def render_preferences_panel() -> None:
             color=["#2E7D32", "#C62828", "#FF9800"],  # Green for wins, red for losses, orange for draws
         )
 
-        # Add data table below chart
         display_df = df.sort("win_pct", descending=True)
 
-        # Show detailed table
         with st.expander(f"Detailed {title} Statistics", expanded=False):
             st.dataframe(
                 display_df,
@@ -203,10 +192,8 @@ def render_preferences_panel() -> None:
                 },
             )
 
-        # Add legend
         st.caption("🎯 **Legend**: 🟢 Wins | 🔴 Losses | 🟠 Draws")
 
-        # Add key insight based on data
         if not df.is_empty():
             sorted_by_win_rate = df.sort("win_pct", descending=True)
             best_group = sorted_by_win_rate.row(0, named=True)
@@ -482,7 +469,6 @@ def render_tournament(names: list[str]) -> None:
     timer.log("After queue manager")
     _render_tournament_queue_caption(round_state.queue_stats, manager)
 
-    # Create placeholders for dynamic content
     pair_display_placeholder = st.empty()
     st.empty()
 
@@ -491,7 +477,6 @@ def render_tournament(names: list[str]) -> None:
 
     timer.log("After button creation")
 
-    # Update session state and UI instantly after vote (no rerun needed)
     if vote_action is not None:
         preference, timing_label = vote_action
         timer.log(f"{timing_label} clicked - handling")
@@ -830,7 +815,6 @@ def render_rankings(names: list[str]) -> None:
         st.info("No names to rank. Please include some names in the Name Filter tab first.")
         return
 
-    # Get gender-specific name lists if available
     male_names = []
     female_names = []
     if "all_names_data" in st.session_state:
@@ -838,14 +822,12 @@ def render_rankings(names: list[str]) -> None:
         male_names = gender_data.get("Male", [])
         female_names = gender_data.get("Female", [])
 
-    # Filter ratings to only show current selection
     filtered_ratings = filter_ratings_for_names(st.session_state.ratings, names)
 
     if not filtered_ratings:
         st.info("No ratings yet. Start comparing names in the Tournament tab to generate rankings.")
         return
 
-    # Create tabs for different views
     tab_overall, tab_male, tab_female = st.tabs(["Overall", "Male", "Female"])
 
     with tab_overall:

@@ -33,7 +33,7 @@ def test_get_current_pair_rejects_same_session_candidate(monkeypatch):
 
 def test_prepare_tournament_round_reuses_current_pair_without_touching_queue():
     manager = Mock()
-    manager.get_pair.side_effect = AssertionError("existing pair should be reused")
+    manager.pop_next_pair.side_effect = AssertionError("existing pair should be reused")
     queue_stats = {"queue_size": 3, "target_size": 10}
 
     result = tournament_orchestration.prepare_tournament_round(
@@ -47,12 +47,12 @@ def test_prepare_tournament_round_reuses_current_pair_without_touching_queue():
     assert result.candidate_a == "Anna"
     assert result.candidate_b == "Bo"
     assert result.queue_stats == queue_stats
-    manager.get_pair.assert_not_called()
+    manager.pop_next_pair.assert_not_called()
 
 
 def test_prepare_tournament_round_uses_queue_pair_when_no_current_pair():
     manager = Mock()
-    manager.get_pair.return_value = ("Maria", "Peter")
+    manager.pop_next_pair.return_value = ("Maria", "Peter")
     queue_stats = {"queue_size": 1, "target_size": 10}
 
     result = tournament_orchestration.prepare_tournament_round(
@@ -65,12 +65,12 @@ def test_prepare_tournament_round_uses_queue_pair_when_no_current_pair():
     assert result.candidate_a == "Maria"
     assert result.candidate_b == "Peter"
     assert result.queue_stats == queue_stats
-    manager.get_pair.assert_called_once_with()
+    manager.pop_next_pair.assert_called_once_with()
 
 
 def test_prepare_tournament_round_falls_back_to_random_pair_when_queue_empty(monkeypatch):
     manager = Mock()
-    manager.get_pair.return_value = None
+    manager.pop_next_pair.return_value = None
     select_random_pair = Mock(return_value=("Anna", "Peter"))
     monkeypatch.setattr(tournament_orchestration, "select_random_pair", select_random_pair)
 
@@ -84,7 +84,7 @@ def test_prepare_tournament_round_falls_back_to_random_pair_when_queue_empty(mon
     assert result.candidate_a == "Anna"
     assert result.candidate_b == "Peter"
     assert result.queue_stats is None
-    manager.get_pair.assert_called_once_with()
+    manager.pop_next_pair.assert_called_once_with()
     select_random_pair.assert_called_once_with(["Anna", "Bo", "Maria", "Peter"])
 
 
@@ -101,7 +101,7 @@ def test_prepare_tournament_round_requires_at_least_two_names():
 
 def test_record_tournament_vote_advances_after_recorded_vote(monkeypatch):
     manager = Mock()
-    manager.get_pair.return_value = ("Maria", "Peter")
+    manager.pop_next_pair.return_value = ("Maria", "Peter")
     record_comparison = Mock(return_value=ModelUpdateStatus(recorded=True, model_updated=None, ratings_fresh=None))
     monkeypatch.setattr(
         tournament_orchestration,
@@ -122,12 +122,12 @@ def test_record_tournament_vote_advances_after_recorded_vote(monkeypatch):
     assert result.pair_source == "queue"
     assert result.update_status.recorded is True
     record_comparison.assert_called_once_with("Anna", "Bo", -1)
-    manager.get_pair.assert_called_once_with()
+    manager.pop_next_pair.assert_called_once_with()
 
 
 def test_record_tournament_vote_falls_back_to_random_pair_after_recorded_vote(monkeypatch):
     manager = Mock()
-    manager.get_pair.return_value = None
+    manager.pop_next_pair.return_value = None
     select_random_pair = Mock(return_value=("Maria", "Peter"))
     record_comparison = Mock(return_value=ModelUpdateStatus(recorded=True, model_updated=False, ratings_fresh=True))
     monkeypatch.setattr(tournament_orchestration, "select_random_pair", select_random_pair)
@@ -150,13 +150,13 @@ def test_record_tournament_vote_falls_back_to_random_pair_after_recorded_vote(mo
     assert result.pair_source == "random"
     assert result.update_status.recorded is True
     record_comparison.assert_called_once_with("Anna", "Bo", -1)
-    manager.get_pair.assert_called_once_with()
+    manager.pop_next_pair.assert_called_once_with()
     select_random_pair.assert_called_once_with(["Anna", "Bo", "Maria", "Peter"])
 
 
 def test_record_tournament_vote_keeps_pair_when_vote_was_not_recorded(monkeypatch):
     manager = Mock()
-    manager.get_pair.side_effect = AssertionError("next pair should not be selected")
+    manager.pop_next_pair.side_effect = AssertionError("next pair should not be selected")
     record_comparison = Mock(
         return_value=ModelUpdateStatus(
             recorded=False,
@@ -186,4 +186,4 @@ def test_record_tournament_vote_keeps_pair_when_vote_was_not_recorded(monkeypatc
     assert result.update_status.recorded is False
     assert result.update_status.error == "database locked"
     record_comparison.assert_called_once_with("Anna", "Bo", -1)
-    manager.get_pair.assert_not_called()
+    manager.pop_next_pair.assert_not_called()

@@ -1,15 +1,7 @@
 #!/usr/bin/env python3
 """Batch orchestration for hierarchical name-origin classification.
 
-This implementation module:
-1. Gets unclassified names from database
-2. Delegates single-name classification to origin_classifier
-3. Maps classifier output to stored origin fields
-4. Updates database with region and confidence
-5. Handles batch processing with progress reporting
-
-The canonical maintenance entrypoint is:
-    st-name-ranking db origins classify
+The canonical maintenance entrypoint is ``st-name-ranking db origins classify``.
 """
 
 import logging
@@ -35,11 +27,8 @@ MIN_CONFIDENCE_THRESHOLD = 0.1
 
 
 def classify_name(name: str) -> OriginResult | None:
-    """Classify a single name using hierarchical classifier.
-    Returns (region, confidence) or None if classification failed.
-    """
+    """Classify a single name, returning None when classification is unavailable."""
     try:
-        # Get reference names from already classified names in database
         reference_names = _get_reference_names()
         classifier = get_or_create_classifier(reference_names)
 
@@ -62,13 +51,7 @@ def classify_name(name: str) -> OriginResult | None:
 
 
 def _get_reference_names() -> dict[str, tuple[str, float, str, str]]:
-    """Get dictionary of known name -> (region, confidence, phonetic_primary, phonetic_secondary) from database.
-
-    Cached for performance using function attribute.
-
-    Returns:
-        Dictionary mapping name to (region, confidence, phonetic_primary, phonetic_secondary).
-    """
+    """Load known names used as origin-classification references."""
     cache = getattr(_get_reference_names, "_cache", None)
     if cache is not None:
         return cache
@@ -97,15 +80,12 @@ def reset_reference_cache() -> None:
 
 
 def classify_batch(names_batch: list[UnclassifiedName], batch_size: int = 100) -> int:
-    """Classify a batch of names using ethnidata.
-    Returns number of successfully classified names.
-    """
+    """Classify a batch and return the number of stored results."""
     if not names_batch:
         return 0
 
     logger.debug("Classifying batch of %d names", len(names_batch))
 
-    # Process each name individually (ethnidata doesn't support batch)
     classified_count = 0
 
     for i, name_data in enumerate(names_batch):
@@ -130,14 +110,7 @@ def classify_all_names(
     batch_size: int = 100,
     progress_callback: "Callable[[int, int], None] | None" = None,
 ) -> int:
-    """Classify all unclassified names.
-    Returns total number of names classified.
-
-    Args:
-        limit: Maximum number of names to classify
-        batch_size: Number of names to process per batch
-        progress_callback: Optional callback(current, total) for progress updates
-    """
+    """Classify unclassified names and return the number of stored results."""
     logger.info("Fetching unclassified names...")
     unclassified = get_unclassified_names(limit)
 
@@ -161,7 +134,6 @@ def classify_all_names(
     classified = 0
     processed = 0
 
-    # Process in batches
     for i in range(0, total, batch_size):
         batch = unclassified[i : i + batch_size]
         logger.debug(
@@ -176,7 +148,6 @@ def classify_all_names(
         if batch_classified:
             reset_reference_cache()
 
-        # Call progress callback if provided
         if progress_callback:
             progress_callback(processed, total)
 

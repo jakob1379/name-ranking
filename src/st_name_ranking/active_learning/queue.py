@@ -82,7 +82,7 @@ class QueueManager:
         else:
             logger.debug("No background thread to stop")
 
-    def get_pair(self) -> tuple[str, str] | None:
+    def pop_next_pair(self) -> tuple[str, str] | None:
         """Pop the next queued pair without blocking."""
         with self._lock:
             if self.queue:
