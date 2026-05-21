@@ -1,6 +1,8 @@
 """Ranking and preference analytics rendering."""
 
 import logging
+from collections.abc import Mapping
+from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
@@ -29,6 +31,7 @@ from st_name_ranking.persistence.database import (
     get_preference_stats_by_origin,
     get_preference_stats_by_phonetic,
 )
+from st_name_ranking.types import PreferenceStats
 
 logger = logging.getLogger(__name__)
 
@@ -53,88 +56,104 @@ except ImportError:
     SKHDBSCAN = None
 
 
+@dataclass(frozen=True)
+class PreferencePanelSection:
+    stats: Mapping[str, PreferenceStats] | None
+    title: str
+    empty_message: str
+
+
+def _preference_detail_column_config() -> dict[str, Any]:
+    return {
+        "Group": st.column_config.TextColumn("Group", width="medium"),
+        "Wins": st.column_config.NumberColumn("Wins", width="small"),
+        "Losses": st.column_config.NumberColumn("Losses", width="small"),
+        "Draws": st.column_config.NumberColumn("Draws", width="small"),
+        "Total": st.column_config.NumberColumn("Total", width="small"),
+        "win_pct": st.column_config.NumberColumn("Win %", format="%.1f%%", width="small"),
+        "loss_pct": st.column_config.NumberColumn("Loss %", format="%.1f%%", width="small"),
+        "draw_pct": st.column_config.NumberColumn("Draw %", format="%.1f%%", width="small"),
+        "win_rate_pct": st.column_config.NumberColumn(
+            "Win Rate %",
+            help="Wins / (Wins + Losses)",
+            format="%.1f%%",
+            width="small",
+        ),
+    }
+
+
+def _render_preference_chart(df: pl.DataFrame, title: str) -> None:
+    """Create stacked bar chart showing win/loss/draw percentages."""
+    if df.is_empty():
+        return
+
+    chart_df = df.select(["Group", "win_pct", "loss_pct", "draw_pct"])
+    chart_df = chart_df.sort("win_pct", descending=True)
+    st.subheader(title, divider="gray")
+
+    st.bar_chart(
+        chart_df,
+        x="Group",
+        y=["win_pct", "loss_pct", "draw_pct"],
+        height=400,
+        width="stretch",
+        color=["#2E7D32", "#C62828", "#FF9800"],  # Green for wins, red for losses, orange for draws
+    )
+
+    display_df = df.sort("win_pct", descending=True)
+
+    with st.expander(f"Detailed {title} Statistics", expanded=False):
+        st.dataframe(
+            display_df,
+            hide_index=True,
+            width="stretch",
+            column_config=_preference_detail_column_config(),
+        )
+
+    st.caption("🎯 **Legend**: 🟢 Wins | 🔴 Losses | 🟠 Draws")
+
+    sorted_by_win_rate = df.sort("win_pct", descending=True)
+    best_group = sorted_by_win_rate.row(0, named=True)
+    worst_group = sorted_by_win_rate.row(sorted_by_win_rate.height - 1, named=True)
+    st.info(
+        f"**Insight**: {best_group['Group']} has the highest win rate ({best_group['win_pct']:.1f}%), "
+        f"while {worst_group['Group']} has the lowest ({worst_group['win_pct']:.1f}%).",
+    )
+
+
+def _render_preference_section(section: PreferencePanelSection) -> None:
+    if not section.stats:
+        st.info(section.empty_message)
+        return
+
+    df = build_preference_percentage_dataframe(section.stats)
+    _render_preference_chart(df, section.title)
+
+
 def render_preferences_panel() -> None:
     """Render panel showing overall preferences across different groups."""
     st.subheader("Overall Preferences")
 
-    gender_stats = get_preference_stats_by_gender()
-    origin_stats = get_preference_stats_by_origin()
-    phonetic_stats = get_preference_stats_by_phonetic()
+    sections = (
+        PreferencePanelSection(
+            get_preference_stats_by_gender(),
+            "Gender Preferences",
+            "No gender preference data available.",
+        ),
+        PreferencePanelSection(
+            get_preference_stats_by_origin(),
+            "Origin Preferences",
+            "No origin preference data available.",
+        ),
+        PreferencePanelSection(
+            get_preference_stats_by_phonetic(),
+            "Phonetic Preferences",
+            "No phonetic preference data available.",
+        ),
+    )
 
-    def create_stacked_bar_chart(df: pl.DataFrame, title: str) -> None:
-        """Create stacked bar chart showing win/loss/draw percentages."""
-        if df.is_empty():
-            return
-
-        chart_df = df.select(["Group", "win_pct", "loss_pct", "draw_pct"])
-        chart_df = chart_df.sort("win_pct", descending=True)
-        st.subheader(title, divider="gray")
-
-        st.bar_chart(
-            chart_df,
-            x="Group",
-            y=["win_pct", "loss_pct", "draw_pct"],
-            height=400,
-            width="stretch",
-            color=["#2E7D32", "#C62828", "#FF9800"],  # Green for wins, red for losses, orange for draws
-        )
-
-        display_df = df.sort("win_pct", descending=True)
-
-        with st.expander(f"Detailed {title} Statistics", expanded=False):
-            st.dataframe(
-                display_df,
-                hide_index=True,
-                width="stretch",
-                column_config={
-                    "Group": st.column_config.TextColumn("Group", width="medium"),
-                    "Wins": st.column_config.NumberColumn("Wins", width="small"),
-                    "Losses": st.column_config.NumberColumn("Losses", width="small"),
-                    "Draws": st.column_config.NumberColumn("Draws", width="small"),
-                    "Total": st.column_config.NumberColumn("Total", width="small"),
-                    "win_pct": st.column_config.NumberColumn("Win %", format="%.1f%%", width="small"),
-                    "loss_pct": st.column_config.NumberColumn("Loss %", format="%.1f%%", width="small"),
-                    "draw_pct": st.column_config.NumberColumn("Draw %", format="%.1f%%", width="small"),
-                    "win_rate_pct": st.column_config.NumberColumn(
-                        "Win Rate %",
-                        help="Wins / (Wins + Losses)",
-                        format="%.1f%%",
-                        width="small",
-                    ),
-                },
-            )
-
-        st.caption("🎯 **Legend**: 🟢 Wins | 🔴 Losses | 🟠 Draws")
-
-        if not df.is_empty():
-            sorted_by_win_rate = df.sort("win_pct", descending=True)
-            best_group = sorted_by_win_rate.row(0, named=True)
-            worst_group = sorted_by_win_rate.row(sorted_by_win_rate.height - 1, named=True)
-            st.info(
-                f"**Insight**: {best_group['Group']} has the highest win rate ({best_group['win_pct']:.1f}%), "
-                f"while {worst_group['Group']} has the lowest ({worst_group['win_pct']:.1f}%).",
-            )
-
-    # Gender preferences
-    if gender_stats:
-        df_gender = build_preference_percentage_dataframe(gender_stats)
-        create_stacked_bar_chart(df_gender, "Gender Preferences")
-    else:
-        st.info("No gender preference data available.")
-
-    # Origin preferences
-    if origin_stats:
-        df_origin = build_preference_percentage_dataframe(origin_stats)
-        create_stacked_bar_chart(df_origin, "Origin Preferences")
-    else:
-        st.info("No origin preference data available.")
-
-    # Phonetic preferences
-    if phonetic_stats:
-        df_phonetic = build_preference_percentage_dataframe(phonetic_stats)
-        create_stacked_bar_chart(df_phonetic, "Phonetic Preferences")
-    else:
-        st.info("No phonetic preference data available.")
+    for section in sections:
+        _render_preference_section(section)
 
 
 @st.cache_data(show_spinner=False)
