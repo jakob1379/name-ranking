@@ -88,13 +88,13 @@ def test_queue_manager_refill_without_pairs_leaves_stats_unchanged(monkeypatch):
 
     manager._refill_queue()
 
-    assert manager.pop_next_pair() is None
+    assert manager.try_pop_pair() is None
     stats = manager.get_stats()
     assert stats["refill_count"] == 0
     assert stats["last_refill_added"] == 0
 
 
-def test_queue_manager_pop_next_pair_pops_pairs_in_order(monkeypatch):
+def test_queue_manager_try_pop_pair_pops_pairs_in_order(monkeypatch):
     manager = queue.QueueManager(
         ["Anna", "Bo", "Clara"],
         target_size=2,
@@ -108,9 +108,9 @@ def test_queue_manager_pop_next_pair_pops_pairs_in_order(monkeypatch):
     )
     manager._refill_queue()
 
-    assert manager.pop_next_pair() == ("Anna", "Bo")
-    assert manager.pop_next_pair() == ("Bo", "Clara")
-    assert manager.pop_next_pair() is None
+    assert manager.try_pop_pair() == ("Anna", "Bo")
+    assert manager.try_pop_pair() == ("Bo", "Clara")
+    assert manager.try_pop_pair() is None
 
 
 def test_queue_manager_recreated_when_middle_names_change(monkeypatch):

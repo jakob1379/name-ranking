@@ -113,7 +113,7 @@ def _ensure_current_pair(
 
 
 def _select_next_pair(names: list[str], manager: QueueManager) -> tuple[tuple[str, str], PairSource]:
-    pair = manager.pop_next_pair()
+    pair = manager.try_pop_pair()
     if pair:
         return pair, "queue"
     return select_random_pair(names), "random"
