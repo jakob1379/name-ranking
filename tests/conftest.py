@@ -159,7 +159,7 @@ def mock_classifier():
 
 
 def pytest_addoption(parser):
-    """Add command-line options for integration tests."""
+    """Add command-line options for opt-in test groups."""
     parser.addoption(
         "--run-integration",
         action="store_true",
@@ -171,6 +171,12 @@ def pytest_addoption(parser):
         action="store_true",
         default=False,
         help="Run Playwright tests (requires browser installation)",
+    )
+    parser.addoption(
+        "--run-performance",
+        action="store_true",
+        default=False,
+        help="Run performance tests with timing-sensitive assertions",
     )
     parser.addoption(
         "--app-url",
@@ -189,16 +195,23 @@ def pytest_configure(config):
         "markers",
         "playwright: mark test as Playwright test (requires browser)",
     )
+    config.addinivalue_line(
+        "markers",
+        "performance: mark test as performance test (timing-sensitive)",
+    )
 
 
 def pytest_collection_modifyitems(config, items):
-    """Skip integration and Playwright tests unless explicitly requested."""
+    """Skip opt-in test groups unless explicitly requested."""
     skip_integration = pytest.mark.skip(reason="Need --run-integration option to run")
     skip_playwright = pytest.mark.skip(reason="Need --run-playwright option to run")
+    skip_performance = pytest.mark.skip(reason="Need --run-performance option to run")
 
     for item in items:
         if _is_path_opt_in_integration(item):
             item.add_marker(pytest.mark.integration)
+        if _is_path_opt_in_performance(item):
+            item.add_marker(pytest.mark.performance)
 
         # Skip integration tests unless --run-integration is set
         if "integration" in item.keywords and not config.getoption("--run-integration"):
@@ -208,12 +221,23 @@ def pytest_collection_modifyitems(config, items):
         if "playwright" in item.keywords and not config.getoption("--run-playwright"):
             item.add_marker(skip_playwright)
 
+        # Skip performance tests unless --run-performance is set
+        if "performance" in item.keywords and not config.getoption("--run-performance"):
+            item.add_marker(skip_performance)
+
 
 def _is_path_opt_in_integration(item) -> bool:
     """Return whether a collected item lives in an opt-in integration directory."""
     path = Path(str(item.path))
     parts = path.parts
     return any(part == "tests" and parts[index + 1] in {"integration", "e2e"} for index, part in enumerate(parts[:-1]))
+
+
+def _is_path_opt_in_performance(item) -> bool:
+    """Return whether a collected item lives in the opt-in performance directory."""
+    path = Path(str(item.path))
+    parts = path.parts
+    return any(part == "tests" and parts[index + 1] == "performance" for index, part in enumerate(parts[:-1]))
 
 
 @pytest.fixture
