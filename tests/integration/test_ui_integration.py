@@ -4,7 +4,9 @@ from unittest.mock import MagicMock, patch
 
 import numpy as np
 
+from st_name_ranking.active_learning.lazy_updates import ModelUpdateStatus
 from st_name_ranking.interface import ui
+from st_name_ranking.tournament_orchestration import TournamentRound, VoteResult
 from st_name_ranking.types import PreferenceStats
 
 
@@ -23,6 +25,56 @@ class MockSessionState(dict):
     def __contains__(self, key):
         # Support 'key in session_state'
         return super().__contains__(key)
+
+
+def _mock_column():
+    column = MagicMock()
+    column.__enter__ = MagicMock(return_value=column)
+    column.__exit__ = MagicMock(return_value=None)
+    return column
+
+
+def _mock_container():
+    container = MagicMock()
+    container.__enter__ = MagicMock(return_value=container)
+    container.__exit__ = MagicMock(return_value=None)
+    return container
+
+
+def _mock_tournament_streamlit(*, clicked_key: str | None):
+    mock_st = MagicMock()
+    mock_st.header = MagicMock()
+    mock_st.write = MagicMock()
+    mock_st.caption = MagicMock()
+    mock_st.markdown = MagicMock()
+    mock_st.info = MagicMock()
+    mock_st.toast = MagicMock()
+    mock_st.session_state = MockSessionState(
+        {
+            "candidate_a": "",
+            "candidate_b": "",
+            "ratings": {"Anna": 1600, "Bo": 1550, "Maria": 1500, "Peter": 1450},
+        },
+    )
+
+    placeholder = MagicMock()
+    placeholder.container = MagicMock(return_value=_mock_container())
+    mock_st.empty = MagicMock(side_effect=[placeholder, MagicMock()])
+
+    def columns_side_effect(spec):
+        count = spec if isinstance(spec, int) else len(spec)
+        return [_mock_column() for _ in range(count)]
+
+    def button_side_effect(*_args, key=None, **_kwargs):
+        return key == clicked_key
+
+    mock_st.columns = MagicMock(side_effect=columns_side_effect)
+    mock_st.button = MagicMock(side_effect=button_side_effect)
+    return mock_st
+
+
+def _render_tournament_body(names: list[str]) -> None:
+    ui.render_tournament.__wrapped__(names)
 
 
 class TestUIIntegration:
@@ -398,1223 +450,130 @@ class TestUIIntegration:
             mock_load_model.assert_not_called()
             mock_st.dataframe.assert_not_called()
 
-    def test_render_tournament_basic(self):
-        """Test basic rendering of tournament with mock data."""
-        # Mock streamlit components
-        mock_st = MagicMock()
-        mock_st.header = MagicMock()
-        mock_st.write = MagicMock()
-        mock_st.caption = MagicMock()
-        mock_st.markdown = MagicMock()
-        mock_st.divider = MagicMock()
-        mock_st.subheader = MagicMock()
-
-        # Create mock columns for main layout (5 columns)
-        mock_col1 = MagicMock()
-        mock_col2 = MagicMock()
-        mock_col3 = MagicMock()
-        mock_col4 = MagicMock()
-        mock_col5 = MagicMock()
-
-        # Create mock columns for draw button layout (3 columns)
-        mock_draw_col1 = MagicMock()
-        mock_draw_col2 = MagicMock()
-        mock_draw_col3 = MagicMock()
-
-        # Create mock columns for top 10 layout (2 columns)
-        mock_top_col1 = MagicMock()
-        mock_top_col2 = MagicMock()
-
-        # Set up columns to return different values on each call
-        mock_st.columns = MagicMock(
-            side_effect=[
-                [mock_col1, mock_col2, mock_col3, mock_col4, mock_col5],  # First call: main layout
-                [mock_draw_col1, mock_draw_col2, mock_draw_col3],  # Second call: draw button
-                [mock_top_col1, mock_top_col2],  # Third call: top 10 layout
-            ],
+    def test_render_tournament_prepares_round_at_orchestration_boundary(self):
+        """Tournament rendering gets its pair from the orchestration boundary."""
+        mock_st = _mock_tournament_streamlit(clicked_key=None)
+        manager = MagicMock(target_size=5)
+        round_state = TournamentRound(
+            manager=manager,
+            candidate_a="Anna",
+            candidate_b="Bo",
+            queue_stats={"queue_size": 2, "target_size": 5},
         )
-
-        # Mock container for button containers
-        mock_button_container = MagicMock()
-        mock_button_container.__enter__ = MagicMock(return_value=MagicMock())
-        mock_button_container.__exit__ = MagicMock(return_value=None)
-        mock_st.container = MagicMock(return_value=mock_button_container)
-
-        # Mock buttons to return False (no clicks)
-        mock_st.button = MagicMock(return_value=False)
-        mock_st.toast = MagicMock()
-        mock_st.rerun = MagicMock()
-        # Mock tabs to return 3 mock tab objects
-        mock_st.tabs = MagicMock(return_value=[MagicMock(), MagicMock(), MagicMock()])
-        # Mock expander for statistics section
-        mock_expander = MagicMock()
-        mock_expander.__enter__ = MagicMock(return_value=MagicMock())
-        mock_expander.__exit__ = MagicMock(return_value=None)
-        mock_st.expander = MagicMock(return_value=mock_expander)
-
-        # Mock session state with empty data
-        mock_st.session_state = MockSessionState(
-            {
-                "filtered_names": [],
-                "filtered_features": None,
-                "candidate_queue": [],
-                "candidate_a": "",
-                "candidate_b": "",
-                "ratings": {},
-            },
-        )
-
-        # Mock other UI functions
-        mock_display = MagicMock()
-
-        # Mock utility functions
-        mock_features = MagicMock()
-        mock_batch = [("Name1", "Name2"), ("Name3", "Name4")]
+        names = ["Anna", "Bo", "Maria", "Peter"]
 
         with (
             patch("st_name_ranking.interface.ui.st", mock_st),
-            patch("st_name_ranking.interface.ui.display_name_with_rating", mock_display),
-            patch("st_name_ranking.interface.ui.get_names_features") as mock_get_features,
-            patch("st_name_ranking.interface.ui.select_candidate_batch") as mock_select_batch,
-            patch("st_name_ranking.interface.ui.update_preference_and_save"),
-            patch("st_name_ranking.interface.ui.update_preference_draw_and_save"),
-            patch("st_name_ranking.interface.ui.render_preferences_panel"),
-            patch("st_name_ranking.interface.ui.INITIAL_SCORE", 1500),  # Mock INITIAL_SCORE constant
+            patch("st_name_ranking.interface.tournament_session.st", mock_st),
+            patch("st_name_ranking.interface.ui.display_name_with_rating") as mock_display,
+            patch(
+                "st_name_ranking.interface.ui.get_or_start_tournament_queue",
+                return_value=manager,
+            ) as mock_get_manager,
+            patch("st_name_ranking.interface.ui.get_current_pair", return_value=("Anna", "Bo")) as mock_get_pair,
+            patch(
+                "st_name_ranking.interface.ui.get_queue_manager_stats",
+                return_value={"queue_size": 2, "target_size": 5},
+            ) as mock_stats,
+            patch("st_name_ranking.interface.ui.prepare_tournament_round", return_value=round_state) as mock_prepare,
+            patch("st_name_ranking.interface.ui.record_tournament_vote") as mock_record_vote,
         ):
-            # Setup mocks
-            mock_get_features.return_value = mock_features
-            mock_select_batch.return_value = mock_batch
+            _render_tournament_body(names)
 
-            # Call with test names
-            test_names = ["Anna", "Peter", "Maria", "John"]
-            ui.render_tournament(test_names)
+        mock_get_manager.assert_called_once_with(names, len(names))
+        mock_get_pair.assert_called_once_with(names)
+        mock_stats.assert_called_once_with()
+        mock_prepare.assert_called_once_with(names, manager, ("Anna", "Bo"), {"queue_size": 2, "target_size": 5})
+        mock_record_vote.assert_not_called()
+        assert mock_st.session_state.candidate_a == "Anna"
+        assert mock_st.session_state.candidate_b == "Bo"
+        displayed_names = [call.args[0] for call in mock_display.call_args_list]
+        assert displayed_names == ["Anna", "Bo"]
 
-            # Verify top tournament metadata
-            mock_st.write.assert_called_with(f"Comparing {len(test_names)} names")
-            mock_st.caption.assert_called()
-
-            # Verify features computed (since filtered_names not in session state)
-            mock_get_features.assert_called_with(test_names)
-
-            # Verify candidate batch selected (since queue empty)
-            mock_select_batch.assert_called_with(test_names, mock_features, batch_size=3)
-
-            # Verify preferences panel rendered (commented out in current implementation)
-            # mock_render_prefs.assert_called_once()
-
-            # Verify CSS markdown injected (first call contains style)
-            assert mock_st.markdown.call_count >= 1
-            # First call should be CSS style
-            first_markdown_call = mock_st.markdown.call_args_list[0]
-            assert "<style>" in first_markdown_call[0][0]
-            assert first_markdown_call[1]["unsafe_allow_html"] is True
-
-            # Verify columns created with correct layouts
-            assert mock_st.columns.call_count == 3
-            columns_calls = mock_st.columns.call_args_list
-            # First call: main layout columns
-            assert columns_calls[0][0][0] == [0.8, 1, 0.4, 1, 0.8]
-            # Second call: draw button columns
-            assert columns_calls[1][0][0] == [1, 0.4, 1]
-            # Third call: top 10 layout columns (integer 2)
-            assert columns_calls[2][0][0] == 2
-
-    def test_render_tournament_vote_left(self):
-        """Test render_tournament when left button (vote A) is clicked."""
-        # Mock streamlit components
-        mock_st = MagicMock()
-        mock_st.header = MagicMock()
-        mock_st.write = MagicMock()
-        mock_st.caption = MagicMock()
-        mock_st.markdown = MagicMock()
-        mock_st.divider = MagicMock()
-        mock_st.subheader = MagicMock()
-
-        # Helper to create a mock column with context manager support
-        def create_mock_column():
-            mock_col = MagicMock()
-            mock_col.__enter__ = MagicMock(return_value=mock_col)
-            mock_col.__exit__ = MagicMock(return_value=None)
-            return mock_col
-
-        # Create mock columns for main layout (5 columns)
-        mock_col1 = create_mock_column()
-        mock_col2 = create_mock_column()
-        mock_col3 = create_mock_column()
-        mock_col4 = create_mock_column()
-        mock_col5 = create_mock_column()
-
-        # Create mock columns for draw button layout (3 columns)
-        mock_draw_col1 = create_mock_column()
-        mock_draw_col2 = create_mock_column()
-        mock_draw_col3 = create_mock_column()
-
-        # Create mock columns for top 10 layout (2 columns)
-        mock_top_col1 = create_mock_column()
-        mock_top_col2 = create_mock_column()
-
-        # Set up columns to return different values on each call
-        mock_st.columns = MagicMock(
-            side_effect=[
-                [mock_col1, mock_col2, mock_col3, mock_col4, mock_col5],  # First call: main layout
-                [mock_draw_col1, mock_draw_col2, mock_draw_col3],  # Second call: draw button
-                [mock_top_col1, mock_top_col2],  # Third call: top 10 layout
-            ],
+    def test_render_tournament_vote_uses_orchestration_result(self):
+        """A button vote records through orchestration and displays the returned pair."""
+        mock_st = _mock_tournament_streamlit(clicked_key="vote_a")
+        manager = MagicMock(target_size=5)
+        names = ["Anna", "Bo", "Maria", "Peter"]
+        round_state = TournamentRound(
+            manager=manager,
+            candidate_a="Anna",
+            candidate_b="Bo",
+            queue_stats={"queue_size": 1, "target_size": 5},
         )
-
-        # Mock container for button containers
-        mock_button_container = MagicMock()
-        mock_button_container.__enter__ = MagicMock(return_value=MagicMock())
-        mock_button_container.__exit__ = MagicMock(return_value=None)
-        mock_st.container = MagicMock(return_value=mock_button_container)
-
-        # Mock buttons: left button returns True, others False
-        # Need to handle button calls with different keys
-        button_calls = []
-
-        def button_side_effect(label=None, key=None, **kwargs):
-            button_calls.append((label, key))
-            if key == "vote_a":
-                return True
-            return False
-
-        mock_st.button = MagicMock(side_effect=button_side_effect)
-        mock_st.toast = MagicMock()
-        mock_st.rerun = MagicMock()
-        # Mock tabs to return 3 mock tab objects (for statistics section)
-        mock_st.tabs = MagicMock(return_value=[MagicMock(), MagicMock(), MagicMock()])
-
-        # Mock expander for statistics section
-        mock_expander = MagicMock()
-        mock_expander.__enter__ = MagicMock(return_value=MagicMock())
-        mock_expander.__exit__ = MagicMock(return_value=None)
-        mock_st.expander = MagicMock(return_value=mock_expander)
-
-        # Mock tabs to return 3 mock tab objects (for statistics section)
-        mock_st.tabs = MagicMock(return_value=[MagicMock(), MagicMock(), MagicMock()])
-
-        # Mock expander for statistics section
-        mock_expander = MagicMock()
-        mock_expander.__enter__ = MagicMock(return_value=MagicMock())
-        mock_expander.__exit__ = MagicMock(return_value=None)
-        mock_st.expander = MagicMock(return_value=mock_expander)
-
-        # Mock session state with existing candidates and ratings
-        mock_features = np.random.randn(4, 25)
-        mock_st.session_state = MockSessionState(
-            {
-                "filtered_names": ["Anna", "Peter", "Maria", "John"],
-                "filtered_features": mock_features,
-                "candidate_queue": [],
-                "candidate_a": "Anna",
-                "candidate_b": "Peter",
-                "ratings": {"Anna": 1600, "Peter": 1550, "Maria": 1500, "John": 1450},
-            },
-        )
-
-        # Mock other UI functions
-        mock_display = MagicMock()
-
-        # Mock utility functions
-        mock_batch = [("Maria", "John"), ("Anna", "Maria")]  # New batch after vote
-
-        with (
-            patch("st_name_ranking.interface.ui.st", mock_st),
-            patch("st_name_ranking.interface.ui.display_name_with_rating", mock_display),
-            patch("st_name_ranking.interface.ui.get_names_features") as mock_get_features,
-            patch("st_name_ranking.interface.ui.select_candidate_batch") as mock_select_batch,
-            patch("st_name_ranking.interface.ui.update_preference_and_save") as mock_update,
-            patch("st_name_ranking.interface.ui.update_preference_draw_and_save") as mock_update_draw,
-            patch("st_name_ranking.interface.ui.render_preferences_panel"),
-            patch("st_name_ranking.interface.ui.INITIAL_SCORE", 1500),
-        ):
-            # Setup mocks
-            mock_get_features.return_value = mock_features
-            mock_select_batch.return_value = mock_batch
-
-            # Call with test names
-            test_names = ["Anna", "Peter", "Maria", "John"]
-            ui.render_tournament(test_names)
-
-            # Verify top tournament metadata
-            mock_st.write.assert_called_with(f"Comparing {len(test_names)} names")
-
-            # Verify update_preference_and_save was called with correct args
-            mock_update.assert_called_once_with(
-                mock_st.session_state.ratings,
-                "Anna",  # candidate_a is winner
-                "Peter",  # candidate_b is loser
-            )
-
-            # Verify new batch selected and first pair set as candidates
-            mock_select_batch.assert_called_with(test_names, mock_features, batch_size=3)
-            assert mock_st.session_state.candidate_a == "Maria"
-            assert mock_st.session_state.candidate_b == "John"
-            # Remaining pair stored in queue
-            assert mock_st.session_state.candidate_queue == [("Anna", "Maria")]
-
-            # Verify rerun called
-            mock_st.rerun.assert_called_once()
-
-            # Verify draw update NOT called
-            mock_update_draw.assert_not_called()
-
-            # Verify button was called with correct key
-            # Button should be called at least for vote_a, vote_b, vote_draw
-            assert mock_st.button.call_count >= 3
-            # Check that vote_a button was called with key="vote_a"
-            vote_a_calls = [call for call in mock_st.button.call_args_list if call[1].get("key") == "vote_a"]
-            assert len(vote_a_calls) >= 1
-
-    def test_render_tournament_vote_right(self):
-        """Test render_tournament when right button (vote B) is clicked."""
-        # Mock streamlit components
-        mock_st = MagicMock()
-        mock_st.header = MagicMock()
-        mock_st.write = MagicMock()
-        mock_st.caption = MagicMock()
-        mock_st.markdown = MagicMock()
-        mock_st.divider = MagicMock()
-        mock_st.subheader = MagicMock()
-
-        # Helper to create a mock column with context manager support
-        def create_mock_column():
-            mock_col = MagicMock()
-            mock_col.__enter__ = MagicMock(return_value=mock_col)
-            mock_col.__exit__ = MagicMock(return_value=None)
-            return mock_col
-
-        # Create mock columns for main layout (5 columns)
-        mock_col1 = create_mock_column()
-        mock_col2 = create_mock_column()
-        mock_col3 = create_mock_column()
-        mock_col4 = create_mock_column()
-        mock_col5 = create_mock_column()
-
-        # Create mock columns for draw button layout (3 columns)
-        mock_draw_col1 = create_mock_column()
-        mock_draw_col2 = create_mock_column()
-        mock_draw_col3 = create_mock_column()
-
-        # Create mock columns for top 10 layout (2 columns)
-        mock_top_col1 = create_mock_column()
-        mock_top_col2 = create_mock_column()
-
-        # Set up columns to return different values on each call
-        mock_st.columns = MagicMock(
-            side_effect=[
-                [mock_col1, mock_col2, mock_col3, mock_col4, mock_col5],  # First call: main layout
-                [mock_draw_col1, mock_draw_col2, mock_draw_col3],  # Second call: draw button
-                [mock_top_col1, mock_top_col2],  # Third call: top 10 layout
-            ],
-        )
-
-        # Mock container for button containers
-        mock_button_container = MagicMock()
-        mock_button_container.__enter__ = MagicMock(return_value=MagicMock())
-        mock_button_container.__exit__ = MagicMock(return_value=None)
-        mock_st.container = MagicMock(return_value=mock_button_container)
-
-        # Mock buttons: right button returns True, others False
-        button_calls = []
-
-        def button_side_effect(label=None, key=None, **kwargs):
-            button_calls.append((label, key))
-            if key == "vote_b":
-                return True
-            return False
-
-        mock_st.button = MagicMock(side_effect=button_side_effect)
-        mock_st.toast = MagicMock()
-        mock_st.rerun = MagicMock()
-        # Mock tabs to return 3 mock tab objects (for statistics section)
-        mock_st.tabs = MagicMock(return_value=[MagicMock(), MagicMock(), MagicMock()])
-
-        # Mock expander for statistics section
-        mock_expander = MagicMock()
-        mock_expander.__enter__ = MagicMock(return_value=MagicMock())
-        mock_expander.__exit__ = MagicMock(return_value=None)
-        mock_st.expander = MagicMock(return_value=mock_expander)
-
-        # Mock session state with existing candidates and ratings
-        mock_features = np.random.randn(4, 25)
-        mock_st.session_state = MockSessionState(
-            {
-                "filtered_names": ["Anna", "Peter", "Maria", "John"],
-                "filtered_features": mock_features,
-                "candidate_queue": [],
-                "candidate_a": "Anna",
-                "candidate_b": "Peter",
-                "ratings": {"Anna": 1600, "Peter": 1550, "Maria": 1500, "John": 1450},
-            },
-        )
-
-        # Mock utility functions
-        mock_batch = [("Maria", "John"), ("Anna", "Maria")]  # New batch after vote
-
-        with (
-            patch("st_name_ranking.interface.ui.st", mock_st),
-            patch("st_name_ranking.interface.ui.display_name_with_rating", MagicMock()),
-            patch("st_name_ranking.interface.ui.get_names_features") as mock_get_features,
-            patch("st_name_ranking.interface.ui.select_candidate_batch") as mock_select_batch,
-            patch("st_name_ranking.interface.ui.update_preference_and_save") as mock_update,
-            patch("st_name_ranking.interface.ui.update_preference_draw_and_save") as mock_update_draw,
-            patch("st_name_ranking.interface.ui.render_preferences_panel"),
-            patch("st_name_ranking.interface.ui.INITIAL_SCORE", 1500),
-        ):
-            # Setup mocks
-            mock_get_features.return_value = mock_features
-            mock_select_batch.return_value = mock_batch
-
-            # Call with test names
-            test_names = ["Anna", "Peter", "Maria", "John"]
-            ui.render_tournament(test_names)
-
-            # Verify update_preference_and_save was called with correct args
-            mock_update.assert_called_once_with(
-                mock_st.session_state.ratings,
-                "Peter",  # candidate_b is winner
-                "Anna",  # candidate_a is loser
-            )
-
-            # Verify new batch selected and first pair set as candidates
-            mock_select_batch.assert_called_with(test_names, mock_features, batch_size=3)
-            assert mock_st.session_state.candidate_a == "Maria"
-            assert mock_st.session_state.candidate_b == "John"
-            # Remaining pair stored in queue
-            assert mock_st.session_state.candidate_queue == [("Anna", "Maria")]
-
-            # Verify rerun called
-            mock_st.rerun.assert_called_once()
-
-            # Verify draw update NOT called
-            mock_update_draw.assert_not_called()
-
-    def test_render_tournament_vote_draw(self):
-        """Test render_tournament when draw button is clicked."""
-        # Mock streamlit components
-        mock_st = MagicMock()
-        mock_st.header = MagicMock()
-        mock_st.write = MagicMock()
-        mock_st.caption = MagicMock()
-        mock_st.markdown = MagicMock()
-        mock_st.divider = MagicMock()
-        mock_st.subheader = MagicMock()
-
-        # Helper to create a mock column with context manager support
-        def create_mock_column():
-            mock_col = MagicMock()
-            mock_col.__enter__ = MagicMock(return_value=mock_col)
-            mock_col.__exit__ = MagicMock(return_value=None)
-            return mock_col
-
-        # Create mock columns for main layout (5 columns)
-        mock_col1 = create_mock_column()
-        mock_col2 = create_mock_column()
-        mock_col3 = create_mock_column()
-        mock_col4 = create_mock_column()
-        mock_col5 = create_mock_column()
-
-        # Create mock columns for draw button layout (3 columns)
-        mock_draw_col1 = create_mock_column()
-        mock_draw_col2 = create_mock_column()
-        mock_draw_col3 = create_mock_column()
-
-        # Create mock columns for top 10 layout (2 columns)
-        mock_top_col1 = create_mock_column()
-        mock_top_col2 = create_mock_column()
-
-        # Set up columns to return different values on each call
-        mock_st.columns = MagicMock(
-            side_effect=[
-                [mock_col1, mock_col2, mock_col3, mock_col4, mock_col5],  # First call: main layout
-                [mock_draw_col1, mock_draw_col2, mock_draw_col3],  # Second call: draw button
-                [mock_top_col1, mock_top_col2],  # Third call: top 10 layout
-            ],
-        )
-
-        # Mock container for button containers
-        mock_button_container = MagicMock()
-        mock_button_container.__enter__ = MagicMock(return_value=MagicMock())
-        mock_button_container.__exit__ = MagicMock(return_value=None)
-        mock_st.container = MagicMock(return_value=mock_button_container)
-
-        # Mock buttons: draw button returns True, others False
-        button_calls = []
-
-        def button_side_effect(label=None, key=None, **kwargs):
-            button_calls.append((label, key))
-            if key == "vote_draw":
-                return True
-            return False
-
-        mock_st.button = MagicMock(side_effect=button_side_effect)
-        mock_st.toast = MagicMock()
-        mock_st.rerun = MagicMock()
-        # Mock tabs to return 3 mock tab objects (for statistics section)
-        mock_st.tabs = MagicMock(return_value=[MagicMock(), MagicMock(), MagicMock()])
-
-        # Mock expander for statistics section
-        mock_expander = MagicMock()
-        mock_expander.__enter__ = MagicMock(return_value=MagicMock())
-        mock_expander.__exit__ = MagicMock(return_value=None)
-        mock_st.expander = MagicMock(return_value=mock_expander)
-
-        # Session state with candidates
-        mock_features = np.random.randn(4, 25)
-        mock_st.session_state = MockSessionState(
-            {
-                "filtered_names": ["Anna", "Peter", "Maria", "John"],
-                "filtered_features": mock_features,
-                "candidate_queue": [],
-                "candidate_a": "Anna",
-                "candidate_b": "Peter",
-                "ratings": {"Anna": 1600, "Peter": 1550},
-            },
-        )
-
-        # Mock utility functions
-        mock_batch = [("Maria", "John"), ("Anna", "Maria")]  # New batch after vote
-
-        # Update session state to use mock_features
-        mock_st.session_state.filtered_features = mock_features
-
-        with (
-            patch("st_name_ranking.interface.ui.st", mock_st),
-            patch("st_name_ranking.interface.ui.display_name_with_rating", MagicMock()),
-            patch("st_name_ranking.interface.ui.get_names_features") as mock_get_features,
-            patch("st_name_ranking.interface.ui.select_candidate_batch") as mock_select_batch,
-            patch("st_name_ranking.interface.ui.update_preference_and_save") as mock_update,
-            patch("st_name_ranking.interface.ui.update_preference_draw_and_save") as mock_update_draw,
-            patch("st_name_ranking.interface.ui.render_preferences_panel"),
-            patch("st_name_ranking.interface.ui.INITIAL_SCORE", 1500),
-        ):
-            # Setup mocks
-            mock_get_features.return_value = mock_features
-            mock_select_batch.return_value = mock_batch
-
-            # Call with test names
-            test_names = ["Anna", "Peter", "Maria", "John"]
-            ui.render_tournament(test_names)
-
-            # Verify update_preference_draw_and_save was called with correct args
-            mock_update_draw.assert_called_once_with(
-                mock_st.session_state.ratings,
-                "Anna",
-                "Peter",
-            )
-
-            # Verify toast shown for draw
-            mock_st.toast.assert_called_once_with("🤝 you chose a draw!", duration="long")
-
-            # Verify new batch selected and first pair set as candidates
-            mock_select_batch.assert_called_with(test_names, mock_features, batch_size=3)
-            assert mock_st.session_state.candidate_a == "Maria"
-            assert mock_st.session_state.candidate_b == "John"
-            # Remaining pair stored in queue
-            assert mock_st.session_state.candidate_queue == [("Anna", "Maria")]
-
-            # Verify rerun called
-            mock_st.rerun.assert_called_once()
-
-            # Verify regular update NOT called
-            mock_update.assert_not_called()
-
-    def test_render_tournament_queue_management(self):
-        """Test render_tournament candidate queue scenarios."""
-        # Test 1: candidate_queue missing from session state (should be initialized)
-        mock_st = MagicMock()
-        mock_st.header = MagicMock()
-        mock_st.write = MagicMock()
-        mock_st.caption = MagicMock()
-        mock_st.markdown = MagicMock()
-        mock_st.divider = MagicMock()
-        mock_st.subheader = MagicMock()
-
-        # Helper to create a mock column with context manager support
-        def create_mock_column():
-            mock_col = MagicMock()
-            mock_col.__enter__ = MagicMock(return_value=mock_col)
-            mock_col.__exit__ = MagicMock(return_value=None)
-            return mock_col
-
-        # Create mock columns
-        mock_col1 = create_mock_column()
-        mock_col2 = create_mock_column()
-        mock_col3 = create_mock_column()
-        mock_col4 = create_mock_column()
-        mock_col5 = create_mock_column()
-        mock_draw_col1 = create_mock_column()
-        mock_draw_col2 = create_mock_column()
-        mock_draw_col3 = create_mock_column()
-        mock_top_col1 = create_mock_column()
-        mock_top_col2 = create_mock_column()
-
-        mock_st.columns = MagicMock(
-            side_effect=[
-                [mock_col1, mock_col2, mock_col3, mock_col4, mock_col5],
-                [mock_draw_col1, mock_draw_col2, mock_draw_col3],
-                [mock_top_col1, mock_top_col2],
-            ],
-        )
-
-        mock_st.container = MagicMock(return_value=MagicMock())
-        mock_st.button = MagicMock(return_value=False)  # No clicks
-        mock_st.toast = MagicMock()
-        mock_st.rerun = MagicMock()
-        # Mock tabs to return 3 mock tab objects (for statistics section)
-        mock_st.tabs = MagicMock(return_value=[MagicMock(), MagicMock(), MagicMock()])
-
-        # Mock expander for statistics section
-        mock_expander = MagicMock()
-        mock_expander.__enter__ = MagicMock(return_value=MagicMock())
-        mock_expander.__exit__ = MagicMock(return_value=None)
-        mock_st.expander = MagicMock(return_value=mock_expander)
-
-        # Session state WITHOUT candidate_queue key
-        mock_features = np.random.randn(4, 25)  # 4 names, 25 features
-        mock_st.session_state = MockSessionState(
-            {
-                "filtered_names": ["Anna", "Peter", "Maria", "John"],
-                "filtered_features": mock_features,
-                # candidate_queue missing
-                "candidate_a": "",
-                "candidate_b": "",
-                "ratings": {},
-            },
-        )
-
-        mock_batch = [("Anna", "Peter"), ("Maria", "John")]
-
-        with (
-            patch("st_name_ranking.interface.ui.st", mock_st),
-            patch("st_name_ranking.interface.ui.display_name_with_rating", MagicMock()),
-            patch("st_name_ranking.interface.ui.get_names_features") as mock_get_features,
-            patch("st_name_ranking.interface.ui.select_candidates") as mock_select_candidates,
-            patch("st_name_ranking.interface.ui.select_candidate_batch") as mock_select_batch,
-            patch("st_name_ranking.interface.ui.update_preference_and_save"),
-            patch("st_name_ranking.interface.ui.update_preference_draw_and_save"),
-            patch("st_name_ranking.interface.ui.render_preferences_panel"),
-            patch("st_name_ranking.interface.ui.INITIAL_SCORE", 1500),
-        ):
-            mock_get_features.return_value = mock_features
-            mock_select_candidates.return_value = ("Anna", "Peter")
-            mock_select_batch.return_value = mock_batch
-
-            test_names = ["Anna", "Peter", "Maria", "John"]
-            ui.render_tournament(test_names)
-
-            # Verify candidate_queue was initialized (added to session state)
-            assert "candidate_queue" in mock_st.session_state
-            # select_candidates called to get initial pair when candidates empty
-            mock_select_candidates.assert_called_with(test_names, mock_features)
-            # select_candidate_batch called to pre-fill queue
-            mock_select_batch.assert_called_with(test_names, mock_features, batch_size=3)
-            # Queue contains full batch (initialization doesn't pop like button handlers do)
-            assert mock_st.session_state.candidate_queue == [("Anna", "Peter"), ("Maria", "John")]
-            assert mock_st.session_state.candidate_a == "Anna"
-            assert mock_st.session_state.candidate_b == "Peter"
-
-    def test_render_tournament_queue_has_pairs(self):
-        """Test render_tournament when candidate_queue has pairs and candidates invalid."""
-        mock_st = MagicMock()
-        mock_st.header = MagicMock()
-        mock_st.write = MagicMock()
-        mock_st.caption = MagicMock()
-        mock_st.markdown = MagicMock()
-        mock_st.divider = MagicMock()
-        mock_st.subheader = MagicMock()
-
-        def create_mock_column():
-            mock_col = MagicMock()
-            mock_col.__enter__ = MagicMock(return_value=mock_col)
-            mock_col.__exit__ = MagicMock(return_value=None)
-            return mock_col
-
-        mock_col1 = create_mock_column()
-        mock_col2 = create_mock_column()
-        mock_col3 = create_mock_column()
-        mock_col4 = create_mock_column()
-        mock_col5 = create_mock_column()
-        mock_draw_col1 = create_mock_column()
-        mock_draw_col2 = create_mock_column()
-        mock_draw_col3 = create_mock_column()
-        mock_top_col1 = create_mock_column()
-        mock_top_col2 = create_mock_column()
-
-        mock_st.columns = MagicMock(
-            side_effect=[
-                [mock_col1, mock_col2, mock_col3, mock_col4, mock_col5],
-                [mock_draw_col1, mock_draw_col2, mock_draw_col3],
-                [mock_top_col1, mock_top_col2],
-            ],
-        )
-
-        mock_st.container = MagicMock(return_value=MagicMock())
-        mock_st.button = MagicMock(return_value=False)
-        mock_st.toast = MagicMock()
-        mock_st.rerun = MagicMock()
-        # Mock tabs to return 3 mock tab objects (for statistics section)
-        mock_st.tabs = MagicMock(return_value=[MagicMock(), MagicMock(), MagicMock()])
-
-        # Mock expander for statistics section
-        mock_expander = MagicMock()
-        mock_expander.__enter__ = MagicMock(return_value=MagicMock())
-        mock_expander.__exit__ = MagicMock(return_value=None)
-        mock_st.expander = MagicMock(return_value=mock_expander)
-
-        # Session state with queue containing pairs and valid candidates
-        mock_features = np.random.randn(4, 25)  # 4 names, 25 features
-        mock_st.session_state = MockSessionState(
-            {
-                "filtered_names": ["Anna", "Peter", "Maria", "John"],
-                "filtered_features": mock_features,
-                "candidate_queue": [("Anna", "Peter"), ("Maria", "John")],
-                "candidate_a": "Alice",  # Valid existing candidates
-                "candidate_b": "Bob",
-                "ratings": {},
-            },
+        vote_result = VoteResult(
+            previous_pair=("Anna", "Bo"),
+            next_pair=("Maria", "Peter"),
+            pair_source="queue",
+            update_status=ModelUpdateStatus(recorded=True, model_updated=False, ratings_fresh=True),
         )
 
         with (
             patch("st_name_ranking.interface.ui.st", mock_st),
-            patch("st_name_ranking.interface.ui.display_name_with_rating", MagicMock()),
-            patch("st_name_ranking.interface.ui.get_names_features") as mock_get_features,
-            patch("st_name_ranking.interface.ui.select_candidate_batch") as mock_select_batch,
-            patch("st_name_ranking.interface.ui.update_preference_and_save"),
-            patch("st_name_ranking.interface.ui.update_preference_draw_and_save"),
-            patch("st_name_ranking.interface.ui.render_preferences_panel"),
-            patch("st_name_ranking.interface.ui.INITIAL_SCORE", 1500),
+            patch("st_name_ranking.interface.tournament_session.st", mock_st),
+            patch("st_name_ranking.interface.ui.display_name_with_rating") as mock_display,
+            patch("st_name_ranking.interface.ui.get_or_start_tournament_queue", return_value=manager),
+            patch("st_name_ranking.interface.ui.get_current_pair", return_value=("Anna", "Bo")),
+            patch(
+                "st_name_ranking.interface.ui.get_queue_manager_stats",
+                return_value={"queue_size": 1, "target_size": 5},
+            ),
+            patch("st_name_ranking.interface.ui.prepare_tournament_round", return_value=round_state),
+            patch("st_name_ranking.interface.ui.record_tournament_vote", return_value=vote_result) as mock_record_vote,
         ):
-            mock_get_features.return_value = mock_features
+            _render_tournament_body(names)
 
-            test_names = ["Anna", "Peter", "Maria", "John"]
-            ui.render_tournament(test_names)
+        mock_record_vote.assert_called_once_with(names, manager, "Anna", "Bo", -1)
+        assert mock_st.session_state.candidate_a == "Maria"
+        assert mock_st.session_state.candidate_b == "Peter"
+        displayed_names = [call.args[0] for call in mock_display.call_args_list]
+        assert displayed_names == ["Maria", "Peter", "Maria", "Peter"]
 
-            # Should NOT call select_candidate_batch since candidates are already valid
-            mock_select_batch.assert_not_called()
-            # Existing candidates should remain (queue is preserved for later use)
-            assert mock_st.session_state.candidate_a == "Alice"
-            assert mock_st.session_state.candidate_b == "Bob"
-            # Queue should remain intact
-            assert mock_st.session_state.candidate_queue == [("Anna", "Peter"), ("Maria", "John")]
-
-    def test_render_tournament_filtered_names_change(self):
-        """Test render_tournament when filtered names change (clears queue)."""
-        mock_st = MagicMock()
-        mock_st.header = MagicMock()
-        mock_st.write = MagicMock()
-        mock_st.caption = MagicMock()
-        mock_st.markdown = MagicMock()
-        mock_st.divider = MagicMock()
-        mock_st.subheader = MagicMock()
-
-        def create_mock_column():
-            mock_col = MagicMock()
-            mock_col.__enter__ = MagicMock(return_value=mock_col)
-            mock_col.__exit__ = MagicMock(return_value=None)
-            return mock_col
-
-        mock_col1 = create_mock_column()
-        mock_col2 = create_mock_column()
-        mock_col3 = create_mock_column()
-        mock_col4 = create_mock_column()
-        mock_col5 = create_mock_column()
-        mock_draw_col1 = create_mock_column()
-        mock_draw_col2 = create_mock_column()
-        mock_draw_col3 = create_mock_column()
-        mock_top_col1 = create_mock_column()
-        mock_top_col2 = create_mock_column()
-
-        mock_st.columns = MagicMock(
-            side_effect=[
-                [mock_col1, mock_col2, mock_col3, mock_col4, mock_col5],
-                [mock_draw_col1, mock_draw_col2, mock_draw_col3],
-                [mock_top_col1, mock_top_col2],
-            ],
+    def test_render_tournament_failed_vote_keeps_pair_and_toasts(self):
+        """A failed vote result leaves the current pair visible instead of advancing."""
+        mock_st = _mock_tournament_streamlit(clicked_key="vote_b")
+        manager = MagicMock(target_size=5)
+        names = ["Anna", "Bo", "Maria", "Peter"]
+        round_state = TournamentRound(
+            manager=manager,
+            candidate_a="Anna",
+            candidate_b="Bo",
+            queue_stats={"queue_size": 1, "target_size": 5},
         )
-
-        mock_st.container = MagicMock(return_value=MagicMock())
-        mock_st.button = MagicMock(return_value=False)
-        mock_st.toast = MagicMock()
-        mock_st.rerun = MagicMock()
-        # Mock tabs to return 3 mock tab objects (for statistics section)
-        mock_st.tabs = MagicMock(return_value=[MagicMock(), MagicMock(), MagicMock()])
-
-        # Mock expander for statistics section
-        mock_expander = MagicMock()
-        mock_expander.__enter__ = MagicMock(return_value=MagicMock())
-        mock_expander.__exit__ = MagicMock(return_value=None)
-        mock_st.expander = MagicMock(return_value=mock_expander)
-
-        # Session state with filtered_names different from current names
-        # filtered_names has old list, queue has pairs from old list
-        mock_st.session_state = MockSessionState(
-            {
-                "filtered_names": ["Anna", "Peter"],  # Old subset
-                "filtered_features": np.random.randn(2, 25),
-                "candidate_queue": [("Anna", "Peter")],
-                "candidate_a": "Anna",
-                "candidate_b": "Peter",
-                "ratings": {},
-            },
+        vote_result = VoteResult(
+            previous_pair=("Anna", "Bo"),
+            next_pair=("Anna", "Bo"),
+            pair_source="unchanged",
+            update_status=ModelUpdateStatus(
+                recorded=False,
+                model_updated=False,
+                ratings_fresh=False,
+                fallback_used=True,
+                error="database locked",
+            ),
         )
-
-        # We'll mock get_names_features to return new features for new names
-        mock_features = np.random.randn(4, 25)
-        with (
-            patch("st_name_ranking.interface.ui.st", mock_st),
-            patch("st_name_ranking.interface.ui.display_name_with_rating", MagicMock()),
-            patch("st_name_ranking.interface.ui.get_names_features") as mock_get_features,
-            patch("st_name_ranking.interface.ui.select_candidate_batch") as mock_select_batch,
-            patch("st_name_ranking.interface.ui.update_preference_and_save"),
-            patch("st_name_ranking.interface.ui.update_preference_draw_and_save"),
-            patch("st_name_ranking.interface.ui.render_preferences_panel"),
-            patch("st_name_ranking.interface.ui.INITIAL_SCORE", 1500),
-        ):
-            mock_get_features.return_value = mock_features
-            mock_select_batch.return_value = [("Maria", "John")]
-
-            # Call with NEW names (different from filtered_names)
-            test_names = ["Anna", "Peter", "Maria", "John"]
-            ui.render_tournament(test_names)
-
-            # Features should be computed for new names
-            mock_get_features.assert_called_with(test_names)
-            # Queue is preserved since candidates are still valid (in names_set)
-            # Note: Code doesn't currently detect filtered_names change to clear queue
-            assert mock_st.session_state.candidate_queue == [("Anna", "Peter")]
-            # Candidates remain unchanged since they're valid (not empty, in names_set)
-            assert mock_st.session_state.candidate_a == "Anna"
-            assert mock_st.session_state.candidate_b == "Peter"
-            # select_candidate_batch not called because candidates are still valid
-            mock_select_batch.assert_not_called()
-
-    def test_render_tournament_fallback_selection(self):
-        """Test render_tournament fallback when valid_batch is empty."""
-        mock_st = MagicMock()
-        mock_st.header = MagicMock()
-        mock_st.write = MagicMock()
-        mock_st.caption = MagicMock()
-        mock_st.markdown = MagicMock()
-        mock_st.divider = MagicMock()
-        mock_st.subheader = MagicMock()
-
-        def create_mock_column():
-            mock_col = MagicMock()
-            mock_col.__enter__ = MagicMock(return_value=mock_col)
-            mock_col.__exit__ = MagicMock(return_value=None)
-            return mock_col
-
-        mock_col1 = create_mock_column()
-        mock_col2 = create_mock_column()
-        mock_col3 = create_mock_column()
-        mock_col4 = create_mock_column()
-        mock_col5 = create_mock_column()
-        mock_draw_col1 = create_mock_column()
-        mock_draw_col2 = create_mock_column()
-        mock_draw_col3 = create_mock_column()
-        mock_top_col1 = create_mock_column()
-        mock_top_col2 = create_mock_column()
-
-        mock_st.columns = MagicMock(
-            side_effect=[
-                [mock_col1, mock_col2, mock_col3, mock_col4, mock_col5],
-                [mock_draw_col1, mock_draw_col2, mock_draw_col3],
-                [mock_top_col1, mock_top_col2],
-            ],
-        )
-
-        mock_st.container = MagicMock(return_value=MagicMock())
-        mock_st.button = MagicMock(return_value=False)
-        mock_st.toast = MagicMock()
-        mock_st.rerun = MagicMock()
-        # Mock tabs to return 3 mock tab objects (for statistics section)
-        mock_st.tabs = MagicMock(return_value=[MagicMock(), MagicMock(), MagicMock()])
-
-        # Mock expander for statistics section
-        mock_expander = MagicMock()
-        mock_expander.__enter__ = MagicMock(return_value=MagicMock())
-        mock_expander.__exit__ = MagicMock(return_value=None)
-        mock_st.expander = MagicMock(return_value=mock_expander)
-
-        # Session state with empty candidates
-        mock_features = np.random.randn(4, 25)
-        mock_st.session_state = MockSessionState(
-            {
-                "filtered_names": ["Anna", "Peter", "Maria", "John"],
-                "filtered_features": mock_features,
-                "candidate_queue": [],
-                "candidate_a": "",
-                "candidate_b": "",
-                "ratings": {},
-            },
-        )
-        # Mock batch with pairs where names are NOT in filtered names (should be filtered out)
-        # Actually batch returns pairs from names list, but we can mock to return invalid pairs
-        # To simulate edge case where names_set filtering removes all pairs
-        invalid_batch = [("X", "Y"), ("Z", "W")]
-        valid_fallback_pair = ("Anna", "Peter")
 
         with (
             patch("st_name_ranking.interface.ui.st", mock_st),
-            patch("st_name_ranking.interface.ui.display_name_with_rating", MagicMock()),
-            patch("st_name_ranking.interface.ui.get_names_features") as mock_get_features,
-            patch("st_name_ranking.interface.ui.select_candidate_batch") as mock_select_batch,
-            patch("st_name_ranking.interface.ui.select_candidates") as mock_select_candidates,
-            patch("st_name_ranking.interface.ui.update_preference_and_save"),
-            patch("st_name_ranking.interface.ui.update_preference_draw_and_save"),
-            patch("st_name_ranking.interface.ui.render_preferences_panel"),
-            patch("st_name_ranking.interface.ui.INITIAL_SCORE", 1500),
+            patch("st_name_ranking.interface.tournament_session.st", mock_st),
+            patch("st_name_ranking.interface.ui.display_name_with_rating") as mock_display,
+            patch("st_name_ranking.interface.ui.get_or_start_tournament_queue", return_value=manager),
+            patch("st_name_ranking.interface.ui.get_current_pair", return_value=("Anna", "Bo")),
+            patch(
+                "st_name_ranking.interface.ui.get_queue_manager_stats",
+                return_value={"queue_size": 1, "target_size": 5},
+            ),
+            patch("st_name_ranking.interface.ui.prepare_tournament_round", return_value=round_state),
+            patch("st_name_ranking.interface.ui.record_tournament_vote", return_value=vote_result) as mock_record_vote,
         ):
-            mock_get_features.return_value = mock_features
-            mock_select_batch.return_value = invalid_batch
-            mock_select_candidates.return_value = valid_fallback_pair
+            _render_tournament_body(names)
 
-            test_names = ["Anna", "Peter", "Maria", "John"]
-            ui.render_tournament(test_names)
-
-            # select_candidate_batch called with batch_size=3
-            mock_select_batch.assert_called_with(test_names, mock_features, batch_size=3)
-            # valid_batch empty after filtering, so select_candidates called
-            mock_select_candidates.assert_called_with(test_names, mock_features)
-            # Candidates set to fallback pair
-            assert mock_st.session_state.candidate_a == "Anna"
-            assert mock_st.session_state.candidate_b == "Peter"
-            # Queue remains empty
-            assert mock_st.session_state.candidate_queue == []
-
-    def test_render_tournament_button_click_fallback(self):
-        """Test button click with empty valid_batch (fallback to select_candidates)."""
-        # Similar to vote_left test but with invalid batch
-        mock_st = MagicMock()
-        mock_st.header = MagicMock()
-        mock_st.write = MagicMock()
-        mock_st.caption = MagicMock()
-        mock_st.markdown = MagicMock()
-        mock_st.divider = MagicMock()
-        mock_st.subheader = MagicMock()
-
-        def create_mock_column():
-            mock_col = MagicMock()
-            mock_col.__enter__ = MagicMock(return_value=mock_col)
-            mock_col.__exit__ = MagicMock(return_value=None)
-            return mock_col
-
-        mock_col1 = create_mock_column()
-        mock_col2 = create_mock_column()
-        mock_col3 = create_mock_column()
-        mock_col4 = create_mock_column()
-        mock_col5 = create_mock_column()
-        mock_draw_col1 = create_mock_column()
-        mock_draw_col2 = create_mock_column()
-        mock_draw_col3 = create_mock_column()
-        mock_top_col1 = create_mock_column()
-        mock_top_col2 = create_mock_column()
-
-        mock_st.columns = MagicMock(
-            side_effect=[
-                [mock_col1, mock_col2, mock_col3, mock_col4, mock_col5],
-                [mock_draw_col1, mock_draw_col2, mock_draw_col3],
-                [mock_top_col1, mock_top_col2],
-            ],
-        )
-
-        mock_st.container = MagicMock(return_value=MagicMock())
-        # Mock left button clicked
-        button_calls = []
-
-        def button_side_effect(label=None, key=None, **kwargs):
-            button_calls.append((label, key))
-            if key == "vote_a":
-                return True
-            return False
-
-        mock_st.button = MagicMock(side_effect=button_side_effect)
-        mock_st.toast = MagicMock()
-        mock_st.rerun = MagicMock()
-        # Mock tabs to return 3 mock tab objects (for statistics section)
-        mock_st.tabs = MagicMock(return_value=[MagicMock(), MagicMock(), MagicMock()])
-
-        # Mock expander for statistics section
-        mock_expander = MagicMock()
-        mock_expander.__enter__ = MagicMock(return_value=MagicMock())
-        mock_expander.__exit__ = MagicMock(return_value=None)
-        mock_st.expander = MagicMock(return_value=mock_expander)
-
-        # Session state with candidates
-        mock_features = np.random.randn(4, 25)
-        mock_st.session_state = MockSessionState(
-            {
-                "filtered_names": ["Anna", "Peter", "Maria", "John"],
-                "filtered_features": mock_features,
-                "candidate_queue": [],
-                "candidate_a": "Anna",
-                "candidate_b": "Peter",
-                "ratings": {"Anna": 1600, "Peter": 1550},
-            },
-        )
-
-        invalid_batch = [("X", "Y")]
-        valid_fallback_pair = ("Maria", "John")
-
-        with (
-            patch("st_name_ranking.interface.ui.st", mock_st),
-            patch("st_name_ranking.interface.ui.display_name_with_rating", MagicMock()),
-            patch("st_name_ranking.interface.ui.get_names_features") as mock_get_features,
-            patch("st_name_ranking.interface.ui.select_candidate_batch") as mock_select_batch,
-            patch("st_name_ranking.interface.ui.select_candidates") as mock_select_candidates,
-            patch("st_name_ranking.interface.ui.update_preference_and_save") as mock_update,
-            patch("st_name_ranking.interface.ui.update_preference_draw_and_save"),
-            patch("st_name_ranking.interface.ui.render_preferences_panel"),
-            patch("st_name_ranking.interface.ui.INITIAL_SCORE", 1500),
-        ):
-            mock_get_features.return_value = mock_features
-            mock_select_batch.return_value = invalid_batch
-            mock_select_candidates.return_value = valid_fallback_pair
-
-            test_names = ["Anna", "Peter", "Maria", "John"]
-            ui.render_tournament(test_names)
-
-            # update_preference_and_save called
-            mock_update.assert_called_once_with(
-                mock_st.session_state.ratings,
-                "Anna",
-                "Peter",
-            )
-            # select_candidate_batch called after vote
-            mock_select_batch.assert_called_with(test_names, mock_features, batch_size=3)
-            # valid_batch empty, so select_candidates called
-            mock_select_candidates.assert_called_with(test_names, mock_features)
-            # Candidates set to fallback pair
-            assert mock_st.session_state.candidate_a == "Maria"
-            assert mock_st.session_state.candidate_b == "John"
-            # Queue remains empty
-            assert mock_st.session_state.candidate_queue == []
-            # rerun called
-            mock_st.rerun.assert_called_once()
-
-    def test_render_tournament_button_click_fallback_right(self):
-        """Test right button click with empty valid_batch (fallback to select_candidates)."""
-        mock_st = MagicMock()
-        mock_st.header = MagicMock()
-        mock_st.write = MagicMock()
-        mock_st.caption = MagicMock()
-        mock_st.markdown = MagicMock()
-        mock_st.divider = MagicMock()
-        mock_st.subheader = MagicMock()
-
-        def create_mock_column():
-            mock_col = MagicMock()
-            mock_col.__enter__ = MagicMock(return_value=mock_col)
-            mock_col.__exit__ = MagicMock(return_value=None)
-            return mock_col
-
-        mock_col1 = create_mock_column()
-        mock_col2 = create_mock_column()
-        mock_col3 = create_mock_column()
-        mock_col4 = create_mock_column()
-        mock_col5 = create_mock_column()
-        mock_draw_col1 = create_mock_column()
-        mock_draw_col2 = create_mock_column()
-        mock_draw_col3 = create_mock_column()
-        mock_top_col1 = create_mock_column()
-        mock_top_col2 = create_mock_column()
-
-        mock_st.columns = MagicMock(
-            side_effect=[
-                [mock_col1, mock_col2, mock_col3, mock_col4, mock_col5],
-                [mock_draw_col1, mock_draw_col2, mock_draw_col3],
-                [mock_top_col1, mock_top_col2],
-            ],
-        )
-
-        mock_st.container = MagicMock(return_value=MagicMock())
-        # Mock right button clicked
-        button_calls = []
-
-        def button_side_effect(label=None, key=None, **kwargs):
-            button_calls.append((label, key))
-            if key == "vote_b":
-                return True
-            return False
-
-        mock_st.button = MagicMock(side_effect=button_side_effect)
-        mock_st.toast = MagicMock()
-        mock_st.rerun = MagicMock()
-        # Mock tabs to return 3 mock tab objects (for statistics section)
-        mock_st.tabs = MagicMock(return_value=[MagicMock(), MagicMock(), MagicMock()])
-
-        # Mock expander for statistics section
-        mock_expander = MagicMock()
-        mock_expander.__enter__ = MagicMock(return_value=MagicMock())
-        mock_expander.__exit__ = MagicMock(return_value=None)
-        mock_st.expander = MagicMock(return_value=mock_expander)
-
-        # Session state with candidates
-        mock_features = np.random.randn(4, 25)
-        mock_st.session_state = MockSessionState(
-            {
-                "filtered_names": ["Anna", "Peter", "Maria", "John"],
-                "filtered_features": mock_features,
-                "candidate_queue": [],
-                "candidate_a": "Anna",
-                "candidate_b": "Peter",
-                "ratings": {"Anna": 1600, "Peter": 1550},
-            },
-        )
-
-        invalid_batch = [("X", "Y")]
-        valid_fallback_pair = ("Maria", "John")
-
-        with (
-            patch("st_name_ranking.interface.ui.st", mock_st),
-            patch("st_name_ranking.interface.ui.display_name_with_rating", MagicMock()),
-            patch("st_name_ranking.interface.ui.get_names_features") as mock_get_features,
-            patch("st_name_ranking.interface.ui.select_candidate_batch") as mock_select_batch,
-            patch("st_name_ranking.interface.ui.select_candidates") as mock_select_candidates,
-            patch("st_name_ranking.interface.ui.update_preference_and_save") as mock_update,
-            patch("st_name_ranking.interface.ui.update_preference_draw_and_save"),
-            patch("st_name_ranking.interface.ui.render_preferences_panel"),
-            patch("st_name_ranking.interface.ui.INITIAL_SCORE", 1500),
-        ):
-            mock_get_features.return_value = mock_features
-            mock_select_batch.return_value = invalid_batch
-            mock_select_candidates.return_value = valid_fallback_pair
-
-            test_names = ["Anna", "Peter", "Maria", "John"]
-            ui.render_tournament(test_names)
-
-            # update_preference_and_save called with reversed winner/loser
-            mock_update.assert_called_once_with(
-                mock_st.session_state.ratings,
-                "Peter",  # candidate_b is winner
-                "Anna",  # candidate_a is loser
-            )
-            # select_candidate_batch called after vote
-            mock_select_batch.assert_called_with(test_names, mock_features, batch_size=3)
-            # valid_batch empty, so select_candidates called
-            mock_select_candidates.assert_called_with(test_names, mock_features)
-            # Candidates set to fallback pair
-            assert mock_st.session_state.candidate_a == "Maria"
-            assert mock_st.session_state.candidate_b == "John"
-            # Queue remains empty
-            assert mock_st.session_state.candidate_queue == []
-            # rerun called
-            mock_st.rerun.assert_called_once()
-
-    def test_render_tournament_button_click_fallback_draw(self):
-        """Test draw button click with empty valid_batch (fallback to select_candidates)."""
-        mock_st = MagicMock()
-        mock_st.header = MagicMock()
-        mock_st.write = MagicMock()
-        mock_st.caption = MagicMock()
-        mock_st.markdown = MagicMock()
-        mock_st.divider = MagicMock()
-        mock_st.subheader = MagicMock()
-
-        def create_mock_column():
-            mock_col = MagicMock()
-            mock_col.__enter__ = MagicMock(return_value=mock_col)
-            mock_col.__exit__ = MagicMock(return_value=None)
-            return mock_col
-
-        mock_col1 = create_mock_column()
-        mock_col2 = create_mock_column()
-        mock_col3 = create_mock_column()
-        mock_col4 = create_mock_column()
-        mock_col5 = create_mock_column()
-        mock_draw_col1 = create_mock_column()
-        mock_draw_col2 = create_mock_column()
-        mock_draw_col3 = create_mock_column()
-        mock_top_col1 = create_mock_column()
-        mock_top_col2 = create_mock_column()
-
-        mock_st.columns = MagicMock(
-            side_effect=[
-                [mock_col1, mock_col2, mock_col3, mock_col4, mock_col5],
-                [mock_draw_col1, mock_draw_col2, mock_draw_col3],
-                [mock_top_col1, mock_top_col2],
-            ],
-        )
-
-        mock_st.container = MagicMock(return_value=MagicMock())
-        # Mock draw button clicked
-        button_calls = []
-
-        def button_side_effect(label=None, key=None, **kwargs):
-            button_calls.append((label, key))
-            if key == "vote_draw":
-                return True
-            return False
-
-        mock_st.button = MagicMock(side_effect=button_side_effect)
-        mock_st.toast = MagicMock()
-        mock_st.rerun = MagicMock()
-        # Mock tabs to return 3 mock tab objects (for statistics section)
-        mock_st.tabs = MagicMock(return_value=[MagicMock(), MagicMock(), MagicMock()])
-
-        # Mock expander for statistics section
-        mock_expander = MagicMock()
-        mock_expander.__enter__ = MagicMock(return_value=MagicMock())
-        mock_expander.__exit__ = MagicMock(return_value=None)
-        mock_st.expander = MagicMock(return_value=mock_expander)
-
-        # Session state with candidates
-        mock_features = np.random.randn(4, 25)
-        mock_st.session_state = MockSessionState(
-            {
-                "filtered_names": ["Anna", "Peter", "Maria", "John"],
-                "filtered_features": mock_features,
-                "candidate_queue": [],
-                "candidate_a": "Anna",
-                "candidate_b": "Peter",
-                "ratings": {"Anna": 1600, "Peter": 1550},
-            },
-        )
-
-        invalid_batch = [("X", "Y")]
-        valid_fallback_pair = ("Maria", "John")
-
-        with (
-            patch("st_name_ranking.interface.ui.st", mock_st),
-            patch("st_name_ranking.interface.ui.display_name_with_rating", MagicMock()),
-            patch("st_name_ranking.interface.ui.get_names_features") as mock_get_features,
-            patch("st_name_ranking.interface.ui.select_candidate_batch") as mock_select_batch,
-            patch("st_name_ranking.interface.ui.select_candidates") as mock_select_candidates,
-            patch("st_name_ranking.interface.ui.update_preference_and_save") as mock_update,
-            patch("st_name_ranking.interface.ui.update_preference_draw_and_save") as mock_update_draw,
-            patch("st_name_ranking.interface.ui.render_preferences_panel"),
-            patch("st_name_ranking.interface.ui.INITIAL_SCORE", 1500),
-        ):
-            mock_get_features.return_value = mock_features
-            mock_select_batch.return_value = invalid_batch
-            mock_select_candidates.return_value = valid_fallback_pair
-
-            test_names = ["Anna", "Peter", "Maria", "John"]
-            ui.render_tournament(test_names)
-
-            # update_preference_draw_and_save called
-            mock_update_draw.assert_called_once_with(
-                mock_st.session_state.ratings,
-                "Anna",
-                "Peter",
-            )
-            # toast shown
-            mock_st.toast.assert_called_once_with("🤝 you chose a draw!", duration="long")
-            # select_candidate_batch called after vote
-            mock_select_batch.assert_called_with(test_names, mock_features, batch_size=3)
-            # valid_batch empty, so select_candidates called
-            mock_select_candidates.assert_called_with(test_names, mock_features)
-            # Candidates set to fallback pair
-            assert mock_st.session_state.candidate_a == "Maria"
-            assert mock_st.session_state.candidate_b == "John"
-            # Queue remains empty
-            assert mock_st.session_state.candidate_queue == []
-            # rerun called
-            mock_st.rerun.assert_called_once()
-            # regular update NOT called
-            mock_update.assert_not_called()
+        mock_record_vote.assert_called_once_with(names, manager, "Anna", "Bo", 1)
+        assert mock_st.session_state.candidate_a == "Anna"
+        assert mock_st.session_state.candidate_b == "Bo"
+        mock_st.toast.assert_called_once_with("Vote was not saved: database locked", icon="❌", duration="long")
+        displayed_names = [call.args[0] for call in mock_display.call_args_list]
+        assert displayed_names == ["Anna", "Bo", "Anna", "Bo"]
 
     def test_render_rankings_skips_landscape_with_small_sample(self):
         """Test rankings keeps table behavior and skips landscape for small samples."""
