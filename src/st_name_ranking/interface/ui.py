@@ -23,6 +23,7 @@ from st_name_ranking.interface.filter_state import (
     get_excluded_names,
     get_included_names,
     get_undecided_names,
+    load_name_inclusions_json,
     set_many_filter_statuses,
 )
 from st_name_ranking.interface.rankings_data import (
@@ -817,9 +818,9 @@ def _load_cached_name_inclusions() -> dict[str, bool]:
 
     try:
         inclusions_json = load_user_setting("name_inclusions", "{}")
-        st.session_state.name_inclusions = json.loads(inclusions_json)
+        st.session_state.name_inclusions = load_name_inclusions_json(inclusions_json)
         logger.debug("Loaded %d inclusions from database", len(st.session_state.name_inclusions))
-    except json.JSONDecodeError:
+    except TypeError:
         st.session_state.name_inclusions = {}
     st.session_state[cache_key] = True
     return st.session_state.name_inclusions

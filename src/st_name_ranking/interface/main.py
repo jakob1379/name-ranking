@@ -16,6 +16,7 @@ from st_name_ranking.interface.app_actions import (
     setup_session_state,
     sync_names_from_submodule,
 )
+from st_name_ranking.interface.filter_state import load_name_inclusions_json
 from st_name_ranking.interface.ui import render_binary_filter, render_rankings, render_similarity, render_tournament
 from st_name_ranking.persistence import database
 from st_name_ranking.persistence.data_loader import DataLoaderError, load_names_by_gender
@@ -411,16 +412,9 @@ def resolve_filtered_names() -> list[str] | None:
     return filtered_names
 
 
-def _load_name_inclusions() -> dict:
+def _load_name_inclusions() -> dict[str, bool]:
     inclusions_json = database.load_user_setting("name_inclusions", "{}")
-    inclusions = {}
-    try:
-        loaded = json.loads(inclusions_json)
-        if isinstance(loaded, dict):
-            inclusions = loaded
-    except json.JSONDecodeError as e:
-        logger.warning("Failed to parse inclusions JSON: %s", e)
-    return inclusions
+    return load_name_inclusions_json(inclusions_json)
 
 
 def _get_included_names(filtered_names: list[str]) -> list[str]:

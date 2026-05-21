@@ -10,6 +10,7 @@ from st_name_ranking.interface.filter_state import (
     get_excluded_names,
     get_included_names,
     get_undecided_names,
+    load_name_inclusions_json,
     set_many_filter_statuses,
 )
 from st_name_ranking.interface.rankings_data import (
@@ -46,6 +47,18 @@ def test_filter_state_counts_and_transitions() -> None:
     changed = set_many_filter_statuses(inclusions, ["Maria", "Jens"], status=True)
     assert changed == 2
     assert inclusions == {"Anna": True, "Peter": False, "Maria": True, "Jens": True}
+
+
+def test_load_name_inclusions_json_accepts_only_str_bool_maps() -> None:
+    assert load_name_inclusions_json('{"Anna": true, "Peter": false}') == {
+        "Anna": True,
+        "Peter": False,
+    }
+
+    assert load_name_inclusions_json('["Anna", true]') == {}
+    assert load_name_inclusions_json('{"Anna": "true"}') == {}
+    assert load_name_inclusions_json('{"Anna": true, "Peter": null}') == {}
+    assert load_name_inclusions_json("{invalid json") == {}
 
 
 def test_preference_percentage_dataframe() -> None:

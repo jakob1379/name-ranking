@@ -1,6 +1,8 @@
 """Pure helpers for the binary name-filter workflow."""
 
+import json
 from dataclasses import dataclass
+from typing import Any
 
 
 @dataclass(frozen=True)
@@ -10,6 +12,24 @@ class FilterCounts:
     not_decided: int
     included: int
     excluded: int
+
+
+def load_name_inclusions_json(inclusions_json: str) -> dict[str, bool]:
+    """Decode a stored include/exclude map only when every entry has the expected shape."""
+    try:
+        decoded: Any = json.loads(inclusions_json)
+    except (json.JSONDecodeError, TypeError):
+        return {}
+
+    if not isinstance(decoded, dict):
+        return {}
+
+    inclusions: dict[str, bool] = {}
+    for name, status in decoded.items():
+        if not isinstance(name, str) or not isinstance(status, bool):
+            return {}
+        inclusions[name] = status
+    return inclusions
 
 
 def count_filter_statuses(names: list[str], inclusions: dict[str, bool]) -> FilterCounts:
