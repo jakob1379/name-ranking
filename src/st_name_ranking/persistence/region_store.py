@@ -1,20 +1,18 @@
 """Region mapping seed data for the persistence schema."""
 
 import sqlite3
+from collections.abc import Mapping
 
-
-def insert_default_region_mapping(conn: sqlite3.Connection) -> None:
-    """Insert default nationality -> region mapping."""
-    # Nordic countries
-    nordic = [
+DEFAULT_REGION_COUNTRIES: Mapping[str, tuple[str, ...]] = {
+    "Nordic": (
         "Denmark",
         "Norway",
         "Sweden",
         "Iceland",
         "Finland",
         "Faroe Islands",
-    ]
-    european = [
+    ),
+    "European": (
         "Germany",
         "France",
         "Italy",
@@ -51,9 +49,8 @@ def insert_default_region_mapping(conn: sqlite3.Connection) -> None:
         "Montenegro",
         "Macedonia",
         "Kosovo",
-    ]
-    # Middle Eastern
-    middle_eastern = [
+    ),
+    "Middle Eastern": (
         "Egypt",
         "Turkey",
         "Iran",
@@ -72,9 +69,8 @@ def insert_default_region_mapping(conn: sqlite3.Connection) -> None:
         "Bahrain",
         "Afghanistan",
         "Pakistan",
-    ]
-    # Asian
-    asian = [
+    ),
+    "Asian": (
         "China",
         "Japan",
         "South Korea",
@@ -97,9 +93,8 @@ def insert_default_region_mapping(conn: sqlite3.Connection) -> None:
         "Taiwan",
         "Hong Kong",
         "Mongolia",
-    ]
-    # African
-    african = [
+    ),
+    "African": (
         "Nigeria",
         "Ethiopia",
         "Egypt",
@@ -123,9 +118,8 @@ def insert_default_region_mapping(conn: sqlite3.Connection) -> None:
         "Zimbabwe",
         "Tunisia",
         "Libya",
-    ]
-    # American
-    american = [
+    ),
+    "American": (
         "United States",
         "Canada",
         "Mexico",
@@ -156,9 +150,8 @@ def insert_default_region_mapping(conn: sqlite3.Connection) -> None:
         "Honduras",
         "El Salvador",
         "Guatemala",
-    ]
-    # Oceanian
-    oceanian = [
+    ),
+    "Oceanian": (
         "Australia",
         "New Zealand",
         "Fiji",
@@ -173,17 +166,13 @@ def insert_default_region_mapping(conn: sqlite3.Connection) -> None:
         "Kiribati",
         "Tuvalu",
         "Nauru",
-    ]
+    ),
+}
 
-    mappings = [
-        *[("Nordic", country) for country in nordic],
-        *[("European", country) for country in european],
-        *[("Middle Eastern", country) for country in middle_eastern],
-        *[("Asian", country) for country in asian],
-        *[("African", country) for country in african],
-        *[("American", country) for country in american],
-        *[("Oceanian", country) for country in oceanian],
-    ]
+
+def insert_default_region_mapping(conn: sqlite3.Connection) -> None:
+    """Insert default nationality -> region mapping."""
+    mappings = [(region, country) for region, countries in DEFAULT_REGION_COUNTRIES.items() for country in countries]
 
     conn.executemany(
         "INSERT OR IGNORE INTO region_mapping (region, nationality) VALUES (?, ?)",
