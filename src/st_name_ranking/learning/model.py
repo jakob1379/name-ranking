@@ -13,13 +13,13 @@ from functools import lru_cache
 
 import numpy as np
 
+from st_name_ranking.learning.pair_selection import MIN_NAMES_FOR_PAIR_SELECTION
 from st_name_ranking.persistence.database import get_connection, get_phonetic_codes_batch
 from st_name_ranking.types import NamePair, PhoneticCodes
 
 logger = logging.getLogger(__name__)
 
 # Model constants
-MIN_NAMES_FOR_PAIR_SELECTION = 2
 MIN_CROSS_CLUSTER_PAIRS = 10
 UTILITY_DIFFERENCE_THRESHOLD = 0.1
 TRIVIAL_COMPARISON_PENALTY = 0.5

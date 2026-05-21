@@ -6,7 +6,7 @@ import logging
 import sqlite3
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any, Protocol
+from typing import Any, Protocol, TypedDict
 
 from st_name_ranking.persistence.connection import MAX_SQL_PARAMS, get_connection
 from st_name_ranking.types import FeatureSetRecord, FeatureValues
@@ -29,6 +29,23 @@ class FeatureCacheRebuildResult:
     feature_set_id: int
     processed: int
     deleted: int = 0
+
+
+class FeatureSetCacheStats(TypedDict):
+    """Coverage counters for one feature-set cache."""
+
+    version: str
+    is_active: bool
+    cached_count: int
+    missing_count: int
+    coverage_pct: float
+
+
+class FeatureCacheStats(TypedDict):
+    """Aggregate feature-cache coverage counters."""
+
+    total_names: int
+    feature_sets: list[FeatureSetCacheStats]
 
 
 class CorruptFeatureCacheError(RuntimeError):
@@ -384,7 +401,7 @@ def is_features_computed(name_id: int, feature_set_id: int) -> bool:
         return cursor.fetchone() is not None
 
 
-def get_feature_cache_stats() -> dict:
+def get_feature_cache_stats() -> FeatureCacheStats:
     """Get aggregate feature-cache coverage statistics."""
     with get_connection() as conn:
         total_names = conn.execute("SELECT COUNT(*) FROM names").fetchone()[0]
@@ -397,7 +414,7 @@ def get_feature_cache_stats() -> dict:
             ORDER BY fs.created_at DESC
         """)
 
-        feature_set_stats = []
+        feature_set_stats: list[FeatureSetCacheStats] = []
         for row in cursor:
             cached = row[2]
             feature_set_stats.append(

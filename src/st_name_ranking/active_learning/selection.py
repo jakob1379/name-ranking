@@ -11,6 +11,7 @@ import numpy as np
 
 from st_name_ranking.learning.features import FeatureExtractor
 from st_name_ranking.learning.model import BradleyTerryModel, initialize_model_if_needed
+from st_name_ranking.learning.pair_selection import MIN_NAMES_FOR_PAIR_SELECTION
 from st_name_ranking.persistence import database
 from st_name_ranking.phonetic_similarity import phonetic_similarity
 
@@ -19,7 +20,6 @@ logger = logging.getLogger(__name__)
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-MIN_NAMES_FOR_PAIR_SELECTION = 2
 DEFAULT_PAIR_SAMPLE_SIZE = 50
 _ACTIVE_LEARNING_STATE_LOCK = threading.RLock()
 

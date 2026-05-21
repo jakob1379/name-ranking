@@ -9,11 +9,11 @@ from collections import deque
 from typing import Final
 
 from st_name_ranking.active_learning.selection import PairSelectionOptions, select_candidate_batch
+from st_name_ranking.learning.pair_selection import MIN_NAMES_FOR_PAIR_SELECTION
 
 logger = logging.getLogger(__name__)
 
 MIN_TRAINING_SAMPLES: Final[int] = 10
-MIN_NAMES_FOR_PAIR_SELECTION: Final[int] = 2
 MS_PER_SECOND: Final[int] = 1000
 
 
