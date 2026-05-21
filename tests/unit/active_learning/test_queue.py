@@ -28,6 +28,7 @@ def test_queue_manager_refill_adds_model_selected_pairs(monkeypatch):
     stats = manager.get_stats()
     assert stats["refill_count"] == 1
     assert stats["last_refill_added"] == 2
+    assert stats["thread_alive"] is False
     select_batch.assert_called_once()
     options = select_batch.call_args.kwargs["options"]
     assert options.batch_size == 3

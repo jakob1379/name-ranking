@@ -63,7 +63,7 @@ def get_or_start_queue_manager(
     return manager
 
 
-def get_queue_manager_stats() -> dict[str, int | float | str] | None:
+def get_queue_manager_stats() -> dict[str, int | float | bool | str] | None:
     """Return stats for the current session queue manager."""
     manager = get_session_queue_manager()
     if manager is None:
@@ -72,11 +72,10 @@ def get_queue_manager_stats() -> dict[str, int | float | str] | None:
     return build_queue_manager_stats(manager)
 
 
-def build_queue_manager_stats(manager: QueueManager) -> dict[str, int | float | str]:
+def build_queue_manager_stats(manager: QueueManager) -> dict[str, int | float | bool | str]:
     """Return UI-ready stats for a queue manager."""
-    stats: dict[str, int | float | str] = manager.get_stats()
+    stats: dict[str, int | float | bool | str] = manager.get_stats()
     stats["num_names"] = len(manager.names)
-    stats["thread_alive"] = manager._worker_thread is not None and manager._worker_thread.is_alive()
     return stats
 
 

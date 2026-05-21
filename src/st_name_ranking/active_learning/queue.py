@@ -96,7 +96,11 @@ class QueueManager:
         with self._lock:
             return len(self.queue)
 
-    def get_stats(self) -> dict[str, int | float]:
+    def is_running(self) -> bool:
+        """Return whether the background filler thread is currently alive."""
+        return self._worker_thread is not None and self._worker_thread.is_alive()
+
+    def get_stats(self) -> dict[str, int | float | bool]:
         """Get queue and refill stats (thread-safe)."""
         with self._lock:
             return {
@@ -109,6 +113,7 @@ class QueueManager:
                 "avg_refill_ms": self.avg_refill_ms,
                 "last_refill_added": self.last_refill_added,
                 "last_refill_timestamp": self.last_refill_timestamp,
+                "thread_alive": self.is_running(),
             }
 
     def _fill_queue_continuously(self) -> None:
@@ -181,5 +186,5 @@ class QueueManager:
     def __repr__(self) -> str:
         with self._lock:
             queue_size = len(self.queue)
-        thread_status = "running" if self._worker_thread and self._worker_thread.is_alive() else "stopped"
+        thread_status = "running" if self.is_running() else "stopped"
         return f"QueueManager(target_size={self.target_size}, current_size={queue_size}, thread={thread_status})"
