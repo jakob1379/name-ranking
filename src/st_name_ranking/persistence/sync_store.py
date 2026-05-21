@@ -2,7 +2,7 @@
 
 import logging
 import shutil
-import subprocess
+import subprocess  # nosec B404 - sync reads git metadata from the checked-out submodule.
 from pathlib import Path
 
 from metaphone import doublemetaphone
@@ -83,7 +83,7 @@ def _current_submodule_commit(submodule_path: Path) -> str:
             msg = "Git executable not found"
             raise RuntimeError(msg)
 
-        result = subprocess.run(  # noqa: S603
+        result = subprocess.run(  # noqa: S603  # nosec B603 - resolved executable, fixed args.
             [git_executable, "-C", str(submodule_path), "rev-parse", "HEAD"],
             check=False,
             capture_output=True,

@@ -4,7 +4,6 @@ Benchmark origin classification performance with phonetic caching.
 """
 
 import logging
-import random
 import sys
 import time
 from pathlib import Path
@@ -86,10 +85,9 @@ def main() -> None:
         print("   Not enough unclassified names for benchmark.")
         return
 
-    # Select random subset for benchmark
+    # Select a stable spread across the result set so repeated benchmark runs compare like for like.
     sample_size = min(1000, len(unclassified))
-    random.seed(42)
-    sampled = random.sample(unclassified, sample_size)
+    sampled = [unclassified[index * len(unclassified) // sample_size] for index in range(sample_size)]
     sampled_names = [item.name for item in sampled]
 
     print(f"4. Benchmarking classification of {sample_size} names...")

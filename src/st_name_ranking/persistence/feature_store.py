@@ -13,6 +13,8 @@ from st_name_ranking.types import FeatureSetRecord, FeatureValues, ProgressCallb
 
 logger = logging.getLogger(__name__)
 
+MAX_SQLITE_TABLE_LOOKUP_NAMES = 2
+
 
 @dataclass(frozen=True)
 class FeatureCacheRebuildResult:
@@ -342,11 +344,19 @@ def get_feature_stats() -> FeatureStatusStats:
 
 
 def _existing_tables(conn: sqlite3.Connection, table_names: set[str]) -> set[str]:
-    placeholders = ", ".join(["?"] * len(table_names))
-    cursor = conn.execute(
-        f"SELECT name FROM sqlite_master WHERE type='table' AND name IN ({placeholders})",
-        tuple(table_names),
-    )
+    sorted_names = tuple(sorted(table_names))
+    if not sorted_names:
+        return set()
+
+    if len(sorted_names) == 1:
+        query = "SELECT name FROM sqlite_master WHERE type='table' AND name = ?"
+    elif len(sorted_names) == MAX_SQLITE_TABLE_LOOKUP_NAMES:
+        query = "SELECT name FROM sqlite_master WHERE type='table' AND name IN (?, ?)"
+    else:
+        msg = "_existing_tables supports at most two table names"
+        raise ValueError(msg)
+
+    cursor = conn.execute(query, sorted_names)
     return {row[0] for row in cursor.fetchall()}
 
 

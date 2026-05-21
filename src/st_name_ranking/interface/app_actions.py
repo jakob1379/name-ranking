@@ -1,7 +1,8 @@
 """Streamlit-facing application actions."""
 
 import logging
-import subprocess
+import shutil
+import subprocess  # nosec B404 - Streamlit action shells out only to a resolved git executable.
 import time
 
 import streamlit as st
@@ -16,10 +17,15 @@ logger = logging.getLogger(__name__)
 def pull_submodule_updates(*, classify_origins: bool = False) -> bool:
     """Pull latest submodule data, sync names, and optionally classify origins."""
     logger.debug("Pulling submodule updates, classify_origins=%s", classify_origins)
+    git_executable = shutil.which("git")
+    if git_executable is None:
+        st.toast("Git executable not found", icon="❌", duration="long")
+        return False
+
     try:
         with st.spinner("Pulling latest name data from git submodule..."):
-            result = subprocess.run(
-                ["git", "-C", "godkendtefornavne", "pull"],  # noqa: S607
+            result = subprocess.run(  # noqa: S603  # nosec B603 - resolved executable, fixed args.
+                [git_executable, "-C", "godkendtefornavne", "pull"],
                 check=False,
                 capture_output=True,
                 text=True,
