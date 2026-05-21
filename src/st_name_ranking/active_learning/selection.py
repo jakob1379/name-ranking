@@ -145,19 +145,13 @@ def select_candidate_batch(
     names: list[str],
     features: np.ndarray | None = None,
     batch_size: int = 3,
-    sample_size: int | None = None,
-    options: PairSelectionOptions | None = None,
 ) -> list[tuple[str, str]]:
-    """Select a batch of candidate pairs for active learning.
-
-    sample_size limits model ranking to a random subset; None uses
-    DEFAULT_PAIR_SAMPLE_SIZE capped to the number of candidate names.
-    """
-    resolved_options = options or PairSelectionOptions(
-        batch_size=batch_size,
-        sample_size=sample_size,
+    """Select a batch of candidate pairs for active learning."""
+    return select_candidate_pairs(
+        names,
+        features,
+        PairSelectionOptions(batch_size=batch_size),
     )
-    return select_candidate_pairs(names, features, resolved_options)
 
 
 def select_candidate_pairs(

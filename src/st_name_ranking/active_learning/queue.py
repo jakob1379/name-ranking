@@ -8,7 +8,12 @@ import time
 from collections import deque
 from typing import Final
 
-from st_name_ranking.active_learning.selection import PairSelectionOptions, select_candidate_batch
+from st_name_ranking.active_learning.selection import (
+    PairSelectionOptions,
+)
+from st_name_ranking.active_learning.selection import (
+    select_candidate_pairs as select_candidate_batch,
+)
 from st_name_ranking.learning.pair_selection import MIN_NAMES_FOR_PAIR_SELECTION
 
 logger = logging.getLogger(__name__)
