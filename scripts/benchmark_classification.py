@@ -13,8 +13,6 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from st_name_ranking.types import UnclassifiedName
 
-logging.basicConfig(level=logging.WARNING)
-
 
 def benchmark_reference_names_load() -> tuple[
     dict[str, tuple[str, float, str, str]],
@@ -54,7 +52,9 @@ def benchmark_classification_batch(
     return total_names, elapsed
 
 
-def main():
+def main() -> None:
+    logging.basicConfig(level=logging.WARNING)
+
     # Add src to Python path for imports
     src_path = Path(__file__).parent.parent / "src"
     sys.path.insert(0, str(src_path))

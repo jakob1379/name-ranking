@@ -4,13 +4,12 @@ Check phonetic code population status in database.
 """
 
 import sqlite3
-from pathlib import Path
 
-DB_PATH = Path("data/names.db")
+from st_name_ranking.persistence.connection import get_db_path
 
 
-def main():
-    conn = sqlite3.connect(DB_PATH)
+def main() -> None:
+    conn = sqlite3.connect(get_db_path())
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
 

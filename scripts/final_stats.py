@@ -3,7 +3,7 @@ import sys
 from pathlib import Path
 
 
-def main():
+def main() -> None:
     # Add src to Python path for imports
     src_path = Path(__file__).parent.parent / "src"
     sys.path.insert(0, str(src_path))
