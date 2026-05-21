@@ -20,7 +20,7 @@ def test_queue_manager_refill_adds_model_selected_pairs(monkeypatch):
             ("Clara", "Dana"),
         ],
     )
-    monkeypatch.setattr(queue, "select_candidate_batch", select_batch)
+    monkeypatch.setattr(queue, "select_candidate_pairs", select_batch)
 
     manager._refill_queue()
 
@@ -46,7 +46,7 @@ def test_queue_manager_refill_ignores_existing_pairs_in_reverse_order(monkeypatc
     manager.queue.append(("Anna", "Bo"))
     monkeypatch.setattr(
         queue,
-        "select_candidate_batch",
+        "select_candidate_pairs",
         Mock(return_value=[("Bo", "Anna"), ("Anna", "Clara")]),
     )
 
@@ -66,7 +66,7 @@ def test_queue_manager_refill_normalizes_reversed_existing_queue_pairs(monkeypat
     manager.queue.append(("Bo", "Anna"))
     monkeypatch.setattr(
         queue,
-        "select_candidate_batch",
+        "select_candidate_pairs",
         Mock(return_value=[("Anna", "Bo"), ("Bo", "Clara")]),
     )
 
@@ -83,7 +83,7 @@ def test_queue_manager_refill_without_pairs_leaves_stats_unchanged(monkeypatch):
         refill_threshold=1,
         sample_size=2,
     )
-    monkeypatch.setattr(queue, "select_candidate_batch", Mock(return_value=[]))
+    monkeypatch.setattr(queue, "select_candidate_pairs", Mock(return_value=[]))
 
     manager._refill_queue()
 
@@ -102,7 +102,7 @@ def test_queue_manager_get_pair_pops_pairs_in_order(monkeypatch):
     )
     monkeypatch.setattr(
         queue,
-        "select_candidate_batch",
+        "select_candidate_pairs",
         Mock(return_value=[("Anna", "Bo"), ("Bo", "Clara")]),
     )
     manager._refill_queue()

@@ -113,7 +113,10 @@ def select_candidates(
     sample_size: int | None = None,
     dependencies: PairSelectionDependencies | None = None,
 ) -> tuple[str, str]:
-    """Select one active-learning candidate pair.
+    """Compatibility wrapper for selecting one active-learning pair.
+
+    New code should call select_candidate_pairs(..., PairSelectionOptions(batch_size=1)).
+    Remove this wrapper with the deprecated top-level compatibility surface in 0.3.0.
 
     sample_size limits model ranking to a random subset; None uses
     DEFAULT_PAIR_SAMPLE_SIZE capped to the number of candidate names.
@@ -131,7 +134,11 @@ def try_select_candidates(
     sample_size: int | None = None,
     dependencies: PairSelectionDependencies | None = None,
 ) -> tuple[str, str] | None:
-    """Select one candidate pair, or return None when no pair is available."""
+    """Compatibility wrapper returning one candidate pair, or None.
+
+    New code should call select_candidate_pairs(..., PairSelectionOptions(batch_size=1)).
+    Remove this wrapper with the deprecated top-level compatibility surface in 0.3.0.
+    """
     pairs = select_candidate_pairs(
         names,
         features,
@@ -139,19 +146,6 @@ def try_select_candidates(
         dependencies,
     )
     return pairs[0] if pairs else None
-
-
-def select_candidate_batch(
-    names: list[str],
-    features: np.ndarray | None = None,
-    batch_size: int = 3,
-) -> list[tuple[str, str]]:
-    """Select a batch of candidate pairs for active learning."""
-    return select_candidate_pairs(
-        names,
-        features,
-        PairSelectionOptions(batch_size=batch_size),
-    )
 
 
 def select_candidate_pairs(

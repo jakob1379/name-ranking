@@ -10,8 +10,9 @@ from unittest.mock import patch
 import numpy as np
 
 from st_name_ranking.active_learning.selection import (
+    PairSelectionOptions,
     get_or_create_feature_extractor,
-    select_candidate_batch,
+    select_candidate_pairs,
     select_candidates,
 )
 from st_name_ranking.learning.model import (
@@ -430,7 +431,7 @@ class TestBatchSelection:
                 NamePair(idx_a=3, idx_b=5, name_a="Petra", name_b="Jonas"),
             ]
 
-            pairs = select_candidate_batch(names, batch_size=3)
+            pairs = select_candidate_pairs(names, options=PairSelectionOptions(batch_size=3))
 
         # Verify pairs are unique
         pair_set = set()
@@ -476,7 +477,7 @@ class TestBatchSelection:
                 ]
                 mock_model.select_top_k_pairs.return_value = mock_pairs
 
-                pairs = select_candidate_batch(names, batch_size=batch_size)
+                pairs = select_candidate_pairs(names, options=PairSelectionOptions(batch_size=batch_size))
                 assert len(pairs) == batch_size, f"Expected {batch_size} pairs, got {len(pairs)}"
 
 

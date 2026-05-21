@@ -10,9 +10,7 @@ from typing import Final
 
 from st_name_ranking.active_learning.selection import (
     PairSelectionOptions,
-)
-from st_name_ranking.active_learning.selection import (
-    select_candidate_pairs as select_candidate_batch,
+    select_candidate_pairs,
 )
 from st_name_ranking.learning.pair_selection import MIN_NAMES_FOR_PAIR_SELECTION
 
@@ -145,7 +143,7 @@ class QueueManager:
         if needed <= 0:
             return
 
-        pairs = select_candidate_batch(
+        pairs = select_candidate_pairs(
             self.names,
             options=PairSelectionOptions(
                 batch_size=needed,

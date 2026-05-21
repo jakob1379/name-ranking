@@ -301,8 +301,8 @@ class TestSelectCandidates:
         assert (a, b) == ("Anna", "Peter")
 
 
-class TestSelectCandidateBatch:
-    """Tests for select_candidate_batch function."""
+class TestSelectCandidatePairs:
+    """Tests for batch selection through select_candidate_pairs."""
 
     def test_select_batch_success(self):
         """Test successful batch selection."""

@@ -222,16 +222,6 @@ class FeatureCacheOptions:
     use_cache: bool = True
 
 
-@dataclass(frozen=True)
-class FeatureBatchContext:
-    """Metadata and cache controls for extracting a name batch."""
-
-    genders: Sequence[str | None] | None = None
-    origin_regions: Sequence[str | None] | None = None
-    name_ids: Sequence[int | None] | None = None
-    use_cache: bool = True
-
-
 def extract_suffix_features(name: str) -> dict[str, float]:
     """Extract suffix and prefix-based gender cue features.
 
@@ -629,35 +619,20 @@ class FeatureExtractor:
         names: list[str],
         genders: Sequence[str | None] | None = None,
         origin_regions: Sequence[str | None] | None = None,
-        context: FeatureBatchContext | None = None,
-        **legacy_options: object,
+        *,
+        name_ids: Sequence[int | None] | None = None,
+        use_cache: bool = True,
     ) -> np.ndarray:
         """Extract feature vectors as an array of shape (n_names, n_features)."""
-        name_ids = legacy_options.pop("name_ids", None)
-        use_cache = legacy_options.pop("use_cache", True)
-        if legacy_options:
-            unknown = ", ".join(sorted(legacy_options))
-            msg = f"Unknown batch_extract option(s): {unknown}"
-            raise TypeError(msg)
-        if name_ids is not None and not isinstance(name_ids, Sequence):
-            msg = "name_ids must be a sequence when provided"
-            raise TypeError(msg)
-        if context is None:
-            context = FeatureBatchContext(
-                genders=genders,
-                origin_regions=origin_regions,
-                name_ids=name_ids,
-                use_cache=bool(use_cache),
-            )
-        genders = _metadata_sequence(names, context.genders, "genders")
-        origin_regions = _metadata_sequence(names, context.origin_regions, "origin_regions")
-        name_ids = _metadata_sequence(names, context.name_ids, "name_ids")
+        genders = _metadata_sequence(names, genders, "genders")
+        origin_regions = _metadata_sequence(names, origin_regions, "origin_regions")
+        name_ids = _metadata_sequence(names, name_ids, "name_ids")
 
         vectors = []
         for name, gender, origin, name_id in zip(names, genders, origin_regions, name_ids, strict=True):
             cache_options = FeatureCacheOptions(
                 name_id=name_id,
-                use_cache=context.use_cache,
+                use_cache=use_cache,
             )
             vectors.append(self.extract(name, gender, origin, cache_options))
 
