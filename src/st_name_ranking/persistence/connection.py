@@ -11,6 +11,7 @@ if TYPE_CHECKING:
     from collections.abc import Iterator
 
 DB_PATH = Path("data/names.db")
+DB_PATH.parent.mkdir(parents=True, exist_ok=True)
 _INIT_STATE = {"db_initialized": False, "db_path": None}
 
 INITIAL_SCORE = 1500.0
