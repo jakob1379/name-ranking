@@ -2,16 +2,34 @@
 
 [![Docs](https://img.shields.io/badge/docs-live-2ea44f)](https://jakob1379.github.io/name-ranking)
 
-Rank Danish names using **Bayesian preference learning**.
+Find the Danish names you actually like by answering one easy question at a
+time: _this one or that one?_
+
+<p align="center">
+  <img src=".github/assets/preference-loop.svg" width="960" alt="The preference loop: you prefer Freja over Alma with the left arrow key, the Bayesian Bradley-Terry model's uncertainty narrows, Freja moves to the top of the ranking, and Thompson sampling picks the next pair, Ida and Karla">
+</p>
+
+## Why
+
+The official list of approved Danish first names runs to thousands of entries.
+Nobody can score that many names one by one, but anyone can say which of two
+names they prefer.
+
+Name Ranking is a local Streamlit app that turns those quick pairwise votes into
+a full ranking. It describes every name by its features (phonetics, syllables,
+letter patterns, gender, origin region), learns which features you favour with a
+**Bayesian Bradley–Terry model**, and uses **Thompson sampling** to show you the
+pair that teaches the model the most. Names you never voted on still get ranked.
 
 ## Quickstart
 
-You need **Python 3.12 or 3.13** and **Git**.
+You need **Python 3.12 or 3.13**, **Git** and
+[uv](https://github.com/astral-sh/uv).
 
 ```bash
-# Clone with submodules
-$ git clone --recurse-submodules https://github.com/yourusername/sort-names.git
-$ cd sort-names
+# Clone with submodules (the name list lives in a Git submodule)
+$ git clone --recurse-submodules https://github.com/jakob1379/name-ranking.git
+$ cd name-ranking
 
 # Install dependencies
 $ uv sync
@@ -36,9 +54,31 @@ $ uv run st-name-ranking serve
 
 Open **http://localhost:8501** in your browser.
 
-### Feature Cache Management
+## Using it
 
-The application **pre-computes features** for all names during initialization:
+The **Tournament** view shows:
+
+1. Two names side by side
+2. Vote buttons: **← Prefer Left**, **Draw**, **Down**, **Prefer Right →**
+3. Top 10 rankings that update after each vote
+4. A **Tournament sample size** selector (50, 100, 500, 1000, 2000, 3000, ...,
+   **N**)
+5. A queue status line with **green/yellow/red** refill latency, **last/avg
+   ms**, and queue fill
+
+Vote faster with the arrow keys:
+
+| Key   | Vote                |
+| ----- | ------------------- |
+| **←** | Prefer left         |
+| **→** | Prefer right        |
+| **↑** | Draw                |
+| **↓** | Dislike both (Down) |
+
+## Feature cache
+
+`db init` pre-computes features for every name. Rebuild them after changing
+feature engineering:
 
 ```bash
 # Rebuild features after feature engineering changes
@@ -54,29 +94,16 @@ Feature sets: 1
 Active version: 20250224_120000
 ```
 
-## What You See
+Other `db` commands: `stats`, `model status`, `model reset`, `origins classify`
+and `import`.
 
-1. Two names side-by-side
-2. Vote buttons: **← Prefer Left**, **Draw**, **Down**, **Prefer Right →**
-3. Top 10 rankings update after each vote
-4. A **Tournament sample size** selector (50, 100, 500, 1000, 2000, 3000, ...,
-   **N**)
-5. A queue status line with **green/yellow/red** refill latency, **last/avg
-   ms**, and queue fill
+## Learn more
 
-Use **arrow keys** for rapid voting:
-
-- **←** Prefer left
-- **→** Prefer right
-- **↑** Draw
-- **↓** Dislike both
-
-## Next Steps
-
-- Read the [Tutorial](docs/tutorial.md) for a complete walkthrough
-- Learn about the [Active Learning System](docs/active_learning.md)
-- See [System Architecture](docs/architecture.md) for technical details
-- View all [Features](docs/features.md)
+- [Tutorial](docs/tutorial.md): a complete walkthrough
+- [Active Learning System](docs/active_learning.md): the model, Thompson
+  sampling and feature engineering
+- [System Architecture](docs/architecture.md): components and data flow
+- [Features](docs/features.md): everything the app can do
 
 ## Requirements
 

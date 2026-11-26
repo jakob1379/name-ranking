@@ -1,0 +1,173 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 372" width="960" height="372" role="img" aria-labelledby="t d">
+  <title id="t">How Name Ranking learns your taste</title>
+  <desc id="d">You prefer Freja over Alma with the left arrow key. The vote updates a Bayesian Bradley-Terry model whose uncertainty narrows, Freja climbs to the top of your ranking, and Thompson sampling picks the next pair, Ida and Karla.</desc>
+  <style>
+    :root {
+      --bg: #eef3f6;
+      --panel: #ffffff;
+      --ink: #1b2a3a;
+      --muted: #5d6f80;
+      --line: #c9d5de;
+      --accent: #c8102e;
+      --accent-soft: rgba(200, 16, 46, 0.12);
+      --sea: #2f7d6d;
+      --sea-soft: rgba(47, 125, 109, 0.16);
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0f1b26;
+        --panel: #172736;
+        --ink: #e6eef4;
+        --muted: #93a6b6;
+        --line: #2c4152;
+        --accent: #ff5a6e;
+        --accent-soft: rgba(255, 90, 110, 0.16);
+        --sea: #5cc2a8;
+        --sea-soft: rgba(92, 194, 168, 0.18);
+      }
+    }
+    .bg { fill: var(--bg); }
+    .card { fill: var(--panel); stroke: var(--line); stroke-width: 1.5; }
+    .serif { font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, "Times New Roman", serif; }
+    .sans { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+    .name { fill: var(--ink); font-size: 30px; }
+    .row-name { fill: var(--ink); font-size: 19px; }
+    .rank { fill: var(--muted); font-size: 14px; }
+    .step { fill: var(--accent); font-size: 15px; font-weight: 700; }
+    .cap { fill: var(--ink); font-size: 16px; font-weight: 600; }
+    .sub { fill: var(--muted); font-size: 13px; }
+    .key { fill: var(--panel); stroke: var(--line); stroke-width: 1.5; }
+    .key-glyph { fill: var(--muted); font-size: 16px; }
+    .axis { stroke: var(--line); stroke-width: 1.5; }
+    .prior { fill: none; stroke: var(--muted); stroke-width: 1.5; stroke-dasharray: 4 5; opacity: 0.7; }
+    .post { fill: var(--sea-soft); stroke: var(--sea); stroke-width: 2.5; }
+    .arc { fill: none; stroke: var(--sea); stroke-width: 2; stroke-linecap: round; }
+    .arc-head { fill: var(--sea); }
+    .arc-label { fill: var(--sea); font-size: 13px; font-weight: 600; }
+
+    .pick { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 2.5; opacity: 0; animation: pick 10s infinite; }
+    .dim { animation: dim 10s infinite; }
+    .key-l { animation: key 10s infinite; }
+    .key-gl { animation: keygl 10s infinite; }
+    .vote { fill: var(--accent); opacity: 0; animation: vote 10s infinite; }
+    .narrow { transform-box: fill-box; transform-origin: 50% 100%; animation: narrow 10s infinite; }
+    .up2 { animation: up2 10s infinite; }
+    .down1 { animation: down1 10s infinite; }
+    .rise { fill: var(--accent); animation: rise 10s infinite; }
+    .hl-row { fill: var(--accent-soft); opacity: 0; animation: hlrow 10s infinite; }
+    .arc { stroke-dasharray: 640; stroke-dashoffset: 640; animation: arc 10s infinite; }
+    .arc-in { opacity: 0; animation: arcin 10s infinite; }
+    .pair-a { animation: paira 10s infinite; }
+    .pair-b { opacity: 0; animation: pairb 10s infinite; }
+
+    @keyframes key { 0%, 13% { fill: var(--panel); stroke: var(--line); } 15%, 22% { fill: var(--accent); stroke: var(--accent); } 26%, 100% { fill: var(--panel); stroke: var(--line); } }
+    @keyframes keygl { 0%, 13% { fill: var(--muted); } 15%, 22% { fill: var(--panel); } 26%, 100% { fill: var(--muted); } }
+    @keyframes pick { 0%, 14% { opacity: 0; } 18%, 72% { opacity: 1; } 76%, 100% { opacity: 0; } }
+    @keyframes dim { 0%, 14% { opacity: 1; } 18%, 72% { opacity: 0.4; } 76%, 100% { opacity: 1; } }
+    @keyframes vote {
+      0%, 18% { opacity: 0; transform: translate(0, 0); }
+      20% { opacity: 1; transform: translate(0, 0); }
+      27% { transform: translate(190px, -55px); }
+      33% { opacity: 1; transform: translate(380px, 10px); }
+      35%, 100% { opacity: 0; transform: translate(380px, 10px); }
+    }
+    @keyframes narrow { 0%, 32% { transform: translateX(0) scale(1, 1); } 42%, 88% { transform: translateX(22px) scale(0.6, 1.4); } 97%, 100% { transform: translateX(0) scale(1, 1); } }
+    @keyframes up2 { 0%, 42% { transform: translateY(0); } 52%, 89% { transform: translateY(-80px); } 95%, 100% { transform: translateY(0); } }
+    @keyframes down1 { 0%, 42% { transform: translateY(0); } 52%, 89% { transform: translateY(40px); } 95%, 100% { transform: translateY(0); } }
+    @keyframes rise { 0%, 42% { fill: var(--ink); } 46%, 89% { fill: var(--accent); } 95%, 100% { fill: var(--ink); } }
+    @keyframes hlrow { 0%, 42% { opacity: 0; } 47%, 88% { opacity: 1; } 94%, 100% { opacity: 0; } }
+    @keyframes arc { 0%, 54% { stroke-dashoffset: 640; opacity: 1; } 68%, 88% { stroke-dashoffset: 0; opacity: 1; } 94% { stroke-dashoffset: 0; opacity: 0; } 100% { stroke-dashoffset: 640; opacity: 0; } }
+    @keyframes arcin { 0%, 62% { opacity: 0; } 68%, 88% { opacity: 1; } 94%, 100% { opacity: 0; } }
+    @keyframes paira { 0%, 72% { opacity: 1; } 76%, 94% { opacity: 0; } 99%, 100% { opacity: 1; } }
+    @keyframes pairb { 0%, 74% { opacity: 0; } 78%, 92% { opacity: 1; } 96%, 100% { opacity: 0; } }
+
+    @media (prefers-reduced-motion: reduce) {
+      .pick, .dim, .key-l, .key-gl, .vote, .narrow, .up2, .down1, .rise, .hl-row, .arc, .arc-in, .pair-a, .pair-b { animation: none; }
+      .pick { opacity: 1; }
+      .key-gl { fill: var(--panel); }
+      .dim { opacity: 0.4; }
+      .key-l { fill: var(--accent); stroke: var(--accent); }
+      .narrow { transform: translateX(22px) scale(0.6, 1.4); }
+      .up2 { transform: translateY(-80px); }
+      .down1 { transform: translateY(40px); }
+      .rise { fill: var(--accent); }
+      .hl-row { opacity: 1; }
+      .arc { stroke-dashoffset: 0; }
+      .arc-in { opacity: 1; }
+    }
+  </style>
+
+  <rect class="bg" width="960" height="372" rx="16"/>
+
+  <g class="arc-in">
+    <path class="arc-head" d="M178 104 l-7 -13 h14 z"/>
+    <text class="sans arc-label" x="480" y="32" text-anchor="middle">Thompson sampling picks the next, most informative pair</text>
+  </g>
+  <path class="arc" d="M770 96 C 760 40, 640 46, 480 46 C 320 46, 200 40, 178 92"/>
+
+  <g>
+    <rect class="card" x="40" y="112" width="132" height="108" rx="12"/>
+    <rect class="card" x="188" y="112" width="132" height="108" rx="12"/>
+    <rect class="pick" x="40" y="112" width="132" height="108" rx="12"/>
+    <g class="pair-a">
+      <text class="serif name" x="106" y="176" text-anchor="middle">Freja</text>
+      <text class="serif name dim" x="254" y="176" text-anchor="middle">Alma</text>
+    </g>
+    <g class="pair-b">
+      <text class="serif name" x="106" y="176" text-anchor="middle">Ida</text>
+      <text class="serif name" x="254" y="176" text-anchor="middle">Karla</text>
+    </g>
+
+    <g class="sans">
+      <rect class="key key-l" x="104" y="240" width="34" height="30" rx="6"/>
+      <text class="key-glyph key-gl" x="121" y="261" text-anchor="middle">←</text>
+      <rect class="key" x="144" y="240" width="34" height="30" rx="6"/>
+      <text class="key-glyph" x="161" y="261" text-anchor="middle">↑</text>
+      <rect class="key" x="184" y="240" width="34" height="30" rx="6"/>
+      <text class="key-glyph" x="201" y="261" text-anchor="middle">↓</text>
+      <rect class="key" x="224" y="240" width="34" height="30" rx="6"/>
+      <text class="key-glyph" x="241" y="261" text-anchor="middle">→</text>
+    </g>
+
+    <text class="sans step" x="40" y="318">1</text>
+    <text class="sans cap" x="58" y="318">You compare two names</text>
+    <text class="sans sub" x="58" y="340">← → prefer one, ↑ draw, ↓ dislike both</text>
+  </g>
+
+  <circle class="vote" cx="106" cy="140" r="6"/>
+
+  <g>
+    <line class="axis" x1="370" y1="260" x2="600" y2="260"/>
+    <g transform="translate(485 260)">
+      <path class="prior" d="M-110 0 C-62 0 -42 -90 0 -90 C42 -90 62 0 110 0"/>
+      <g class="narrow">
+        <path class="post" d="M-110 0 C-62 0 -42 -90 0 -90 C42 -90 62 0 110 0"/>
+      </g>
+    </g>
+    <text class="sans sub" x="485" y="284" text-anchor="middle">uncertainty about your taste</text>
+
+    <text class="sans step" x="370" y="318">2</text>
+    <text class="sans cap" x="388" y="318">The model updates</text>
+    <text class="sans sub" x="388" y="340">Bayesian Bradley–Terry model</text>
+  </g>
+
+  <g>
+    <rect class="card" x="660" y="112" width="220" height="172" rx="12"/>
+    <g class="sans">
+      <text class="rank" x="684" y="146">1</text>
+      <text class="rank" x="684" y="186">2</text>
+      <text class="rank" x="684" y="226">3</text>
+      <text class="rank" x="684" y="266">4</text>
+    </g>
+    <g class="up2">
+      <rect class="hl-row" x="672" y="200" width="196" height="36" rx="8"/>
+      <text class="serif row-name rise" x="708" y="226">Freja</text>
+    </g>
+    <g class="down1"><text class="serif row-name" x="708" y="146">Alma</text></g>
+    <g class="down1"><text class="serif row-name" x="708" y="186">Ida</text></g>
+    <text class="serif row-name" x="708" y="266">Karla</text>
+    <text class="sans step" x="660" y="318">3</text>
+    <text class="sans cap" x="678" y="318">Your ranking reorders</text>
+    <text class="sans sub" x="678" y="340">Top 10, refreshed after every vote</text>
+  </g>
+</svg>
